@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Panopticon 33 · SPOTVISION Government</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Serif:wght@300;400&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!--
+  PANOPTICON 33 — Prototipo navegable de validación de pantallas
+  SPOTVISION Government · Physical AI Agent: SENTINEL · Orquestación: MAIC · Agente: Jules
+
+  Propósito: validar con el Ministerio de Seguridad la experiencia de la consola antes del
+  desarrollo. Todos los datos son SIMULADOS (sin datos reales de ciudadanos). Las vías y
+  edificios del sector Salvador del Mundo provienen de OpenStreetMap (© colaboradores de OSM, ODbL).
+
+  Arquitectura del prototipo (cada sección del <script> corresponde a un módulo de producción):
+    §1 Config          → constantes y paleta del SPOTVISION Design System 2.0
+    §2 MockDB          → datos simulados con la forma del contrato de APIs
+    §3 Api             → capa de servicios: ÚNICO punto por donde la UI obtiene datos
+    §4 Sfx             → audio de interfaz (Web Audio, sin archivos externos)
+    §5 Globe           → escena 3D del globo (intro)
+    §6 City            → escena 3D del sector Salvador del Mundo (consola)
+    §7 Cctv            → evidencia sintética (sustituir por frames/clips reales de SENTINEL)
+    §8 UI              → navegación, vistas, hojas laterales
+    §9 FaceLab         → análisis y reconstrucción facial 3D
+    §10 SceneLab       → reconstrucción de escena 3D multicámara
+    §11 Jules          → agente orquestador conversacional
+    §12 Boot           → arranque y simulador de tiempo real
+-->
+<canvas id="gl" aria-hidden="true"></canvas>
+<!-- Vista fotorrealista (CesiumJS + Google). Solo se usa si config.local.js trae la clave. -->
+<div id="geo" class="hidden" aria-hidden="true"></div>
+<div id="geoCredits" aria-label="Atribución del mapa"></div>
+<!-- Vistas Mapa y Satélite de Google (MapLibre + Map Tiles API). Predeterminadas si hay clave. -->
+<div id="gmap" class="hidden"></div>
+<div id="gmapCredits" style="display:none" aria-label="Atribución del mapa"><img src="https://maps.gstatic.com/mapfiles/api-3/images/google_white5_hdpi.png" alt="Google"><span id="gmapCopy">Datos del mapa © Google</span></div>
+<div class="vignette"></div>
+<div class="fade" id="fade"></div>
+
+<!-- ================= INTRO: globo ================= -->
+<section id="intro" aria-label="Presentación">
+  <header class="intro-head">
+    <div class="lockup"><img src="assets/logo-spotvision.png" alt="SPOTVISION"><span class="x">×</span><span class="p33">Panopticon 33</span></div>
+    <h1 class="intro-title">Presencia continua sobre el territorio.</h1>
+    <p class="intro-sub">SENTINEL observa cada cámara las 24 horas, detecta lo que importa y lo convierte en acción a través de MAIC.</p>
+  </header>
+  <div class="intro-stats" id="introStats"></div>
+  <div class="globe-card" id="globeCard" style="opacity:0"></div>
+  <div class="intro-cta">
+    <button class="btn primary lg" id="enterBtn"><span class="ms">radar</span>Entrar al centro de mando</button>
+    <span class="note">Activa el audio de la consola · Prototipo con datos simulados</span>
+  </div>
+  <div class="ticker" id="introTicker"><span class="dot"></span><span class="txt">SENTINEL en línea · 40 cámaras en Salvador del Mundo</span></div>
+</section>
+
+<!-- ================= CONSOLA ================= -->
+<div id="app" class="hidden">
+  <nav class="nav" aria-label="Principal">
+    <div class="brand"><img src="assets/logo-spotvision.png" alt="SPOTVISION"><span class="p33">Panopticon 33</span></div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="right">
+      <span class="sim-badge">Simulación</span>
+      <span class="clock" id="clock">--:--:--</span>
+      <button class="iconbtn" id="soundBtn" title="Sonido de la consola" aria-label="Sonido"><span class="ms">volume_off</span></button>
+      <span class="user"><span class="av">OP</span>Operador · Turno A</span>
+    </div>
+  </nav>
+  <aside class="rail left" id="railL"></aside>
+  <aside class="rail right" id="railR"></aside>
+  <section class="sheet closed" id="sheet" aria-live="polite"></section>
+  <div class="hud" aria-hidden="true">
+    <i class="br tl"></i><i class="br tr"></i><i class="br bl"></i><i class="br rb"></i>
+    <div class="hud-top"><span class="sec" id="hudSec">SEC. SDM-E5</span><span class="co"><b id="hudLat">13.7013</b>° N</span><span class="co"><b id="hudLon">89.2243</b>° W</span></div>
+    <div class="hud-status" id="hudStatus"></div>
+    <div class="presets seg" id="hudPresets"></div>
+    <div class="hud-bl"><span>ALT <b id="hudAlt">—</b></span><span>RUMBO <b id="hudHdg">—</b></span><span>INCL <b id="hudTilt">—</b></span><span>CURSOR <b id="hudCur">—</b></span></div>
+    <div class="reticle"></div>
+  </div>
+  <section id="wall" class="hidden" aria-label="Muro de video"></section>
+  <div id="bannerSlot"></div>
+  <div class="legend panel" id="legend"></div>
+</div>
+
+<div id="tip" class="hidden"></div>
+<div id="toasts" aria-live="polite"></div>
+<div id="fullSlot"></div>
+
+<!-- ================= JULES ================= -->
+<button id="jules-btn" class="hidden" aria-label="Abrir Jules"><img src="assets/jules-orb.gif" alt=""></button>
+<section id="jules" class="closed" aria-label="Jules">
+  <div class="j-hd"><img src="assets/jules-orb.gif" alt=""><div><b>Jules</b><small>Agente orquestador · conectado a SENTINEL y MAIC</small></div><button class="iconbtn" id="julesClose" style="margin-left:auto" aria-label="Cerrar"><span class="ms">close</span></button></div>
+  <div class="j-body" id="jBody"></div>
+  <div class="j-sugg" id="jSugg"></div>
+  <div class="j-in"><input id="jInput" placeholder="Pídele algo a Jules…" aria-label="Mensaje para Jules" autocomplete="off"><button class="btn primary sm" id="jSend" aria-label="Enviar"><span class="ms">arrow_upward</span></button></div>
+</section>
+
+<!-- Configuración local (clave de Google). Si el archivo no existe, la consola funciona en modo táctico. -->
+<script src="config.local.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="data/geo.js"></script>
+<script src="data/media.js"></script>
+<script src="data/icons.js"></script>
+<script src="js/core.js"></script>
+<script src="js/map-tactical.js"></script>
+<script src="js/map-google-3d.js"></script>
+<script src="js/map-google-2d.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/video-wall.js"></script>
+<script src="js/identity-sources.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
