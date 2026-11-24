@@ -1,0 +1,11 @@
+{
+  "name": "panopticon33-front",
+  "private": true,
+  "description": "Panopticon 33: consola beta. La app está en app/; este archivo solo deja levantarla desde la raíz.",
+  "scripts": {
+    "postinstall": "npm --prefix app install --no-audit --no-fund",
+    "dev": "npm --prefix app run dev",
+    "build": "npm --prefix app run build",
+    "preview": "npm --prefix app run preview"
+  }
+}
