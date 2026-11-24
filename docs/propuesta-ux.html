@@ -1,0 +1,409 @@
+<title>Propuesta Panopticon 33</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;1,400&display=swap">
+<style>
+/* Layout: una columna de lectura con tablas y diagramas que se abren a un ancho mayor; estética de la consola (grises + estados + Jules). */
+:root {
+  color-scheme: dark;
+  --bg: #090909; --panel: #121212; --raised: #1b1b1b;
+  --ink: #f4f4f4; --muted: #b7b7b7; --subtle: #8c8c8c;
+  --line: #262626; --line-2: #363636;
+  --neg: #e0453c; --neg-t: #ef6b62; --alert: #f3ff00; --pos: #6cd300; --neutral: #e6e6e6;
+  --j1: #cdec08; --j2: #0084ba; --j5: #3ea380;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --jules: 'IBM Plex Serif', Georgia, serif;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  color-scheme: light; --bg: #f6f6f5; --panel: #ffffff; --raised: #ededec; --ink: #121212; --muted: #4a4a4a; --subtle: #6b6b6b;
+  --line: #e2e2e0; --line-2: #cfcfcc; --neg: #c0342c; --neg-t: #b02a23; --alert: #8a7d00; --pos: #3b8500; --neutral: #5a5a5a; } }
+:root[data-theme="light"] {
+  color-scheme: light; --bg: #f6f6f5; --panel: #ffffff; --raised: #ededec; --ink: #121212; --muted: #4a4a4a; --subtle: #6b6b6b;
+  --line: #e2e2e0; --line-2: #cfcfcc; --neg: #c0342c; --neg-t: #b02a23; --alert: #8a7d00; --pos: #3b8500; --neutral: #5a5a5a; }
+*, *::before, *::after { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 56px 96px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 64px; }
+.read { max-width: 68ch; }
+h1, h2, h3 { margin: 0; text-wrap: balance; font-weight: 500; }
+h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.08; letter-spacing: -.02em; }
+h2 { font-size: 26px; line-height: 1.2; letter-spacing: -.01em; }
+h3 { font-size: 17px; line-height: 1.35; font-weight: 600; }
+p { margin: 0; }
+.eyebrow { font: 600 11px/1.4 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--subtle); }
+.lead { font-size: 19px; line-height: 1.55; color: var(--muted); }
+section { display: grid; gap: 20px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font: 400 12px var(--mono); color: var(--subtle); }
+ul.tight { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+ul.tight li::marker { color: var(--subtle); }
+b, strong { font-weight: 600; color: var(--ink); }
+code { font: 500 .88em var(--mono); background: var(--raised); padding: 1px 5px; border-radius: 3px; }
+
+/* Bloque de resumen */
+.tldr { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.tldr > div { background: var(--panel); padding: 20px; display: grid; gap: 8px; align-content: start; }
+.tldr .k { font: 600 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--subtle); }
+
+/* Jules: su voz va en serif, con la Nebulosa al lado */
+.jq { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; }
+.jq p { font: italic 400 16px/1.5 var(--jules); }
+.orb { width: 24px; height: 24px; margin-top: 2px; border-radius: 50%; background: radial-gradient(circle at 38% 38%, var(--j1) 0 18%, var(--j5) 42%, var(--j2) 66%, transparent 72%); filter: blur(.4px); box-shadow: 0 0 14px #0084ba66; }
+
+/* Hallazgos */
+.findings { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.f { background: var(--panel); padding: 18px 20px; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 4px 16px; }
+.f .id { font: 600 12px var(--mono); color: var(--subtle); grid-row: span 3; padding-top: 3px; }
+.f p { color: var(--muted); font-size: 15px; }
+.f .ev { font: 400 12.5px/1.5 var(--mono); color: var(--subtle); }
+
+/* Propuestas */
+.props { display: grid; gap: 28px; }
+.p { display: grid; gap: 12px; padding-top: 24px; border-top: 1px solid var(--line); }
+.p header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.p .num { font: 600 12px var(--mono); color: var(--subtle); }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font: 500 11px var(--mono); letter-spacing: .04em; padding: 2px 8px; border: 1px solid var(--line-2); border-radius: 2px; color: var(--muted); }
+.tag.hi { color: var(--ink); border-color: var(--ink); }
+.p .why { color: var(--muted); font-size: 15px; }
+
+/* Tablas */
+.tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--subtle); background: var(--panel); }
+tr:last-child td { border-bottom: 0; }
+td { color: var(--muted); }
+td:first-child { color: var(--ink); font-weight: 500; }
+
+/* Estados (forma + color) */
+.sev { display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--mono); white-space: nowrap; }
+.sev i { width: 9px; height: 9px; display: inline-block; flex: none; }
+.sev.c i { background: var(--neg); transform: rotate(45deg); }
+.sev.m i { background: var(--alert); clip-path: polygon(50% 0, 100% 100%, 0 100%); width: 10px; }
+.sev.l i { background: var(--neutral); border-radius: 50%; }
+.sev.a i { border: 2px solid var(--pos); border-radius: 50%; }
+
+/* Diagramas */
+figure { margin: 0; display: grid; gap: 10px; }
+figcaption { font: 400 12.5px var(--mono); color: var(--subtle); }
+.dia { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+.dia svg { display: block; min-width: 760px; width: 100%; height: auto; }
+svg text { font-family: var(--mono); }
+.s-line { stroke: var(--line-2); } .s-ink { stroke: var(--ink); } .s-sub { stroke: var(--subtle); }
+.f-panel { fill: var(--panel); } .f-raised { fill: var(--raised); } .f-bg { fill: var(--bg); }
+.t-ink { fill: var(--ink); } .t-mut { fill: var(--muted); } .t-sub { fill: var(--subtle); }
+.f-neg { fill: var(--neg); } .f-alert { fill: var(--alert); } .f-pos { fill: var(--pos); } .f-neutral { fill: var(--neutral); }
+.s-neg { stroke: var(--neg); } .s-pos { stroke: var(--pos); }
+
+/* Hoja de ruta */
+.road { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.road > div { border: 1px solid var(--line); border-radius: 4px; padding: 18px; display: grid; gap: 10px; align-content: start; background: var(--panel); }
+.road .when { font: 600 12px var(--mono); letter-spacing: .06em; }
+.done li::marker { content: '✓  '; color: var(--pos); }
+.qs li { color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .orb { animation: breathe 4s ease-in-out infinite; } }
+@keyframes breathe { 50% { transform: scale(1.08); } }
+</style>
+
+<div class="wrap">
+
+<header style="display:grid;gap:18px">
+  <div class="eyebrow">Panopticon 33 · Spotvision Government · Propuesta de UX y producto</div>
+  <h1>De una consola que muestra todo a un centro de mando que ayuda a decidir</h1>
+  <p class="lead read">El prototipo tiene buena base técnica: mapa real, video, placas, rostros y despacho a MAIC. Lo que falta es <b>jerarquía</b>: qué mirar primero, qué hacer ahora y qué viene. Esta propuesta reordena la consola alrededor de esas tres preguntas y pone a Jules en el centro de la operación.</p>
+  <div class="meta"><span>Sofía Abad · 20 nov 2026</span><span>Base: prototipo panopticon33-consola (5)</span><span>Entrega UI: vie 27 nov · Beta 0.01: 15 dic</span></div>
+</header>
+
+<section>
+  <div class="tldr">
+    <div><span class="k">Qué mirar</span><p>Una frase de Jules arriba resume el momento. El resto de la pantalla la respalda: el mapa y la cola de incidentes.</p></div>
+    <div><span class="k">Qué hacer</span><p>Cada aviso llega con la voz de Jules y con acciones fijas según su tipo: despachar, verificar o descartar. Lo sensible siempre pide confirmación.</p></div>
+    <div><span class="k">Qué viene</span><p>Una línea de tiempo que va de las últimas 2 h al pronóstico de +1 h, y una capa de omnipresencia que muestra dónde va a faltar policía.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Hecho en el prototipo esta semana</div>
+  <h2>Lo que ya cambió</h2>
+  <ul class="tight done read">
+    <li><b>Modo oscuro en escala de grises</b> (decisión del 18/11). La interfaz es solo grises, y el color se reserva para los estados oficiales del DS: <span class="sev c"><i></i>crítica</span> <span class="sev m"><i></i>media</span> <span class="sev l"><i></i>baja</span> <span class="sev a"><i></i>en atención</span>. Ya no hay lima ni azul de Spotvision en la UI.</li>
+    <li><b>Tokens con los nombres del DS de Sync</b> (<code>--surface</code>, <code>--ink</code>, <code>--status-*</code>). Así la migración al paquete del Storybook no obliga a renombrar nada.</li>
+    <li><b>El logo de Jules es la Nebulosa</b>, la misma que usa sentinel-front, y es el único elemento con los colores de Spotvision. Ese es su color distintivo: Jules se reconoce de un vistazo y nunca se confunde con un estado. Además respira según lo que hace: escucha, piensa o habla.</li>
+    <li><b>Ya no se nombra a Sentinel</b> en la consola. Todo es Panopticon.</li>
+    <li><b>Marcadores con lenguaje HUD:</b>
+      <ul class="tight">
+        <li>Cámaras: nodos de sensor con mira.</li>
+        <li>Unidades: hexágonos con su rumbo.</li>
+        <li>Incidentes: corchetes de fijación de objetivo, que se cierran en bucle sobre los críticos.</li>
+        <li>Zonas: etiquetas de telemetría en mono.</li>
+      </ul>
+      Sigue la codificación doble, forma y color, para que nada se distinga solo por color.</li>
+  </ul>
+</section>
+
+<section>
+  <div class="eyebrow">Diagnóstico</div>
+  <h2>Qué no funciona hoy</h2>
+  <p class="read" style="color:var(--muted)">Cada hallazgo sale de recorrer el prototipo con la vista de Mando abierta. Las referencias apuntan a lo que se ve en pantalla.</p>
+  <div class="findings">
+    <div class="f"><span class="id">D1</span><h3>La misma información aparece cuatro veces y nada dice qué hacer ahora</h3><p>Las alertas abiertas aparecen como KPI a la izquierda, como lista a la derecha, como marcadores en el mapa y como estado en el HUD. Ninguna de esas cuatro versiones ordena por urgencia ni propone el próximo paso.</p><span class="ev">KPI "7 alertas abiertas" · panel "Alertas en vivo" · 7 marcadores · línea de estado del HUD</span></div>
+    <div class="f"><span class="id">D2</span><h3>Jules es un chat en una esquina que espera que le pregunten</h3><p>Ejecuta cosas reales: navega, busca placas y despacha a MAIC. Pero solo cuando el operador lo abre y escribe, y no se ve qué hizo sobre el mapa. Contradice lo acordado el 18/11: "Jules siempre es quien avisa".</p><span class="ev">botón flotante abajo a la derecha · sugerencias de texto fijas · acciones listadas en el chat</span></div>
+    <div class="f"><span class="id">D3</span><h3>Una sola pantalla para dos personas con trabajos opuestos</h3><p>El ministro quiere control total y tendencias: el "ojo de Dios" que pidió en la reunión del 16/11. El operador del 911 necesita una cola, un video y un botón de despacho. Hoy los dos ven lo mismo, y ninguno ve lo suyo bien.</p><span class="ev">reunión 16/11: perfil ministro + vista y rol de operador 911</span></div>
+    <div class="f"><span class="id">D4</span><h3>La prioridad número uno del ministerio no tiene visualización</h3><p>Omnipresencia, según la definió Gerardo, es <b>presencia policial en función de la aglomeración</b>. El prototipo muestra la cobertura de cámaras y las unidades sueltas, pero no cruza las dos cosas. No se ve dónde hay mucha gente y poca policía.</p><span class="ev">capas: Cámaras · Cobertura · Zonas · Unidades · Incidentes (ninguna cruza demanda con presencia)</span></div>
+    <div class="f"><span class="id">D5</span><h3>Todo pasa en presente</h3><p>No hay forma de ver lo que pasó hace 20 minutos ni lo que se espera en la próxima hora. El eslogan es "Seguridad que anticipa, no que reacciona", y la integración con Mike trae justamente la parte predictiva.</p><span class="ev">sin línea de tiempo · sin reproducción · sin pronóstico</span></div>
+    <div class="f"><span class="id">D6</span><h3>El mapa se satura al acercarse</h3><p>Las etiquetas de zona se pisan entre sí (Estación y Plaza Salvador del Mundo) y no hay agrupación por zoom. Los marcadores tenían dibujos de clip-art, y eso ya está corregido.</p><span class="ev">zoom 16 sobre la plaza · etiquetas superpuestas</span></div>
+    <div class="f"><span class="id">D7</span><h3>La navegación está ordenada por tecnología, no por tarea</h3><p>Hay siete pestañas: Mando, Aglomeraciones, Placas, Tránsito, Personas, Escenas 3D y Muro. El operador no piensa "voy a Placas": piensa "tengo que encontrar este auto". Placas, Personas y Escenas 3D son variantes de una misma tarea, buscar.</p><span class="ev">barra superior del prototipo</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Propuesta</div>
+  <h2>Así se ve el Mando</h2>
+  <figure>
+    <div class="dia" role="img" aria-label="Esquema de la pantalla de Mando propuesta: barra superior con la frase de Jules, cola de incidentes a la izquierda, mapa con capa de omnipresencia al centro, panel de Jules a la derecha y línea de tiempo abajo.">
+      <svg viewBox="0 0 960 540" aria-hidden="true">
+        <rect class="f-bg" x="0" y="0" width="960" height="540"/>
+        <!-- barra superior -->
+        <rect class="f-panel s-line" x="12" y="12" width="936" height="44" rx="3" stroke-width="1"/>
+        <text class="t-mut" x="28" y="39" font-size="12" font-weight="600" letter-spacing="2">PANOPTICON 33</text>
+        <circle cx="210" cy="34" r="8" fill="url(#jg)"/>
+        <text class="t-ink" x="226" y="38" font-size="12.5" font-style="italic" font-family="IBM Plex Serif, Georgia, serif">3 zonas sobre lo previsto. Roosevelt sube 18 % en 10 min: sugiero mover 2 unidades desde Escalón.</text>
+        <rect class="s-line" fill="none" x="808" y="22" width="128" height="24" rx="2" stroke-width="1"/>
+        <text class="t-mut" x="822" y="38" font-size="11">MANDO · OPERACIÓN</text>
+        <!-- cola -->
+        <rect class="f-panel s-line" x="12" y="68" width="236" height="372" rx="3" stroke-width="1"/>
+        <text class="t-sub" x="26" y="90" font-size="10.5" letter-spacing="1.5">COLA · 7 ABIERTAS</text>
+        <g>
+          <rect class="f-raised" x="24" y="102" width="212" height="74" rx="2"/>
+          <rect class="f-neg" x="36" y="114" width="9" height="9" transform="rotate(45 40.5 118.5)"/>
+          <text class="t-ink" x="54" y="122" font-size="11.5">Plaza · exceso 680 %</text>
+          <rect class="f-bg" x="36" y="132" width="64" height="36" rx="1"/>
+          <text class="t-sub" x="110" y="146" font-size="10">SM-04 · 00:42</text>
+          <text class="t-mut" x="110" y="162" font-size="10">Despachar · Ver</text>
+        </g>
+        <g>
+          <rect class="f-raised" x="24" y="184" width="212" height="52" rx="2"/>
+          <path class="f-alert" d="M40 194 l6 11 h-12z"/>
+          <text class="t-ink" x="54" y="204" font-size="11.5">Placa con orden · M 204</text>
+          <text class="t-sub" x="54" y="222" font-size="10">SM-13 · 03:10 · Asignada</text>
+        </g>
+        <g>
+          <rect class="f-raised" x="24" y="244" width="212" height="52" rx="2"/>
+          <circle class="f-neutral" cx="40" cy="258" r="4.5"/>
+          <text class="t-ink" x="54" y="262" font-size="11.5">Cámara degradada · SM-09</text>
+          <text class="t-sub" x="54" y="280" font-size="10">Técnico notificado</text>
+        </g>
+        <text class="t-sub" x="26" y="424" font-size="10">J / K moverse · D despachar</text>
+        <!-- mapa -->
+        <rect class="f-panel s-line" x="260" y="68" width="440" height="372" rx="3" stroke-width="1"/>
+        <g stroke-width="1" class="s-line" fill="none">
+          <path d="M280 300 C 360 260, 420 280, 520 220 S 660 150, 690 120"/>
+          <path d="M300 130 L 680 410"/>
+          <path d="M260 220 H 700"/>
+        </g>
+        <!-- hexágonos de omnipresencia -->
+        <g stroke-width="1">
+          <polygon points="470,170 492,182 492,206 470,218 448,206 448,182" fill="#e0453c" fill-opacity=".38" class="s-neg"/>
+          <polygon points="514,194 536,206 536,230 514,242 492,230 492,206" fill="#e0453c" fill-opacity=".22" class="s-neg"/>
+          <polygon points="426,194 448,206 448,230 426,242 404,230 404,206" fill="#ffffff" fill-opacity=".06" class="s-line"/>
+          <polygon points="470,218 492,230 492,254 470,266 448,254 448,230" fill="#ffffff" fill-opacity=".1" class="s-line"/>
+          <polygon points="558,170 580,182 580,206 558,218 536,206 536,182" fill="#ffffff" fill-opacity=".04" class="s-line"/>
+        </g>
+        <!-- incidente con mira -->
+        <g class="s-neg" stroke-width="2" fill="none"><path d="M458 176 v-8 h8 M482 168 h8 v8 M490 200 v8 h-8 M466 208 h-8 v-8"/></g>
+        <!-- unidades -->
+        <g class="s-ink" stroke-width="1.5" fill="none"><polygon points="360,330 368,334 368,342 360,346 352,342 352,334"/><polygon points="604,300 612,304 612,312 604,316 596,312 596,304"/></g>
+        <path d="M368 336 C 410 300, 440 240, 462 210" class="s-ink" stroke-dasharray="3 4" stroke-width="1.2" fill="none"/>
+        <text class="t-sub" x="276" y="90" font-size="10.5" letter-spacing="1.5">CAPA · OMNIPRESENCIA</text>
+        <text class="t-mut" x="510" y="168" font-size="10">BRECHA −2 UNIDADES</text>
+        <!-- panel de Jules -->
+        <rect class="f-panel s-line" x="712" y="68" width="236" height="372" rx="3" stroke-width="1"/>
+        <circle cx="734" cy="92" r="10" fill="url(#jg)"/>
+        <text class="t-ink" x="752" y="96" font-size="13" font-family="IBM Plex Serif, Georgia, serif">Jules</text>
+        <rect class="f-raised" x="724" y="114" width="212" height="96" rx="2"/>
+        <text class="t-mut" x="736" y="134" font-size="10.5">Llegó una alerta crítica</text>
+        <text class="t-mut" x="736" y="150" font-size="10.5">en la Plaza. Veo 78 mil</text>
+        <text class="t-mut" x="736" y="166" font-size="10.5">personas y 2 unidades.</text>
+        <rect class="s-ink" fill="none" x="736" y="180" width="96" height="20" rx="2" stroke-width="1"/>
+        <text class="t-ink" x="746" y="194" font-size="10">Enviar 3 más</text>
+        <rect class="s-line" fill="none" x="840" y="180" width="84" height="20" rx="2" stroke-width="1"/>
+        <text class="t-mut" x="850" y="194" font-size="10">Ver cámaras</text>
+        <rect class="s-line" fill="none" x="724" y="400" width="212" height="28" rx="2" stroke-width="1"/>
+        <text class="t-sub" x="736" y="418" font-size="10.5">Pedile algo a Jules…</text>
+        <!-- línea de tiempo -->
+        <rect class="f-panel s-line" x="12" y="452" width="936" height="76" rx="3" stroke-width="1"/>
+        <text class="t-sub" x="28" y="474" font-size="10.5" letter-spacing="1.5">−2 H</text>
+        <text class="t-ink" x="590" y="474" font-size="10.5" letter-spacing="1.5">AHORA</text>
+        <text class="t-sub" x="880" y="474" font-size="10.5" letter-spacing="1.5">+1 H MIKE</text>
+        <path d="M28 512 C 120 506, 220 500, 320 494 S 520 480, 610 470" class="s-ink" stroke-width="1.5" fill="none"/>
+        <path d="M610 470 C 700 462, 800 458, 930 466" class="s-sub" stroke-width="1.5" stroke-dasharray="4 4" fill="none"/>
+        <line x1="610" y1="460" x2="610" y2="520" class="s-ink" stroke-width="1"/>
+        <rect class="f-neg" x="420" y="500" width="6" height="6" transform="rotate(45 423 503)"/>
+        <path class="f-alert" d="M250 498 l5 9 h-10z"/>
+        <defs><radialGradient id="jg" cx=".4" cy=".4" r=".6"><stop offset="0" stop-color="#cdec08"/><stop offset=".5" stop-color="#3ea380"/><stop offset="1" stop-color="#0084ba"/></radialGradient></defs>
+      </svg>
+    </div>
+    <figcaption>Esquema · Mando propuesto. La frase de Jules arriba; la cola a la izquierda; el mapa con la capa de omnipresencia; Jules a la derecha; el tiempo abajo.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Siete propuestas</h2>
+  <div class="props">
+
+    <article class="p">
+      <header><span class="num">P1</span><h3>Jules como copiloto del turno</h3><div class="tags"><span class="tag hi">Viernes 27</span><span class="tag">Resuelve D1 · D2</span></div></header>
+      <p class="why read">Jules deja de ser un chat que espera preguntas: <b>avisa, resume y propone</b>. Es el mismo modelo que ya se acordó para Sentinel el 18/11, adaptado a la sala de mando.</p>
+      <ul class="tight read">
+        <li><b>Frase del momento</b> fija en la barra superior. Se actualiza sola y, si no hay novedades, lo dice: <i>"Todo en orden. 39 de 40 cámaras en línea."</i></li>
+        <li><b>Los avisos llegan con su voz</b> y con <b>acciones fijas según el tipo</b> (ver la tabla). Siempre hay opción manual.</li>
+        <li><b>Jules actúa a la vista.</b> Cuando hace algo, el mapa lo muestra: vuela a la zona, marca las cámaras que consulta y dibuja el recorrido que reconstruye. La Nebulosa cambia de estado (escucha, piensa, habla) para que se note que está trabajando.</li>
+        <li><b>Lo sensible pide confirmación:</b> despachar, pedir una intercepción o ver una identidad. Cada acción de Jules queda en la auditoría con quién la aprobó.</li>
+        <li><b>Jules para lo masivo:</b> "revisá las 40 cámaras y decime cuáles están degradadas", "armame el reporte del turno", "seguí esta placa toda la noche".</li>
+      </ul>
+      <div class="jq"><span class="orb" aria-hidden="true"></span><p>Llegó una alerta crítica en Plaza Salvador del Mundo: 78.446 personas, 680 % sobre lo previsto. Hay 2 unidades a menos de 5 minutos. ¿Envío 3 más desde Escalón?</p></div>
+    </article>
+
+    <article class="p">
+      <header><span class="num">P2</span><h3>Dos modos: Mando y Operación</h3><div class="tags"><span class="tag hi">Viernes 27</span><span class="tag">Resuelve D3</span></div></header>
+      <p class="why read">Un selector en la barra superior. Es la misma consola y la misma data, con distinta jerarquía. El rol del usuario define con qué modo arranca.</p>
+      <div class="tw"><table>
+        <thead><tr><th></th><th>Mando · ministro</th><th>Operación · 911</th></tr></thead>
+        <tbody>
+          <tr><td>Pregunta</td><td>¿Está bajo control el territorio?</td><td>¿Qué atiendo ahora?</td></tr>
+          <tr><td>Protagonista</td><td>Mapa grande, tendencias, omnipresencia</td><td>Cola de incidentes, video y despacho</td></tr>
+          <tr><td>Jules</td><td>Resume y recomienda ("sugiero redistribuir")</td><td>Avisa y prepara la acción ("¿despacho?")</td></tr>
+          <tr><td>Escala</td><td>País → ciudad → sector</td><td>Sector → cámara</td></tr>
+          <tr><td>Métricas</td><td>Tiempo de respuesta, brechas, incidentes por hora</td><td>Tiempo en cola, SLA de cada incidente</td></tr>
+        </tbody>
+      </table></div>
+    </article>
+
+    <article class="p">
+      <header><span class="num">P3</span><h3>Capa de omnipresencia</h3><div class="tags"><span class="tag hi">Beta 15 dic</span><span class="tag">Resuelve D4</span></div></header>
+      <p class="why read">Es lo que pidió el ministerio y nadie más lo muestra así: <b>dónde hay gente y no hay policía</b>. Se vuelve el argumento de venta, una plataforma de alta gama y no de ahorro de costos.</p>
+      <ul class="tight read">
+        <li>Grilla hexagonal sobre el mapa. Cada celda compara la <b>demanda</b> (personas estimadas por Panopticon más incidentes abiertos) con la <b>presencia</b> (unidades de MAIC a menos de N minutos).</li>
+        <li>Las celdas en gris están cubiertas; las rojas tienen <b>brecha</b>, y la intensidad marca su tamaño. La celda indica cuántas unidades faltan.</li>
+        <li>Jules propone redistribuir: <i>"Mover 2 unidades de Escalón a Roosevelt cierra la brecha y deja Escalón en verde."</i></li>
+        <li>Indicador global en el HUD: <b>% del territorio con presencia suficiente</b>.</li>
+      </ul>
+    </article>
+
+    <article class="p">
+      <header><span class="num">P4</span><h3>Línea de tiempo: pasado, ahora y pronóstico</h3><div class="tags"><span class="tag">Beta 15 dic</span><span class="tag">Resuelve D5</span></div></header>
+      <p class="why read">Una barra abajo del mapa que va de −2 h a +1 h. Arrastrarla reproduce el estado del mapa en ese momento. A la derecha de "ahora", el pronóstico de Mike aparece en línea punteada y la capa de omnipresencia muestra la brecha esperada. Así se le da forma a "Seguridad que anticipa".</p>
+    </article>
+
+    <article class="p">
+      <header><span class="num">P5</span><h3>Cola de incidentes con ciclo de vida</h3><div class="tags"><span class="tag hi">Viernes 27</span><span class="tag">Resuelve D1</span></div></header>
+      <ul class="tight read">
+        <li>Estados: <b>Nueva → Asignada → En atención → Cerrada</b>, con el tiempo en cada estado y un límite que se pone en rojo si se excede.</li>
+        <li>Orden por <b>urgencia</b> (nivel × tiempo esperando), no por hora.</li>
+        <li><b>Imagen primero</b> (acordado el 18/11): captura grande de la cámara, después el qué y después el dónde.</li>
+        <li>Atajos de teclado para el operador: J / K para moverse, D para despachar, Enter para abrir.</li>
+        <li>Al elegir un incidente, el mapa vuela al lugar y abre las 4 cámaras más cercanas. Esto ya existe y se mantiene.</li>
+      </ul>
+    </article>
+
+    <article class="p">
+      <header><span class="num">P6</span><h3>Mapa con zoom por niveles y lenguaje HUD</h3><div class="tags"><span class="tag">Parte hecha</span><span class="tag">Resuelve D6</span></div></header>
+      <ul class="tight read">
+        <li><b>Cuatro niveles:</b> país (estado por departamento) → ciudad (calor y brechas) → sector (zonas, unidades e incidentes) → cámara (cono de visión y video).</li>
+        <li><b>Agrupación:</b> los incidentes cercanos se juntan en un contador con el nivel más alto; las etiquetas que chocan se esconden por prioridad.</li>
+        <li><b>Marcadores HUD</b> (ya hechos): nodo de sensor, hexágono de unidad, mira de incidente y etiqueta de telemetría.</li>
+      </ul>
+    </article>
+
+    <article class="p">
+      <header><span class="num">P7</span><h3>Navegación por tarea</h3><div class="tags"><span class="tag">Beta 15 dic</span><span class="tag">Resuelve D7</span></div></header>
+      <div class="tw"><table>
+        <thead><tr><th>Hoy</th><th>Propuesta</th><th>Por qué</th></tr></thead>
+        <tbody>
+          <tr><td>Mando</td><td>Mando</td><td>Se queda: es la vista del territorio.</td></tr>
+          <tr><td>Aglomeraciones · Tránsito</td><td>Capas y filtros del mapa</td><td>Son formas de mirar el mismo territorio, no pantallas aparte.</td></tr>
+          <tr><td>—</td><td>Incidentes</td><td>Nueva: la cola completa con historial (P5).</td></tr>
+          <tr><td>Placas · Personas · Escenas 3D</td><td>Búsqueda</td><td>Una sola tarea: encontrar algo. Por placa, por foto, por descripción o por recorrido.</td></tr>
+          <tr><td>Muro</td><td>Video</td><td>Se queda, con el nombre de lo que el operador busca.</td></tr>
+        </tbody>
+      </table></div>
+    </article>
+
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Jules en el sistema</div>
+  <h2>Cómo interactúa Jules</h2>
+  <figure>
+    <div class="dia" role="img" aria-label="Flujo: las fuentes (cámaras de Panopticon, unidades de MAIC y pronóstico de Mike) alimentan a Jules; Jules avisa y propone al operador; el operador confirma; Jules ejecuta en la consola y en MAIC; todo queda en auditoría.">
+      <svg viewBox="0 0 960 250" aria-hidden="true">
+        <rect class="f-bg" width="960" height="250"/>
+        <g font-size="11">
+          <rect class="f-raised" x="20" y="30" width="170" height="44" rx="2"/><text class="t-ink" x="34" y="50">Cámaras · Panopticon</text><text class="t-sub" x="34" y="65" font-size="10">aglomeraciones, placas, rostros</text>
+          <rect class="f-raised" x="20" y="100" width="170" height="44" rx="2"/><text class="t-ink" x="34" y="120">MAIC</text><text class="t-sub" x="34" y="135" font-size="10">unidades y despachos</text>
+          <rect class="f-raised" x="20" y="170" width="170" height="44" rx="2"/><text class="t-ink" x="34" y="190">Mike</text><text class="t-sub" x="34" y="205" font-size="10">pronóstico y verificación</text>
+        </g>
+        <g class="s-sub" stroke-width="1" fill="none"><path d="M190 52 C 240 52, 250 122, 300 122"/><path d="M190 122 H 300"/><path d="M190 192 C 240 192, 250 122, 300 122"/></g>
+        <circle cx="340" cy="122" r="30" fill="url(#jg2)"/>
+        <text class="t-ink" x="314" y="176" font-size="13" font-family="IBM Plex Serif, Georgia, serif">Jules</text>
+        <text class="t-sub" x="290" y="194" font-size="10">resume · prioriza · propone</text>
+        <g class="s-ink" stroke-width="1" fill="none"><path d="M372 122 H 470"/><path d="M462 117 l8 5 -8 5"/></g>
+        <text class="t-mut" x="384" y="112" font-size="10">aviso + acciones</text>
+        <rect class="f-raised" x="474" y="96" width="150" height="52" rx="2"/><text class="t-ink" x="488" y="118" font-size="11">Operador</text><text class="t-sub" x="488" y="134" font-size="10">confirma o corrige</text>
+        <g class="s-ink" stroke-width="1" fill="none"><path d="M624 122 H 700"/><path d="M692 117 l8 5 -8 5"/></g>
+        <text class="t-mut" x="636" y="112" font-size="10">aprueba</text>
+        <rect class="f-raised" x="704" y="70" width="236" height="44" rx="2"/><text class="t-ink" x="718" y="90" font-size="11">Ejecuta en la consola</text><text class="t-sub" x="718" y="105" font-size="10">mapa, cámaras, búsqueda</text>
+        <rect class="f-raised" x="704" y="130" width="236" height="44" rx="2"/><text class="t-ink" x="718" y="150" font-size="11">Ejecuta en MAIC</text><text class="t-sub" x="718" y="165" font-size="10">despacho, intercepción</text>
+        <path d="M822 174 V 206 H 340 V 200" class="s-sub" stroke-dasharray="3 4" fill="none"/>
+        <text class="t-sub" x="560" y="224" font-size="10">auditoría: quién pidió, quién aprobó, qué hizo Jules</text>
+        <defs><radialGradient id="jg2" cx=".4" cy=".4" r=".6"><stop offset="0" stop-color="#cdec08"/><stop offset=".5" stop-color="#3ea380"/><stop offset="1" stop-color="#0084ba"/></radialGradient></defs>
+      </svg>
+    </div>
+    <figcaption>Jules nunca despacha solo: propone, y el operador aprueba. Lo que no es sensible, como navegar o consultar, lo hace directamente.</figcaption>
+  </figure>
+
+  <h3 style="margin-top:12px">Qué propone Jules según el aviso</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Aviso</th><th>Nivel</th><th>Acciones fijas</th><th>Queda pendiente si…</th></tr></thead>
+    <tbody>
+      <tr><td>Aglomeración sobre lo previsto</td><td><span class="sev c"><i></i>crítica</span></td><td>Enviar refuerzos · Ver cámaras · Ya está cubierto</td><td>la brecha de presencia sigue abierta</td></tr>
+      <tr><td>Placa con orden o reporte de robo</td><td><span class="sev m"><i></i>media</span></td><td>Pedir intercepción · Seguir la placa · Descartar</td><td>no hay unidad asignada</td></tr>
+      <tr><td>Coincidencia facial</td><td><span class="sev c"><i></i>crítica</span></td><td>Verificar con Mike · No es la persona · Ver recorrido</td><td>nadie la verificó (requiere rol Analista)</td></tr>
+      <tr><td>Incidente de tránsito</td><td><span class="sev m"><i></i>media</span></td><td>Enviar a MAIC con el clip · Descartar</td><td>hay lesionados posibles</td></tr>
+      <tr><td>Cámara degradada o sin señal</td><td><span class="sev l"><i></i>baja</span></td><td>Avisar a técnico · Ver cámaras vecinas</td><td>la cámara deja un punto ciego</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3 style="margin-top:12px">Dónde aparece Jules</h3>
+  <ul class="tight read">
+    <li><b>Siempre:</b> en la frase del momento, en la barra superior.</li>
+    <li><b>Con el panel abierto:</b> los avisos entran a la conversación y los pendientes quedan fijos arriba del campo de texto.</li>
+    <li><b>Con el panel cerrado:</b> aviso flotante con sus acciones. Los críticos quedan hasta resolverse y la Nebulosa pasa a "escucha".</li>
+    <li><b>Sobre el mapa:</b> cuando ejecuta algo, se ve qué está mirando (cámaras consultadas, recorrido, zona).</li>
+  </ul>
+</section>
+
+<section>
+  <div class="eyebrow">Orden de trabajo</div>
+  <h2>Qué va en cada entrega</h2>
+  <div class="road">
+    <div><span class="when">VIE 27 NOV · PROTOTIPO UI</span><ul class="tight"><li>P1 Jules copiloto: frase del momento, avisos con su voz y acciones fijas</li><li>P5 Cola con ciclo de vida</li><li>P2 Selector de modo (aunque el de Operación esté simplificado)</li><li>Corregir las etiquetas que se pisan (parte de P6)</li></ul></div>
+    <div><span class="when">15 DIC · BETA 0.01</span><ul class="tight"><li>P3 Capa de omnipresencia con datos de MAIC</li><li>P4 Línea de tiempo con pronóstico de Mike (sandbox)</li><li>P7 Navegación por tarea</li><li>Migración a React con el paquete del Storybook</li></ul></div>
+    <div><span class="when">DESPUÉS</span><ul class="tight"><li>Zoom por niveles completo, con vista país</li><li>Jules para tareas largas: seguir toda la noche, reportes</li><li>Avisos por celular o WhatsApp para unidades en calle</li></ul></div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Para decidir</div>
+  <h2>Preguntas abiertas</h2>
+  <ul class="tight qs read">
+    <li>¿El ministro usa la consola él mismo o la ve proyectada en la sala? Cambia el tamaño de todo en el modo Mando.</li>
+    <li>¿MAIC expone el tiempo estimado de llegada de cada unidad? Sin ese dato, la omnipresencia se calcula solo por distancia.</li>
+    <li>¿Qué datos del pronóstico de Mike podemos mostrar en el sandbox: aglomeración, incidentes o ambos?</li>
+    <li>¿Jules puede despachar sin confirmación en algún caso (por ejemplo, una aglomeración crítica de noche)? Por defecto, no.</li>
+    <li>¿Qué marca lleva la entrada: Spotvision, Panopticon 33 o las dos? Hoy el lockup usa el logo de Spotvision.</li>
+    <li>Las etiquetas del mapa y la cola, ¿van con datos ficticios en la demo del viernes o con algo del sandbox?</li>
+  </ul>
+</section>
+
+</div>

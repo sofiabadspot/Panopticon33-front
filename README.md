@@ -1,8 +1,8 @@
 # Panopticon 33 — consola (prototipo de validación)
 
-SPOTVISION Government · Physical AI Agent: SENTINEL · Orquestación: MAIC · Agente: Jules
+SPOTVISION Government · Orquestación: MAIC · Agente: Jules
 
-Prototipo navegable de la consola de operación. Sirve para validar pantallas con el Ministerio de Seguridad antes del desarrollo. La geografía es real (calles, cruces y coordenadas). Los eventos son simulados, salvo los tres clips de tránsito y los recortes de trazabilidad, que son salidas reales de SENTINEL (con rostros pixelados).
+Prototipo navegable de la consola de operación. Sirve para validar pantallas con el Ministerio de Seguridad antes del desarrollo. La geografía es real (calles, cruces y coordenadas). Los eventos son simulados, salvo los tres clips de tránsito y los recortes de trazabilidad, que son salidas reales de Panopticon (con rostros pixelados).
 
 ## Cómo ejecutarlo
 
@@ -31,7 +31,7 @@ El estilo de marca del modo Mapa está en `js/map-google-2d.js` (`ROADMAP_STYLE`
 
 - **Barra de capas** con conteos: cámaras, cobertura, zonas, unidades e incidentes. Cada una se enciende o apaga.
 - **Cobertura honesta:** campo de visión de cada cámara operativa y celdas rojas punteadas donde las vías principales no tienen cobertura (puntos ciegos). El cálculo está en `Coverage` (`js/core.js`).
-- **Línea de estado del HUD:** frescura de cada fuente (SENTINEL, MAIC), cámaras operativas, cobertura de vías principales y puntos ciegos.
+- **Línea de estado del HUD:** frescura de cada fuente (Panopticon, MAIC), cámaras operativas, cobertura de vías principales y puntos ciegos.
 - **Incidentes** con codificación redundante: crítica = rombo rojo con pulso, media = triángulo amarillo, baja = círculo azul. En atención = aro verde.
 - **Zoom semántico:** de lejos, mapa de calor de aglomeraciones; de cerca, área de cada zona.
 - **Encuadres rápidos:** Sector, Plaza, Roosevelt, Escalón y Estadio (teclas 1 a 5).
@@ -41,7 +41,7 @@ El estilo de marca del modo Mapa está en `js/map-google-2d.js` (`ROADMAP_STYLE`
 
 - El logo de Google y el texto de derechos se muestran siempre (`#gmapCredits` en 2D, `#geoCredits` en 3D). No deben ocultarse ni taparse.
 - No se descargan ni se guardan mosaicos. Las vistas de Google no funcionan sin conexión.
-- El mapa se usa solo para visualizar. SENTINEL analiza el video de las cámaras, nunca las imágenes del mapa.
+- El mapa se usa solo para visualizar. Panopticon analiza el video de las cámaras, nunca las imágenes del mapa.
 - No hay buscador de direcciones; si se agrega uno sobre estas vistas, debe ser el de Google.
 
 ### Seguridad de la clave
@@ -75,7 +75,7 @@ assets/               Logo, orbe de Jules, tipografía Erbaum
 ## Muro de video e identidad
 
 - **Muro de video** (`js/video-wall.js`): todas las cámaras en rejilla (2×2 a 5×4), ordenadas por alerta. Filtros "Con alerta" y "Con video", ronda automática, filtros de visualización térmico y nocturno (son filtros de imagen, no sensores) y vista de una cámara con sus vecinas. En producción cada mosaico es el flujo en vivo (WebRTC o HLS).
-- **Búsqueda de identidad** (`js/identity-sources.js`): el operador elige buscar un rostro en bases de datos institucionales o en fuentes abiertas. Cada fuente es un conector definido en `MockDB.sources` (`js/core.js`). Solo "Listas autorizadas en SENTINEL" está conectada. Las demás muestran la institución, lo que aportarían y cómo conectarlas: base de datos, API o MCP. Una fuente sin conectar nunca muestra datos.
+- **Búsqueda de identidad** (`js/identity-sources.js`): el operador elige buscar un rostro en bases de datos institucionales o en fuentes abiertas. Cada fuente es un conector definido en `MockDB.sources` (`js/core.js`). Solo "Listas autorizadas en Panopticon" está conectada. Las demás muestran la institución, lo que aportarían y cómo conectarlas: base de datos, API o MCP. Una fuente sin conectar nunca muestra datos.
 - **Iconografía:** Material Symbols Sharp para la interfaz y `Glyph` (`js/map-tactical.js`) para la cámara CCTV y la unidad policial, igual en las tres vistas de mapa.
 
 Las instituciones listadas (RNPN, DGME, PNC, FGR, DGCP, INTERPOL, VMT) son una propuesta. Cuáles se conectan y con qué alcance lo define el Ministerio. La búsqueda en redes sociales requiere un proveedor autorizado y base legal, porque las plataformas prohíben la extracción automática de rostros.
@@ -103,7 +103,7 @@ Iconos de Blueprint (Palantir, Apache-2.0) en `data/icons.js`, aplicados por el 
 | Calles, cruces y nombres | Reales (OpenStreetMap y Google) |
 | Ubicación de cámaras | Cruces reales del sector, con su latitud y longitud. La asignación de cada cámara a un cruce es de demostración; se reemplaza por el inventario del ministerio |
 | Rutas de despacho, patrullaje y recorridos | Calculados sobre la red vial real (`Routes` en `js/core.js`) |
-| Clips de tránsito (3) y recortes de trazabilidad | Reales, generados por SENTINEL. Su ubicación en el mapa es asignada |
+| Clips de tránsito (3) y recortes de trazabilidad | Reales, generados por Panopticon. Su ubicación en el mapa es asignada |
 | Alertas, conteos, placas, candidatos y unidades | Simulados |
 
 **Regla de evidencia:** la consola solo muestra material real. Donde aún no hay material de demostración aparece el logo de SPOTVISION en blanco y negro (`Evidence.placeholder` en `js/ui.js`). No se dibujan imágenes inventadas.

@@ -12,7 +12,7 @@
    Requisitos de uso de Google que este módulo respeta
    - La atribución y el logo de Google se muestran siempre (#geoCredits).
    - No se guarda ni se descarga contenido de los mosaicos.
-   - El mapa solo se usa para visualizar; SENTINEL nunca analiza estas imágenes.
+   - El mapa solo se usa para visualizar; Panopticon nunca analiza estas imágenes.
    - No hay buscador de direcciones (tendría que ser el de Google).
 
    Configuración: window.P33_CONFIG (archivo config.local.js, fuera del código).
@@ -39,11 +39,11 @@ const GeoMap = (() => {
   /* ---------- Conversión de coordenadas locales (x este, z sur, en metros) ---------- */
   const pos = (x, z, h = 0) => { const ll = toLatLon(x, z); return C.Cartesian3.fromDegrees(ll.lon, ll.lat, h); };
   const css = (hex, a = 1) => C.Color.fromCssColorString('#' + hex.toString(16).padStart(6, '0')).withAlpha(a);
-  const camColor = (st) => st === 'online' ? COLOR.skyHi : st === 'degraded' ? COLOR.yellow : COLOR.red;
-  const zoneColor = (st) => st === 'critical' ? COLOR.red : st === 'medium' ? COLOR.yellow : COLOR.skyHi;
+  const camColor = (st) => st === 'online' ? COLOR.muted : st === 'degraded' ? COLOR.yellow : COLOR.red;
+  const zoneColor = (st) => st === 'critical' ? COLOR.red : st === 'medium' ? COLOR.yellow : COLOR.muted;
   const labelStyle = (text, size = 13) => ({
     text, font: `500 ${size}px "IBM Plex Sans", sans-serif`, fillColor: C.Color.fromCssColorString('#fcfcfc'),
-    showBackground: true, backgroundColor: C.Color.fromCssColorString('#080e12').withAlpha(.88), backgroundPadding: new C.Cartesian2(9, 6),
+    showBackground: true, backgroundColor: C.Color.fromCssColorString('#0d0d0d').withAlpha(.88), backgroundPadding: new C.Cartesian2(9, 6),
     heightReference: C.HeightReference.RELATIVE_TO_3D_TILE, disableDepthTestDistance: Number.POSITIVE_INFINITY,
     verticalOrigin: C.VerticalOrigin.BOTTOM, scaleByDistance: new C.NearFarScalar(600, 1.1, 9000, .7), distanceDisplayCondition: new C.DistanceDisplayCondition(0, NEAR),
   });
@@ -94,10 +94,10 @@ const GeoMap = (() => {
   function country() {
     const ring = GEO.sv[0]; const v = S.viewer;
     const outline = []; for (let i = 0; i < ring.length; i += 2) outline.push(ring[i], ring[i + 1], 2500);
-    v.entities.add({ polyline: { positions: C.Cartesian3.fromDegreesArrayHeights(outline), width: 2.5, material: css(COLOR.lime, .95) } });
+    v.entities.add({ polyline: { positions: C.Cartesian3.fromDegreesArrayHeights(outline), width: 2.5, material: css(COLOR.primary, .95) } });
     // Tinte del territorio: se pinta sobre los mosaicos y solo se ve de lejos (no interfiere con la operación).
     v.entities.add({ polygon: {
-      hierarchy: new C.PolygonHierarchy(C.Cartesian3.fromDegreesArray(ring)), material: css(COLOR.lime, .16),
+      hierarchy: new C.PolygonHierarchy(C.Cartesian3.fromDegreesArray(ring)), material: css(COLOR.primary, .16),
       classificationType: C.ClassificationType.CESIUM_3D_TILE, distanceDisplayCondition: new C.DistanceDisplayCondition(60000, Number.MAX_VALUE),
     } });
   }
@@ -172,7 +172,7 @@ const GeoMap = (() => {
       S.zones.set(z.id, { area, label, status: z.status });
     });
     unitObjs.forEach((o) => {
-      const idle = Glyph.badge('unit', COLOR.police), busy = Glyph.badge('unit', COLOR.lime);
+      const kind = Glyph.unitKind(o.u), idle = Glyph.badge('unit', COLOR.police, { kind }), busy = Glyph.badge('unit', 0xf4f4f4, { kind, busy: true });
       const e = E.add({ position: new C.CallbackProperty(() => pos(o.s.position.x, o.s.position.z, 5), false), billboard: plate(idle, 20) });
       e.billboard.image = new C.CallbackProperty(() => (o.u.status === 'patrullando' ? idle : busy), false);
       e.p33 = { kind: 'unit', id: o.u.id };
@@ -223,7 +223,7 @@ const GeoMap = (() => {
   function dispatchUnits(ids, dest) {
     if (!S.available) return;
     ids.forEach((id) => { const o = City.unitObjs.get(id); if (!o) return;
-      S.viewer.entities.add({ polyline: groundLine((o.path || [[o.s.position.x, o.s.position.z], [dest.x, dest.z]]).map(([x, z]) => pos(x, z)), new C.PolylineDashMaterialProperty({ color: css(COLOR.lime, .95), dashLength: 18 }), 3) });
+      S.viewer.entities.add({ polyline: groundLine((o.path || [[o.s.position.x, o.s.position.z], [dest.x, dest.z]]).map(([x, z]) => pos(x, z)), new C.PolylineDashMaterialProperty({ color: css(COLOR.primary, .95), dashLength: 18 }), 3) });
     });
   }
 

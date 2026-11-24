@@ -1,0 +1,99 @@
+/* =====================================================================
+   Panóptico 33 · Tema oscuro en escala de grises
+   ---------------------------------------------------------------------
+   Nombres de token: los del DS de Sync / storybook-spotvision
+   (--surface, --ink, --border, --primary, --status-*…), para que la
+   migración al paquete @spotvision-ai/storybook-spotvision/sync no
+   obligue a renombrar nada.
+
+   Valores: decisión de la reunión del 18/11/2026.
+   - La interfaz es solo grises. Panóptico 33 es otra marca: no usa la
+     lima ni el azul de Spotvision (--brand-lime, --brand-blue, --detail).
+   - El color queda reservado a estados y alertas, con los valores
+     oficiales del DS (status-negative, status-alert, status-positive,
+     status-neutral).
+   - Jules lleva un color propio (--jules). Pendiente de definir: por
+     ahora es el mismo blanco de la tinta.
+
+   Los grises son neutros (OKLCH sin croma). Sus luminosidades son las
+   del prototipo, así que los contrastes se mantienen:
+   texto 18:1, secundario 9.3:1 y tenue 5.4:1 sobre --surface-panel.
+   Producto solo en modo oscuro (sala de control 24/7).
+   ===================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* --- Superficies ---------------------------------------------------- */
+  --surface: #090909;          /* fondo de la consola */
+  --surface-panel: #121212;    /* paneles y hojas (no está en el DS) */
+  --surface-raised: #1b1b1b;   /* hover, ítems elevados */
+  --glass: #121212c9;          /* paneles flotantes sobre el mapa */
+  --glass-strong: #121212f2;
+  --glass-hi: #ffffff14;       /* relleno suave de selección */
+  --scrim: #000000a6;
+
+  /* --- Tinta ---------------------------------------------------------- */
+  --ink: #fcfcfc;
+  --ink-muted: #b7b7b7;        /* texto secundario */
+  --ink-subtle: #898989;       /* rótulos y datos de apoyo (≥4.5:1) */
+  --ink-inverse: #090909;
+
+  /* --- Bordes --------------------------------------------------------- */
+  --border: #222222;           /* filete hairline */
+  --border-strong: #353535;    /* divisores, contornos de chip */
+  --border-control: #636363;   /* contorno de controles (3.3:1) */
+
+  /* --- Acción --------------------------------------------------------- */
+  /* La acción primaria es blanca: en una interfaz de grises es lo que más
+     se destaca sin competir con los estados. */
+  --primary: #fcfcfc;
+  --primary-20: #fcfcfc1f;
+  --on-primary: #171717;
+  --focus: #fcfcfc;
+
+  /* --- Estados (únicos colores de la interfaz) ------------------------ */
+  /* Estados en modo oscuro, como Sync y Scale: el color va FUERTE en bordes, íconos y textos; solo los
+     RELLENOS llevan opacidad (--status-*-tint). Nunca un relleno de color puro salvo que haga falta. */
+  --status-negative: #e0453c;       /* crítica, error · bordes, íconos, puntos */
+  --status-negative-text: #f2554b;  /* texto rojo sobre oscuro (5.6:1) */
+  --status-negative-tint: rgba(224, 69, 60, 0.16);
+  --status-negative-line: #e0453c;
+  --status-negative-20: rgba(224, 69, 60, 0.16);
+  --status-alert: #f3ff00;          /* media, advertencia: siempre con ícono o texto */
+  --status-alert-text: #f3ff00;
+  --status-alert-tint: rgba(243, 255, 0, 0.12);
+  --status-alert-line: #f3ff00;
+  --status-alert-20: rgba(243, 255, 0, 0.12);
+  --status-positive: #6cd300;       /* confirmado, cubierta, operativa */
+  --status-positive-text: #6cd300;
+  --status-positive-tint: rgba(108, 211, 0, 0.14);
+  --status-positive-line: #6cd300;
+  --status-positive-20: rgba(108, 211, 0, 0.14);
+  --status-neutral: #e6e6e6;        /* baja, inactiva, sin cambio */
+  --status-neutral-20: rgba(230, 230, 230, 0.12);
+
+  /* --- Jules ---------------------------------------------------------- */
+  /* Color distintivo de Jules (reunión 18/11): su marca, la Nebulosa, con
+     los colores de Spotvision. Es lo ÚNICO de la consola que los usa: así
+     Jules se reconoce de un vistazo y no se confunde con un estado.
+     No usar estos valores fuera de la marca de Jules. */
+  --jules-c1: #cdec08;   /* brand-lime */
+  --jules-c2: #0084ba;   /* brand-blue */
+  --jules-c3: #0047c4;   /* chart-2 */
+  --jules-c4: #b1d398;   /* chart-4 */
+  --jules-c5: #3ea380;   /* chart-5 */
+  --jules: var(--ink);   /* texto del nombre: blanco, la marca pone el color */
+
+  /* --- Tipografía (DS de Sync) ---------------------------------------- */
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-sans);  /* la jerarquía sale del peso y el color */
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --font-producto: 'Erbaum', 'IBM Plex Sans', sans-serif;  /* nombre del producto */
+  /* Serif solo en los títulos de Jules (reunión 18/11). */
+  --font-jules: 'IBM Plex Serif', Georgia, serif;
+
+  /* --- Sombras -------------------------------------------------------- */
+  --shadow-md: 0 8px 24px #00000059;
+  --shadow-lg: 0 16px 48px #00000080;
+}

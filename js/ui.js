@@ -1,7 +1,7 @@
 /* =====================================================================
    §7 EVIDENCE — evidencia que muestra la consola.
    Regla: solo se muestra material real (clips y recortes generados por
-   SENTINEL). Donde todavía no hay material de demostración aparece un
+   Panopticon). Donde todavía no hay material de demostración aparece un
    marcador con el logo de SPOTVISION en blanco y negro; la consola nunca
    dibuja imágenes inventadas. En producción: GET /v1/events/{id}/evidence.
    ===================================================================== */
@@ -15,7 +15,7 @@ const Evidence = (() => {
   /** Clip real asociado a una cámara (hoy: las cámaras con eventos de tránsito), o null. */
   function clipFor(cameraId) { const ev = MockDB.traffic.find((t) => t.cameraId === cameraId); return ev ? MEDIA.clips[ev.clip] : null; }
   const coords = (o) => { const p = toLatLon(o.x, o.z); return `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`; };
-  /** Captura del caso de demostración con las detecciones de SENTINEL: el rostro analizado y los demás rostros del cuadro. */
+  /** Captura del caso de demostración con las detecciones de Panopticon: el rostro analizado y los demás rostros del cuadro. */
   function demoFrame() {
     const d = MockDB.demoCase, box = (b, cls, label) => `<i class="fbox ${cls}" style="left:${b.l}%;top:${b.t}%;width:${b.w}%;height:${b.h}%"><em>${label}</em></i>`;
     return `<div class="demo-frame"><img src="${MEDIA.demo.cctv}" alt="Captura de muestra">${d.others.map((b) => box(b, '', 'Rostro')).join('')}${box(d.box, 'main', 'Rostro analizado')}<span class="tagx">Imagen de muestra</span></div>`;
@@ -51,7 +51,7 @@ const UI = (() => {
     const P = (lo, la) => [((lo - minx) * s).toFixed(1), ((maxy - la) * s).toFixed(1)];
     let d = ''; for (let i = 0; i < r.length; i += 2) d += (i ? 'L' : 'M') + P(r[i], r[i + 1]).join(',');
     const [cx, cy] = P(-89.1915, 13.6985);
-    return `<svg viewBox="0 0 ${W} ${H}" aria-label="El Salvador"><path d="${d}Z" fill="#0a2732" stroke="#78b2c8" stroke-opacity=".5" stroke-width=".8"/><circle cx="${cx}" cy="${cy}" r="7" fill="#b3c452" opacity=".18"><animate attributeName="r" values="4;10;4" dur="2.4s" repeatCount="indefinite"/></circle><circle cx="${cx}" cy="${cy}" r="2.6" fill="#b3c452"/></svg>`;
+    return `<svg viewBox="0 0 ${W} ${H}" aria-label="El Salvador"><path d="${d}Z" fill="#232323" stroke="#a8a8a8" stroke-opacity=".5" stroke-width=".8"/><circle cx="${cx}" cy="${cy}" r="7" fill="#b9b9b9" opacity=".18"><animate attributeName="r" values="4;10;4" dur="2.4s" repeatCount="indefinite"/></circle><circle cx="${cx}" cy="${cy}" r="2.6" fill="#b9b9b9"/></svg>`;
   }
 
   /* ---------- Pestañas ---------- */
@@ -75,7 +75,12 @@ const UI = (() => {
   function render() {
     renderTabs(); stopLoops();
     const L = $('#railL'), R = $('#railR');
-    if (S.view === 'mando') { L.innerHTML = mandoLeft(); R.innerHTML = feedPanel(); R.classList.remove('hidden'); closeSheet(); }
+    if (S.view === 'mando') {
+      // Propuesta P2: Ministro ve el territorio y lo que pide atención; Operador 911 trabaja la cola.
+      if (Ops.S.mode === 'operador') { L.innerHTML = Ops.queuePanel(); R.innerHTML = ''; R.classList.add('hidden'); }
+      else { L.innerHTML = mandoLeft(); R.innerHTML = Ops.summaryPanel(); R.classList.remove('hidden'); }
+      L.classList.toggle('wide', Ops.S.mode === 'operador'); closeSheet();
+    } else $('#railL').classList.remove('wide');
     if (S.view === 'aglomeraciones') { L.innerHTML = crowdLeft(); R.classList.add('hidden'); }
     if (S.view === 'placas') { L.innerHTML = platesLeft(); R.classList.add('hidden'); if (!S.sel) closeSheet(); }
     if (S.view === 'transito') { L.innerHTML = trafficLeft(); R.classList.add('hidden'); if (!S.sel) closeSheet(); }
@@ -131,7 +136,7 @@ const UI = (() => {
     const units = City.nearestUnits(loc.x, loc.z, 3).map((u) => { const o = City.unitObjs.get(u.id); return { ...u, d: Routes.length(Routes.path(o.s.position.x, o.s.position.z, loc.x, loc.z)) }; }).sort((a, b) => a.d - b.d);
     const box = document.createElement('div'); box.className = 'nearby';
     box.innerHTML = `<div class="caption" style="margin-bottom:8px">Cámaras más cercanas</div><div class="mosaic">${cams.map(({ c, d }) => { const clip = Evidence.clipFor(c.id); return `<button class="tile" data-cam="${c.id}" title="${esc(c.street)}">${clip ? `<video src="${clip.src}" poster="${clip.poster}" muted loop autoplay playsinline></video>` : Evidence.placeholder('', '')}<span>${c.id} · ${Math.round(d)} m</span></button>`; }).join('')}</div>
-      <div class="caption" style="margin:14px 0 8px">Unidades más cercanas (MAIC)</div><div style="display:flex;flex-direction:column;gap:6px">${units.map((u) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px"><span><span class="mono">${u.id}</span> · ${City.unitObjs.get(u.id).u.type}<span class="geo" style="margin:2px 0 0">${Geo.str({ x: City.unitObjs.get(u.id).s.position.x, z: City.unitObjs.get(u.id).s.position.z })}</span></span><span class="muted">${Math.round(u.d)} m por calle · llegada ~${Math.max(1, Math.round(u.d / 500))} min</span></div>`).join('')}</div>`;
+      <div class="caption" style="margin:14px 0 8px">Unidades más cercanas (MAIC)</div><div style="display:flex;flex-direction:column;gap:6px">${units.map((u) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px"><span><span class="mono">${u.id}</span> · ${City.unitObjs.get(u.id).u.type}<span class="geo" style="margin:2px 0 0">${Geo.str({ x: City.unitObjs.get(u.id).s.position.x, z: City.unitObjs.get(u.id).s.position.z })}</span></span><span class="muted">${Math.round(u.d)} m por calle · llegada ~${Math.max(1, Math.round(u.d / 500))} min</span></div>`).join('')}</div>`;
     bd.appendChild(box);
   }
 
@@ -142,7 +147,7 @@ const UI = (() => {
     const units = [...City.unitObjs.values()].length;
     return `
     <section class="panel"><div class="hd"><div><h3>Salvador del Mundo</h3><div class="sub">San Salvador · POC Ministerio de Seguridad</div></div><span class="chip live"><span class="ms">sensors</span>En vivo</span></div>
-      <div class="bd"><div class="territory">${territorySvg()}<div class="meta"><b>${cams.length} cámaras · 4.2 km²</b>Cobertura continua por SENTINEL desde dic 2026</div></div></div>
+      <div class="bd"><div class="territory">${territorySvg()}<div class="meta"><b>${cams.length} cámaras · 4.2 km²</b>Cobertura continua por Panopticon desde dic 2026</div></div></div>
       <div class="kpis">
         <div class="kpi"><div class="v" id="k-cams">${on}<small>/ ${cams.length}</small></div><div class="l">Cámaras en línea</div></div>
         <div class="kpi ${open ? 'alert' : ''}"><div class="v" id="k-open">${open}</div><div class="l">Alertas abiertas</div></div>
@@ -151,12 +156,12 @@ const UI = (() => {
         <div class="kpi"><div class="v">1.4<small>s</small></div><div class="l">Detección a alerta</div></div>
         <div class="kpi"><div class="v">${units}</div><div class="l">Unidades PNC visibles</div></div>
       </div></section>
-    <section class="panel"><div class="hd"><h3>SENTINEL</h3><span class="chip ok"><span class="ms">check_circle</span>Operativo</span></div>
+    <section class="panel"><div class="hd"><h3>Sistema de visión</h3><span class="chip ok"><span class="ms">check_circle</span>Operativo</span></div>
       <div class="bd" style="display:grid;gap:10px;font-size:13px">
         <div style="display:flex;justify-content:space-between"><span class="muted">Cómputo en sitio</span><span>4 de 4 SPOTBOX</span></div>
         <div style="display:flex;justify-content:space-between"><span class="muted">Capacidades activas</span><span>Multitudes · Placas · Rostros</span></div>
         <div style="display:flex;justify-content:space-between"><span class="muted">Latencia de inferencia</span><span class="mono">182 ms</span></div>
-        <div style="display:flex;justify-content:space-between"><span class="muted">Integración MAIC</span><span style="color:var(--green)">Conectada</span></div>
+        <div style="display:flex;justify-content:space-between"><span class="muted">Integración MAIC</span><span style="color:var(--status-positive)">Conectada</span></div>
       </div></section>
     <section class="panel"><div class="hd"><h3>Cámaras con incidencia</h3><span class="sub">${cams.length - on} de ${cams.length}</span></div>
       <ul class="list">${cams.filter((c) => c.status !== 'online').map((c) => `<li class="item" data-cam="${c.id}"><span class="ic ${c.status === 'offline' ? 'critical' : 'medium'}"><span class="ms">${c.status === 'offline' ? 'videocam_off' : 'videocam'}</span></span><div><div class="t">${c.id} · ${esc(c.street)}</div><div class="s">${c.status === 'offline' ? 'Sin señal · técnico notificado' : `Degradada · ${c.fps} fps`}</div></div><div class="r"><span class="chip ${c.status === 'offline' ? 'critical' : 'medium'}">${c.status === 'offline' ? 'Crítica' : 'Media'}</span></div></li>`).join('')}</ul></section>`;
@@ -164,7 +169,7 @@ const UI = (() => {
   function feedPanel() {
     const list = Api.state.alerts.filter((a) => S.feedFilter === 'all' || a.severity === 'critical').slice(0, 40);
     return `<section class="panel flush" style="display:flex;flex-direction:column;min-height:0;flex:1">
-      <div class="hd"><div><h3>Alertas en vivo</h3><div class="sub">SENTINEL · ${Api.state.alerts.length} hoy en este turno</div></div>
+      <div class="hd"><div><h3>Alertas en vivo</h3><div class="sub">Panopticon · ${Api.state.alerts.length} hoy en este turno</div></div>
         <div class="seg"><button data-filter="all" class="${S.feedFilter === 'all' ? 'on' : ''}">Todas</button><button data-filter="crit" class="${S.feedFilter !== 'all' ? 'on' : ''}">Críticas</button></div></div>
       <ul class="list" id="feed" style="overflow-y:auto;flex:1">${list.length ? list.map(feedItem).join('') : `<li class="item" style="cursor:default"><span></span><div class="s">Sin alertas en este filtro. Las nuevas aparecerán aquí en tiempo real.</div></li>`}</ul></section>`;
   }
@@ -181,14 +186,14 @@ const UI = (() => {
     <section class="panel"><div class="hd"><div><h3>Evento en curso</h3><div class="sub">${MockDB.EVENT.name}</div></div><span class="chip critical">${pct(est / plan - 1)}</span></div>
       <div class="bd">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:2px 0 12px">
-          <div><div class="caption">Previsto</div><div style="font-family:var(--f-display);font-size:30px;font-weight:300">${fmt(plan)}</div></div>
-          <div><div class="caption">Estimado ahora</div><div id="evEst" style="font-family:var(--f-display);font-size:30px;font-weight:300;color:#d6a09a">${fmt(est)}</div></div>
+          <div><div class="caption">Previsto</div><div style="font-family:var(--font-display);font-size:30px;font-weight:300">${fmt(plan)}</div></div>
+          <div><div class="caption">Estimado ahora</div><div id="evEst" style="font-family:var(--font-display);font-size:30px;font-weight:300;color:#ef6b62">${fmt(est)}</div></div>
         </div>
         <div class="callout danger"><span class="ms">local_police</span><div>Hay <b>${officers}</b> agentes en las zonas. Para esta asistencia se recomiendan <b>${need}</b> (1 por cada ${MockDB.EVENT.officersPerPerson} personas). Déficit de <b>${Math.max(0, need - officers)}</b>.</div></div>
         <button class="btn primary" style="width:100%;margin-top:12px" data-action="dispatch-all"><span class="ms">send</span>Solicitar refuerzo para zonas críticas</button>
       </div></section>
     <section class="panel flush"><div class="hd"><h3>Zonas</h3><span class="sub">Ordenadas por exceso sobre lo previsto</span></div>
-      <ul class="list">${zs.map((z) => { const k = z.est / z.planned, st = zoneStatus(z), col = st === 'critical' ? 'var(--red)' : st === 'medium' ? 'var(--yellow)' : 'var(--sky-hi)'; return `<li class="item ${S.sel === z.id ? 'sel' : ''}" data-zone="${z.id}"><span class="ic ${st}"><span class="ms">groups</span></span><div><div class="t">${z.name}</div><div class="s">${fmt(z.est)} de ${fmt(z.planned)} previstos · ${z.officers} agentes</div><div class="geo"><span class="ms">location_on</span>${Geo.str(z)}</div><div class="cap"><i style="width:${clamp(k / 10 * 100, 2, 100)}%;background:${col}"></i><span class="mark" style="left:10%"></span></div></div><div class="r"><span class="chip ${st}">${sevLabel[st]}</span><span>${pct(k - 1)}</span></div></li>`; }).join('')}</ul></section>`;
+      <ul class="list">${zs.map((z) => { const k = z.est / z.planned, st = zoneStatus(z), col = st === 'critical' ? 'var(--status-negative)' : st === 'medium' ? 'var(--status-alert)' : 'var(--ink-muted)'; return `<li class="item ${S.sel === z.id ? 'sel' : ''}" data-zone="${z.id}"><span class="ic ${st}"><span class="ms">groups</span></span><div><div class="t">${z.name}</div><div class="s">${fmt(z.est)} de ${fmt(z.planned)} previstos · ${z.officers} agentes</div><div class="geo"><span class="ms">location_on</span>${Geo.str(z)}</div><div class="cap"><i style="width:${clamp(k / 10 * 100, 2, 100)}%;background:${col}"></i><span class="mark" style="left:10%"></span></div></div><div class="r"><span class="chip ${st}">${sevLabel[st]}</span><span>${pct(k - 1)}</span></div></li>`; }).join('')}</ul></section>`;
   }
   function selectZone(id, silent) {
     const z = S.zones.find((q) => q.id === id); if (!z) return; S.sel = id; if (!silent) Sfx.select();
@@ -200,13 +205,13 @@ const UI = (() => {
       <div class="sh-bd">
         <div class="evidence">${Evidence.placeholder('Video en vivo no incluido en la demo', `${z.cameras[0]} · ${Evidence.coords(z)}`)}</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-          <div><div class="caption">Estimado</div><div style="font-family:var(--f-display);font-size:26px;font-weight:300" id="zEst">${fmt(z.est)}</div></div>
-          <div><div class="caption">Previsto</div><div style="font-family:var(--f-display);font-size:26px;font-weight:300">${fmt(z.planned)}</div></div>
-          <div><div class="caption">Desviación</div><div style="font-family:var(--f-display);font-size:26px;font-weight:300;color:${st === 'critical' ? '#d6a09a' : 'inherit'}">${pct(z.est / z.planned - 1)}</div></div>
+          <div><div class="caption">Estimado</div><div style="font-family:var(--font-display);font-size:26px;font-weight:300" id="zEst">${fmt(z.est)}</div></div>
+          <div><div class="caption">Previsto</div><div style="font-family:var(--font-display);font-size:26px;font-weight:300">${fmt(z.planned)}</div></div>
+          <div><div class="caption">Desviación</div><div style="font-family:var(--font-display);font-size:26px;font-weight:300;color:${st === 'critical' ? '#ef6b62' : 'inherit'}">${pct(z.est / z.planned - 1)}</div></div>
         </div>
         <div><div class="caption" style="margin-bottom:6px">Últimos 30 minutos · línea punteada = previsto</div><canvas class="spark" id="spark"></canvas></div>
         <dl class="details"><dt>Centroide de la zona</dt><dd class="mono">${Geo.str(z)}</dd><dt>Área del perímetro</dt><dd>${fmt(z.area)} m² · ${z.poly.length} vértices</dd><dt>Agentes en la zona (MAIC)</dt><dd>${z.officers}</dd><dt>Agentes recomendados</dt><dd>${need}</dd><dt>Unidades disponibles a menos de 1 km</dt><dd>${City.nearestUnits(z.x, z.z, 99).filter((u) => u.d < 1000).length}</dd></dl>
-        ${d ? maicTimeline(d) : `<div class="callout ${st === 'critical' ? 'danger' : 'warn'}"><span class="ms">bolt</span><div>${st === 'low' ? 'La zona está dentro de lo previsto. No se requiere acción.' : `Recomendación de SENTINEL: enviar como primer refuerzo las <b>${Math.min(8, Math.max(2, need - z.officers))}</b> unidades más cercanas. MAIC las alertará.`}</div></div>`}
+        ${d ? maicTimeline(d) : `<div class="callout ${st === 'critical' ? 'danger' : 'warn'}"><span class="ms">bolt</span><div>${st === 'low' ? 'La zona está dentro de lo previsto. No se requiere acción.' : `Recomendación de Panopticon: enviar como primer refuerzo las <b>${Math.min(8, Math.max(2, need - z.officers))}</b> unidades más cercanas. MAIC las alertará.`}</div></div>`}
       </div>
       <div class="sh-ft"><button class="btn secondary sm" data-action="zone-cams" data-id="${z.id}"><span class="ms">videocam</span>Ver cámaras</button>${d ? '' : `<button class="btn primary sm" data-action="dispatch" data-id="${z.id}" ${st === 'low' ? 'disabled' : ''}><span class="ms">send</span>Enviar a MAIC</button>`}</div>`);
     drawSpark($('#spark'), z);
@@ -219,8 +224,8 @@ const UI = (() => {
   function drawSpark(cv, z) {
     if (!cv) return; const dpr = Math.min(2, devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight; cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
     const hs = z.history, mx = Math.max(...hs, z.planned) * 1.12; const X = (i) => i / (hs.length - 1) * w, Y = (v) => h - 6 - v / mx * (h - 12);
-    g.strokeStyle = '#252c35'; g.lineWidth = 1; for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(0, h * k / 4); g.lineTo(w, h * k / 4); g.stroke(); }
-    const st = zoneStatus(z), col = st === 'critical' ? '#bf5a52' : st === 'medium' ? '#cfc56a' : '#78b2c8';
+    g.strokeStyle = '#2b2b2b'; g.lineWidth = 1; for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(0, h * k / 4); g.lineTo(w, h * k / 4); g.stroke(); }
+    const st = zoneStatus(z), col = st === 'critical' ? '#e0453c' : st === 'medium' ? '#f3ff00' : '#a8a8a8';
     const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, col + '55'); gr.addColorStop(1, col + '00');
     g.beginPath(); hs.forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v))); g.lineTo(w, h); g.lineTo(0, h); g.closePath(); g.fillStyle = gr; g.fill();
     g.beginPath(); hs.forEach((v, i) => i ? g.lineTo(X(i), Y(v)) : g.moveTo(X(i), Y(v))); g.strokeStyle = col; g.lineWidth = 2; g.stroke();
@@ -233,7 +238,7 @@ const UI = (() => {
     const units = City.nearestUnits(z.x, z.z, n).map((u) => u.id);
     const d = await Api.dispatch({ label: z.name, zoneId: z.id, location: { lat: toLatLon(z.x, z.z).lat, lon: toLatLon(z.x, z.z).lon }, unitsRequested: n });
     d.units = units; d.eta = 4 + Math.round(rnd() * 4); S.dispatchByZone[id] = d; Sfx.confirm();
-    toast(`Evento enviado a MAIC · ${z.name}`, 'send', 'lime');
+    toast(`Evento enviado a MAIC · ${z.name}`, 'send', 'primary');
     Api.state.alerts.filter((a) => a.zoneId === id && a.status === 'abierta').forEach((a) => { a.status = 'en atención'; });
     if (S.sel === id && S.view === 'aglomeraciones') selectZone(id, true);
     return d;
@@ -247,7 +252,7 @@ const UI = (() => {
     <section class="panel"><div class="hd"><div><h3>Buscar placa</h3><div class="sub">Cada consulta queda en el registro de auditoría</div></div></div>
       <div class="bd"><div class="search"><span class="ms dim">search</span><input id="plateQ" placeholder="P 512-884" value="${esc(S.plateQuery)}" aria-label="Placa"><button class="btn primary xs" data-action="plate-search">Buscar</button></div></div></section>
     <section class="panel flush"><div class="hd"><h3>Coincidencias con reportes</h3><span class="sub">${hits.length}</span></div>
-      <ul class="list">${hits.length ? hits.map((r) => readItem(r)).join('') : `<li class="item" style="cursor:default"><span></span><div class="s">Ninguna lectura coincide hoy con un reporte de robo. SENTINEL compara cada placa en tiempo real.</div></li>`}</ul></section>
+      <ul class="list">${hits.length ? hits.map((r) => readItem(r)).join('') : `<li class="item" style="cursor:default"><span></span><div class="s">Ninguna lectura coincide hoy con un reporte de robo. Panopticon compara cada placa en tiempo real.</div></li>`}</ul></section>
     <section class="panel flush"><div class="hd"><h3>Lecturas en vivo</h3><span class="sub" id="readsCount">${fmt(Api.state.platesToday)} hoy</span></div>
       <ul class="list" id="readsList">${reads.map((r) => readItem(r)).join('')}</ul></section>`;
   }
@@ -277,7 +282,7 @@ const UI = (() => {
     const units = City.nearestUnits(r.x, r.z, 3).map((u) => u.id);
     const d = await Api.dispatch({ label: `Placa ${r.plate}`, readId: r.id, unitsRequested: 3 }); d.units = units; d.eta = 3; Sfx.confirm();
     City.dispatchUnits(units, { x: r.x, z: r.z }, 7); City.pulse(r.x, r.z, COLOR.red, 1);
-    toast(`Intercepción solicitada a MAIC · ${r.plate}`, 'send', 'lime');
+    toast(`Intercepción solicitada a MAIC · ${r.plate}`, 'send', 'primary');
     Api.state.alerts.filter((a) => a.refId === r.id).forEach((a) => { a.status = 'en atención'; });
     if (S.sel === id) selectRead(id);
   }
@@ -287,8 +292,8 @@ const UI = (() => {
     const all = Api.state.faces, fs = all.filter((f) => f.demo).concat(all.filter((f) => !f.demo).slice(0, 11)); // el caso de demostración queda fijo arriba
     return `
     <section class="panel"><div class="hd"><h3>Reconocimiento facial</h3><span class="chip info"><span class="ms">policy</span>Uso controlado</span></div>
-      <div class="bd"><div class="callout"><span class="ms">gavel</span><div>SENTINEL compara rostros solo contra listas autorizadas por el Ministerio. El resultado es un <b>candidato</b> con su puntaje; la identidad se confirma por un analista y cada consulta queda auditada.</div></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px"><div><div class="caption">Rostros procesados hoy</div><div style="font-family:var(--f-display);font-size:26px;font-weight:300">${fmt(Api.state.facesToday)}</div></div><div><div class="caption">Umbral de coincidencia</div><div style="font-family:var(--f-display);font-size:26px;font-weight:300">0.85</div></div></div></div></section>
+      <div class="bd"><div class="callout"><span class="ms">gavel</span><div>Panopticon compara rostros solo contra listas autorizadas por el Ministerio. El resultado es un <b>candidato</b> con su puntaje; la identidad se confirma por un analista y cada consulta queda auditada.</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px"><div><div class="caption">Rostros procesados hoy</div><div style="font-family:var(--font-display);font-size:26px;font-weight:300">${fmt(Api.state.facesToday)}</div></div><div><div class="caption">Umbral de coincidencia</div><div style="font-family:var(--font-display);font-size:26px;font-weight:300">0.85</div></div></div></div></section>
     <section class="panel"><div class="hd"><h3>Fuentes de identidad</h3><span class="sub">${MockDB.sources.filter((s) => s.status === 'connected').length} conectada · ${MockDB.sources.filter((s) => s.status !== 'connected').length} por conectar</span></div>
       <div class="bd"><div class="muted" style="font-size:13px;margin-bottom:10px">Un rostro detectado se puede buscar en bases de datos institucionales o en fuentes abiertas. Cada fuente se conecta por base de datos, API o MCP.</div><button class="btn secondary sm" data-action="face-sources"><span class="ms">hub</span>Ver fuentes y conexiones</button></div></section>
     ${trackPanel()}
@@ -302,27 +307,27 @@ const UI = (() => {
   function selectFace(id) {
     const f = Api.state.faces.find((q) => q.id === id); if (!f) return; S.sel = id; Sfx.select();
     document.querySelectorAll('[data-face]').forEach((el) => el.classList.toggle('sel', el.dataset.face === id));
-    const cam = S.cameras.find((c) => c.id === f.cameraId); if (cam) { City.flyTo(cam.x, cam.z, 750, .78); City.pulse(cam.x, cam.z, f.watch ? COLOR.red : COLOR.skyHi, .6); }
+    const cam = S.cameras.find((c) => c.id === f.cameraId); if (cam) { City.flyTo(cam.x, cam.z, 750, .78); City.pulse(cam.x, cam.z, f.watch ? COLOR.red : COLOR.muted, .6); }
     openSheet(`
       <div class="sh-hd"><div style="flex:1"><h2>${f.demo ? 'Coincidencia en registro de muestra' : f.watch ? 'Candidato en lista de búsqueda' : 'Rostro detectado'}</h2><div class="sub">${f.id} · ${f.cameraId} · ${hhmmss(f.ts)}</div></div>${f.watch ? '<span class="chip critical">Crítica</span>' : '<span class="chip neutral">Sin coincidencia</span>'}<button class="iconbtn" data-action="close-sheet" aria-label="Cerrar"><span class="ms">close</span></button></div>
       <div class="sh-bd">
         ${f.demo ? `<div class="callout warn"><span class="ms">info</span><div><b>Ejemplo con datos ficticios (data dummy).</b> La imagen, el nombre y el documento son de muestra y no corresponden a un registro oficial.</div></div>${Evidence.demoFrame()}` : `<div class="evidence">${Evidence.placeholder('Captura no incluida en la demo', `${f.cameraId} · ${hhmmss(f.ts)}`)}</div>`}
         <dl class="details"><dt>Coordenadas de la detección</dt><dd class="mono">${Geo.str(f)}</dd><dt>Calidad del rostro</dt><dd>${f.quality.toFixed(2)} · ${f.quality < .5 ? 'baja, se recomienda mejora' : 'suficiente'}</dd><dt>Ángulo</dt><dd>${f.angle}°</dd><dt>Mejor puntaje</dt><dd>${Math.round(f.candidates[0].score * 100)} % (${f.candidates[0].ref})</dd></dl>
-        <div class="callout warn"><span class="ms">info</span><div>Antes de actuar, analiza el rostro: SENTINEL mejora la captura, reconstruye el rostro en 3D y recalcula los candidatos.</div></div>
+        <div class="callout warn"><span class="ms">info</span><div>Antes de actuar, analiza el rostro: Panopticon mejora la captura, reconstruye el rostro en 3D y recalcula los candidatos.</div></div>
       </div>
       <div class="sh-ft"><button class="btn secondary sm" data-action="face-lab" data-id="${f.id}"><span class="ms">3d_rotation</span>Reconstruir en 3D</button><button class="btn primary sm" data-action="face-sources" data-id="${f.id}"><span class="ms">person_search</span>Buscar identidad</button></div>`);
   }
 
 
   /* ---------- Evidencia en video real ---------- */
-  /** Reproductor de evidencia. En producción el `src` es el clip firmado que entrega SENTINEL. */
+  /** Reproductor de evidencia. En producción el `src` es el clip firmado que entrega Panopticon. */
   function videoEvidence(clipKey, tag) {
     const c = MEDIA.clips[clipKey];
     return `<div class="evidence"><video src="${c.src}" poster="${c.poster}" muted loop autoplay playsinline preload="auto"></video><span class="rec"><span class="dot red"></span>${tag}</span><div class="vbar"><button class="iconbtn" data-action="video-toggle" aria-label="Pausar o reproducir"><span class="ms">pause</span></button><button class="iconbtn" data-action="video-full" data-id="${clipKey}" aria-label="Ampliar video"><span class="ms">open_in_full</span></button></div></div>`;
   }
   function videoFull(clipKey) {
     const c = MEDIA.clips[clipKey]; Sfx.select();
-    $('#fullSlot').innerHTML = `<section class="full" role="dialog" aria-label="Evidencia en video"><header class="f-hd"><span class="ms" style="color:var(--sky-hi)">smart_display</span><h2>Evidencia en video</h2><span class="muted" style="font-size:13px">Análisis de SENTINEL sobre cámara municipal</span><div class="right"><span class="chip neutral">Video real</span><button class="iconbtn" data-close-full aria-label="Cerrar"><span class="ms">close</span></button></div></header><div class="f-bd" style="place-items:center;padding:20px;min-height:0"><video src="${c.src}" poster="${c.poster}" muted loop autoplay playsinline controls style="max-width:100%;max-height:100%;border:1px solid var(--line);border-radius:10px;background:#000"></video></div></section>`;
+    $('#fullSlot').innerHTML = `<section class="full" role="dialog" aria-label="Evidencia en video"><header class="f-hd"><span class="ms" style="color:var(--ink-muted)">smart_display</span><h2>Evidencia en video</h2><span class="muted" style="font-size:13px">Análisis de Panopticon sobre cámara municipal</span><div class="right"><span class="chip neutral">Video real</span><button class="iconbtn" data-close-full aria-label="Cerrar"><span class="ms">close</span></button></div></header><div class="f-bd" style="place-items:center;padding:20px;min-height:0"><video src="${c.src}" poster="${c.poster}" muted loop autoplay playsinline controls style="max-width:100%;max-height:100%;border:1px solid var(--border);border-radius:10px;background:#000"></video></div></section>`;
     $('#fullSlot [data-close-full]').addEventListener('click', () => { $('#fullSlot').innerHTML = ''; });
   }
 
@@ -331,11 +336,11 @@ const UI = (() => {
   function trafficLeft() {
     const evs = MockDB.traffic;
     return `
-    <section class="panel"><div class="hd"><div><h3>Tránsito</h3><div class="sub">Infracciones y colisiones detectadas por SENTINEL</div></div><span class="chip live"><span class="ms">sensors</span>En vivo</span></div>
+    <section class="panel"><div class="hd"><div><h3>Tránsito</h3><div class="sub">Infracciones y colisiones detectadas por Panopticon</div></div><span class="chip live"><span class="ms">sensors</span>En vivo</span></div>
       <div class="kpis"><div class="kpi"><div class="v">31,480</div><div class="l">Vehículos analizados hoy</div></div><div class="kpi"><div class="v">212</div><div class="l">Infracciones registradas</div></div><div class="kpi alert"><div class="v">3</div><div class="l">Colisiones</div></div><div class="kpi"><div class="v">4.6<small>s</small></div><div class="l">Del impacto a la alerta</div></div></div></section>
     <section class="panel flush"><div class="hd"><h3>Eventos con evidencia</h3><span class="sub">Video real</span></div>
       <ul class="list">${evs.map((ev) => { const cam = S.cameras.find((c) => c.id === ev.cameraId); return `<li class="item ${S.sel === ev.id ? 'sel' : ''}" data-traffic="${ev.id}" style="grid-template-columns:84px 1fr auto"><span style="width:84px;height:48px;border-radius:6px;overflow:hidden;background:#000"><img src="${MEDIA.clips[ev.clip].poster}" alt="" style="width:100%;height:100%;object-fit:cover"></span><div><div class="t">${ev.title}</div><div class="s">${ev.cameraId} · ${esc(cam.street)}</div></div><div class="r"><span>${hhmm(ev.ts)}</span><span class="chip ${ev.severity}">${kindLabel[ev.kind]}</span></div></li>`; }).join('')}</ul></section>
-    <section class="panel"><div class="bd" style="padding-top:14px"><div class="callout"><span class="ms">info</span><div>Estos clips son salidas reales de SENTINEL sobre video de cámaras municipales de San Salvador. Su ubicación en el mapa es asignada para la demo.</div></div></div></section>`;
+    <section class="panel"><div class="bd" style="padding-top:14px"><div class="callout"><span class="ms">info</span><div>Estos clips son salidas reales de Panopticon sobre video de cámaras municipales de San Salvador. Su ubicación en el mapa es asignada para la demo.</div></div></div></section>`;
   }
   function selectTraffic(id) {
     const ev = MockDB.traffic.find((q) => q.id === id); if (!ev) return; S.sel = id; Sfx.select();
@@ -346,11 +351,11 @@ const UI = (() => {
       <div class="sh-hd"><div style="flex:1"><h2>${ev.title}</h2><div class="sub">${ev.id} · ${ev.cameraId} · ${esc(cam.street)} · ${hhmmss(ev.ts)}</div></div><span class="chip ${ev.severity}">${kindLabel[ev.kind]}</span><button class="iconbtn" data-action="close-sheet" aria-label="Cerrar"><span class="ms">close</span></button></div>
       <div class="sh-bd">
         ${videoEvidence(ev.clip, 'CLIP')}
-        <div><div class="caption" style="margin-bottom:8px">Vehículos implicados</div><div style="display:flex;flex-direction:column;gap:6px">${ev.vehicles.map((v) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px"><span class="mono" style="color:${col ? '#d6a09a' : 'var(--yellow)'}">${v.tag}</span><span>${v.desc}</span></div>`).join('')}</div></div>
+        <div><div class="caption" style="margin-bottom:8px">Vehículos implicados</div><div style="display:flex;flex-direction:column;gap:6px">${ev.vehicles.map((v) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px"><span class="mono" style="color:${col ? '#ef6b62' : 'var(--status-alert)'}">${v.tag}</span><span>${v.desc}</span></div>`).join('')}</div></div>
         <dl class="details">${ev.detail.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}<dt>Origen del clip</dt><dd>${ev.source}</dd><dt>Coordenadas del hecho</dt><dd class="mono">${Geo.str(ev)}</dd></dl>
         ${disp ? maicTimeline(disp) : col
-          ? '<div class="callout danger"><span class="ms">bolt</span><div>SENTINEL detectó el impacto por el cambio brusco de velocidad y la superposición de ambos vehículos. Recomendación: enviar una unidad y confirmar si hay personas heridas.</div></div>'
-          : '<div class="callout warn"><span class="ms">info</span><div>La maniobra queda registrada con su clip como evidencia. La placa no es legible desde esta cámara; SENTINEL puede buscar el vehículo por tipo y color en las cámaras vecinas.</div></div>'}
+          ? '<div class="callout danger"><span class="ms">bolt</span><div>Panopticon detectó el impacto por el cambio brusco de velocidad y la superposición de ambos vehículos. Recomendación: enviar una unidad y confirmar si hay personas heridas.</div></div>'
+          : '<div class="callout warn"><span class="ms">info</span><div>La maniobra queda registrada con su clip como evidencia. La placa no es legible desde esta cámara; Panopticon puede buscar el vehículo por tipo y color en las cámaras vecinas.</div></div>'}
       </div>
       <div class="sh-ft"><button class="btn secondary sm" data-action="traffic-follow" data-id="${ev.id}"><span class="ms">route</span>Buscar en cámaras vecinas</button>${disp ? '' : `<button class="btn primary sm" data-action="traffic-maic" data-id="${ev.id}"><span class="ms">send</span>Enviar a MAIC</button>`}</div>`);
   }
@@ -358,7 +363,7 @@ const UI = (() => {
     const ev = MockDB.traffic.find((q) => q.id === id); if (!ev || Api.state.dispatches.find((d) => d.trafficId === id)) return;
     const cam = S.cameras.find((c) => c.id === ev.cameraId), units = City.nearestUnits(cam.x, cam.z, ev.kind === 'collision' ? 2 : 1).map((u) => u.id);
     const d = await Api.dispatch({ label: ev.title, trafficId: id, unitsRequested: units.length }); d.units = units; d.eta = 3; Sfx.confirm();
-    City.dispatchUnits(units, cam, 7); City.pulse(cam.x, cam.z, COLOR.lime, .8); toast(`Evento enviado a MAIC · ${ev.title}`, 'send', 'lime');
+    City.dispatchUnits(units, cam, 7); City.pulse(cam.x, cam.z, COLOR.primary, .8); toast(`Evento enviado a MAIC · ${ev.title}`, 'send', 'primary');
     Api.state.alerts.filter((a) => a.refId === id).forEach((a) => { a.status = 'en atención'; });
     if (S.sel === id) selectTraffic(id);
   }
@@ -379,49 +384,49 @@ const UI = (() => {
   function selectTrack(id) {
     const t = Api.getTrackSync(id); if (!t) return; if (S.sel !== id) Api.audit('Consulta de trazabilidad de persona', id); S.sel = id; Sfx.select();
     document.querySelectorAll('[data-track]').forEach((el) => el.classList.toggle('sel', el.dataset.track === id));
-    const path = trackPath(t); City.setLayer('trace', true); City.showTrace(path, { color: COLOR.skyHi, path: Routes.through(path) });
+    const path = trackPath(t); City.setLayer('trace', true); City.showTrace(path, { color: COLOR.muted, path: Routes.through(path) });
     const xs = path.map((p) => p.x), zs = path.map((p) => p.z); City.flyTo((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...zs) + Math.max(...zs)) / 2, 1500, .8);
     const disp = Api.state.dispatches.find((d) => d.trackId === id), ov = t.sightings.filter((s) => s.overlap);
     openSheet(`
       <div class="sh-hd"><div style="flex:1"><h2>Trazabilidad de persona</h2><div class="sub">${t.id} · ${t.from} – ${t.to} · seguimiento por apariencia</div></div><span class="chip info">Re-identificación</span><button class="iconbtn" data-action="close-sheet" aria-label="Cerrar"><span class="ms">close</span></button></div>
       <div class="sh-bd">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-          <div><div class="caption">Avistamientos</div><div style="font-family:var(--f-display);font-size:26px;font-weight:300">${t.sightings.length}</div></div>
-          <div><div class="caption">Cámaras</div><div style="font-family:var(--f-display);font-size:26px;font-weight:300">${t.cameras}</div></div>
-          <div><div class="caption">Duración</div><div style="font-family:var(--f-display);font-size:26px;font-weight:300">${t.minutes}<span style="font-family:var(--f-ui);font-size:13px;color:var(--text-2)"> min</span></div></div>
+          <div><div class="caption">Avistamientos</div><div style="font-family:var(--font-display);font-size:26px;font-weight:300">${t.sightings.length}</div></div>
+          <div><div class="caption">Cámaras</div><div style="font-family:var(--font-display);font-size:26px;font-weight:300">${t.cameras}</div></div>
+          <div><div class="caption">Duración</div><div style="font-family:var(--font-display);font-size:26px;font-weight:300">${t.minutes}<span style="font-family:var(--font-sans);font-size:13px;color:var(--ink-muted)"> min</span></div></div>
         </div>
         <div><div class="caption" style="margin-bottom:8px">Avistamientos en orden · toca uno para verlo en el mapa</div>
           <div class="strip">${t.sightings.map((s, i) => `<button class="sight ${s.overlap ? 'ov' : ''}" data-sight="${i}"><span class="ph"><img src="${MEDIA.crops[s.img]}" alt="Avistamiento ${i + 1}">${s.overlap ? '<i>Solape</i>' : ''}</span><b>${s.from}</b><span>${s.cameraId}</span><span class="q">cuerpo ${s.bq.toFixed(2)} · rostro ${s.fr.toFixed(2)}</span></button>`).join('')}</div></div>
-        <div class="callout"><span class="ms">accessibility_new</span><div>SENTINEL sigue a la persona por su apariencia completa (ropa, complexión, objetos que lleva), no solo por el rostro. Por eso mantiene el seguimiento cuando está de espaldas, donde la calidad de rostro es 0.00.</div></div>
-        ${ov.length ? `<div class="callout warn"><span class="ms">report</span><div><b>${ov.length} avistamientos se solapan</b> en el tiempo (${ov[0].from} – ${ov[ov.length - 1].to}) en cámaras distintas. SENTINEL los marca para revisión humana: solo es válido si ambas cámaras comparten campo de visión.</div></div>` : ''}
+        <div class="callout"><span class="ms">accessibility_new</span><div>Panopticon sigue a la persona por su apariencia completa (ropa, complexión, objetos que lleva), no solo por el rostro. Por eso mantiene el seguimiento cuando está de espaldas, donde la calidad de rostro es 0.00.</div></div>
+        ${ov.length ? `<div class="callout warn"><span class="ms">report</span><div><b>${ov.length} avistamientos se solapan</b> en el tiempo (${ov[0].from} – ${ov[ov.length - 1].to}) en cámaras distintas. Panopticon los marca para revisión humana: solo es válido si ambas cámaras comparten campo de visión.</div></div>` : ''}
         ${disp ? maicTimeline(disp) : ''}
         <div class="locked"><span class="ms">visibility_off</span>Rostros pixelados en este prototipo. El seguimiento no revela identidad.</div>
       </div>
       <div class="sh-ft"><button class="btn secondary sm" data-action="track-map" data-id="${t.id}"><span class="ms">route</span>Ver recorrido completo</button>${disp ? '' : `<button class="btn primary sm" data-action="track-maic" data-id="${t.id}"><span class="ms">send</span>Enviar última posición a MAIC</button>`}</div>`);
   }
   function focusSight(i) {
-    const s = MockDB.track.sightings[i]; if (!s) return; Sfx.tick(); City.flyTo(s.x, s.z, 620, .76); City.pulse(s.x, s.z, s.overlap ? COLOR.red : COLOR.skyHi, .5);
+    const s = MockDB.track.sightings[i]; if (!s) return; Sfx.tick(); City.flyTo(s.x, s.z, 620, .76); City.pulse(s.x, s.z, s.overlap ? COLOR.red : COLOR.muted, .5);
     document.querySelectorAll('.sight').forEach((el, k) => el.classList.toggle('on', k === i));
   }
   async function trackDispatch(id) {
     const t = MockDB.track; if (Api.state.dispatches.find((d) => d.trackId === id)) return; const s = t.sightings[t.sightings.length - 1];
     const units = City.nearestUnits(s.x, s.z, 2).map((u) => u.id); const d = await Api.dispatch({ label: `Seguimiento ${id}`, trackId: id, unitsRequested: 2 }); d.units = units; d.eta = 3; Sfx.confirm();
-    City.dispatchUnits(units, s, 7); City.pulse(s.x, s.z, COLOR.lime, .8); toast(`Última posición enviada a MAIC · ${s.cameraId}`, 'send', 'lime'); if (S.sel === id) selectTrack(id);
+    City.dispatchUnits(units, s, 7); City.pulse(s.x, s.z, COLOR.primary, .8); toast(`Última posición enviada a MAIC · ${s.cameraId}`, 'send', 'primary'); if (S.sel === id) selectTrack(id);
   }
 
 
   /* ---------- Cámara: ficha con su señal, estado y alertas ---------- */
   function selectCamera(id) {
     const c = S.cameras.find((q) => q.id === id); if (!c) return; Sfx.select();
-    City.flyTo(c.x, c.z, 750, .78); City.pulse(c.x, c.z, c.status === 'offline' ? COLOR.red : COLOR.skyHi, .5);
+    City.flyTo(c.x, c.z, 750, .78); City.pulse(c.x, c.z, c.status === 'offline' ? COLOR.red : COLOR.muted, .5);
     const clip = c.status !== 'offline' && Evidence.clipFor(c.id), al = Api.state.alerts.filter((a) => a.cameraId === c.id).slice(0, 4), zone = S.zones.find((z) => z.id === c.zoneId);
     const st = c.status === 'online' ? ['ok', 'En línea'] : c.status === 'degraded' ? ['medium', 'Degradada'] : ['critical', 'Sin señal'];
     openSheet(`
-      <div class="sh-hd"><span style="color:var(--sky-hi);margin-top:3px">${Glyph.svg('cctv', 22)}</span><div style="flex:1"><h2>${c.id}</h2><div class="sub">${esc(c.street)}</div></div><span class="chip ${st[0]}">${st[1]}</span><button class="iconbtn" data-action="close-sheet" aria-label="Cerrar"><span class="ms">close</span></button></div>
+      <div class="sh-hd"><span style="color:var(--ink-muted);margin-top:3px">${Glyph.svg('cctv', 22)}</span><div style="flex:1"><h2>${c.id}</h2><div class="sub">${esc(c.street)}</div></div><span class="chip ${st[0]}">${st[1]}</span><button class="iconbtn" data-action="close-sheet" aria-label="Cerrar"><span class="ms">close</span></button></div>
       <div class="sh-bd">
         <div class="evidence">${c.status === 'offline' ? Evidence.placeholder('Sin señal', 'Técnico notificado') : clip ? `<video src="${clip.src}" poster="${clip.poster}" muted loop autoplay playsinline></video><span class="rec"><span class="dot red"></span>CLIP</span>` : Evidence.placeholder('Señal en vivo no incluida en la demo', c.id)}</div>
-        <dl class="details"><dt>Coordenadas</dt><dd class="mono">${c.lat.toFixed(5)}, ${c.lon.toFixed(5)}</dd><dt>Cuadros por segundo</dt><dd>${c.status === 'offline' ? '—' : c.fps + ' fps'}</dd><dt>Cómputo</dt><dd>${c.compute}</dd><dt>Análisis de SENTINEL</dt><dd>Multitudes · Placas · Rostros</dd><dt>Campo de visión</dt><dd>62° · alcance 200 m</dd><dt>Zona</dt><dd>${zone ? zone.name : 'Fuera de zonas de concentración'}</dd></dl>
-        <div><div class="caption" style="margin-bottom:8px">Alertas de esta cámara</div>${al.length ? `<ul class="list" style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${al.map((a) => feedItem(a)).join('')}</ul>` : '<div class="dim" style="font-size:13px">Sin alertas en este turno.</div>'}</div>
+        <dl class="details"><dt>Coordenadas</dt><dd class="mono">${c.lat.toFixed(5)}, ${c.lon.toFixed(5)}</dd><dt>Cuadros por segundo</dt><dd>${c.status === 'offline' ? '—' : c.fps + ' fps'}</dd><dt>Cómputo</dt><dd>${c.compute}</dd><dt>Análisis de Panopticon</dt><dd>Multitudes · Placas · Rostros</dd><dt>Campo de visión</dt><dd>62° · alcance 200 m</dd><dt>Zona</dt><dd>${zone ? zone.name : 'Fuera de zonas de concentración'}</dd></dl>
+        <div><div class="caption" style="margin-bottom:8px">Alertas de esta cámara</div>${al.length ? `<ul class="list" style="border:1px solid var(--border);border-radius:10px;overflow:hidden">${al.map((a) => feedItem(a)).join('')}</ul>` : '<div class="dim" style="font-size:13px">Sin alertas en este turno.</div>'}</div>
       </div>
       <div class="sh-ft"><button class="btn secondary sm" data-action="cam-wall" data-id="${c.id}"><span class="ms">grid_view</span>Abrir en el muro</button></div>`);
     nearby(c);
@@ -449,19 +454,68 @@ const UI = (() => {
     nearby(locate(a));
   }
 
-  /* ---------- Tooltips sobre el mapa ---------- */
+  /* ---------- Fichas sobre el mapa ----------
+     Al pasar el mouse por una unidad, una cámara o un grupo aparece una ficha HUD: lo que hace
+     falta para identificarlo de un vistazo (placa, tipo, estado, a qué incidente va; o dónde mira
+     la cámara, con qué ángulo y hasta dónde). Lo demás (zonas, incidentes, puntos ciegos) sigue con
+     la ficha corta. */
+  const UNIT_KIND = { auto: ['Patrulla', 'directions_car'], moto: ['Motorizada', 'two_wheeler'], pie: ['A pie', 'directions_walk'] };
+  const UNIT_SPEED = { auto: 34, moto: 41, pie: 5 };
+  function bearing(c) {
+    const p0 = toLatLon(c.x, c.z), p1 = toLatLon(c.x + Math.cos(c.heading) * 50, c.z + Math.sin(c.heading) * 50);
+    const deg = (Math.atan2((p1.lon - p0.lon) * Math.cos(p0.lat * Math.PI / 180), p1.lat - p0.lat) * 180 / Math.PI + 360) % 360;
+    return { deg, card: ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'][Math.round(deg / 45) % 8] };
+  }
+  /** Abanico de la cámara visto desde arriba: el ángulo real y hacia dónde apunta (norte arriba). */
+  function fovSvg(deg, fovDeg) {
+    const r = 26, cx = 30, cy = 30, a0 = (deg - fovDeg / 2 - 90) * Math.PI / 180, a1 = (deg + fovDeg / 2 - 90) * Math.PI / 180;
+    const P = (an) => `${(cx + Math.cos(an) * r).toFixed(1)},${(cy + Math.sin(an) * r).toFixed(1)}`;
+    return `<svg class="hc-fov" viewBox="0 0 60 60" aria-hidden="true"><circle cx="30" cy="30" r="26" fill="none" stroke="currentColor" stroke-opacity=".18"/><path d="M30 4v4M56 30h-4M30 56v-4M4 30h4" stroke="currentColor" stroke-opacity=".35"/><path d="M${cx},${cy} L${P(a0)} A${r},${r} 0 0 1 ${P(a1)} Z" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.2"/><circle cx="30" cy="30" r="2.6" fill="currentColor"/><text x="30" y="11" text-anchor="middle" font-size="6" fill="currentColor" fill-opacity=".6">N</text></svg>`;
+  }
+  const row = (k, v) => `<div class="hc-row"><span>${k}</span><b>${v}</b></div>`;
+  function unitCard(id) {
+    const o = City.unitObjs.get(id); if (!o) return ''; const u = o.u, k = Glyph.unitKind(u), [kind, icon] = UNIT_KIND[k];
+    const d = Api.state.dispatches.slice().reverse().find((q) => q.units && q.units.includes(id));
+    const busy = u.status !== 'patrullando', st = busy ? (d ? 'En ruta' : 'Asignada') : 'Patrullando';
+    const p = toLatLon(o.s.position.x, o.s.position.z);
+    return `<div class="hc-hd"><span class="hc-eyebrow">Unidad PNC · MAIC</span><span class="hc-state ${busy ? 'busy' : ''}"><i></i>${st}</span></div>
+      <div class="hc-title"><span class="hc-ic"><span class="ms">${icon}</span></span><div><b class="mono">${u.id}</b><small>${kind} · ${u.radio || ''}</small></div></div>
+      <div class="hc-grid">${row('Placa', u.plate ? `<span class="mono plate">${u.plate}</span>` : '—')}${row('Agentes', u.crew || 2)}${row('Velocidad', `${busy ? UNIT_SPEED[k] : Math.round(UNIT_SPEED[k] * .5)} km/h`)}${row('GPS', 'hace 2 s')}</div>
+      ${d ? `<div class="hc-task"><span class="hc-eyebrow">Asignada a</span><b>${esc(d.label)}</b><small>Llegada estimada ~${d.eta || 4} min · ${esc(d.status || '')}</small></div>` : ''}
+      <div class="hc-foot mono">${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}</div>`;
+  }
+  function cameraCard(id) {
+    const c = S.cameras.find((q) => q.id === id); if (!c) return ''; const b = bearing(c), fov = Math.round(Coverage.FOV * 180 / Math.PI);
+    const st = c.status === 'online' ? ['En línea', ''] : c.status === 'degraded' ? ['Degradada', 'medium'] : ['Sin señal', 'critical'];
+    const clip = Evidence.clipFor(c.id);
+    return `<div class="hc-hd"><span class="hc-eyebrow">Cámara · ${esc(c.compute || 'Panopticon')}</span><span class="hc-state ${st[1]}"><i></i>${st[0]}</span></div>
+      ${clip ? `<div class="hc-shot"><img src="${clip.poster}" alt=""><span class="mono">EN VIVO · ${c.id}</span></div>` : ''}
+      <div class="hc-title"><span class="hc-ic"><span class="ms">videocam</span></span><div><b class="mono">${c.id}</b><small>${esc(c.street)}</small></div></div>
+      <div class="hc-cam">${fovSvg(b.deg, fov)}<div class="hc-grid">${row('Ángulo', `${fov}°`)}${row('Alcance', `${Coverage.REACH} m`)}${row('Mira hacia', `${b.card} · ${Math.round(b.deg)}°`)}${row('Imagen', c.status === 'offline' ? '—' : `${c.fps} fps`)}</div></div>
+      <div class="hc-foot mono">${c.lat.toFixed(5)}, ${c.lon.toFixed(5)}</div>`;
+  }
+  function groupCard(info) {
+    const n = info.list.length;
+    if (info.cat === 'units') { const by = {}; info.list.forEach((it) => { by[it.sub] = (by[it.sub] || 0) + 1; }); const busy = info.list.filter((it) => it.busy).length; return `<div class="hc-hd"><span class="hc-eyebrow">Grupo · ${n} unidades</span></div><div class="hc-grid">${Object.entries(by).map(([k, v]) => row(UNIT_KIND[k][0], v)).join('')}${row('Asignadas', busy)}</div><div class="hc-foot">Clic para acercar</div>`; }
+    if (info.cat === 'cams') { const off = info.list.filter((it) => it.sub === 'offline').length, deg = info.list.filter((it) => it.sub === 'degraded').length; return `<div class="hc-hd"><span class="hc-eyebrow">Grupo · ${n} cámaras</span></div><div class="hc-grid">${row('En línea', n - off - deg)}${row('Degradadas', deg)}${row('Sin señal', off)}</div><div class="hc-foot">Clic para acercar</div>`; }
+    const by = { critical: 0, medium: 0, low: 0 }; info.list.forEach((it) => { by[it.sev]++; });
+    return `<div class="hc-hd"><span class="hc-eyebrow">Grupo · ${n} incidentes</span></div><div class="hc-grid">${row('Críticos', by.critical)}${row('Medios', by.medium)}${row('Bajos', by.low)}</div><div class="hc-foot">Clic para acercar</div>`;
+  }
   function tip(info, x, y) {
     const el = $('#tip'); if (!info) { el.classList.add('hidden'); return; }
-    let html = '';
-    if (info.kind === 'camera') { const c = S.cameras.find((q) => q.id === info.id); html = `<b>${c.id} · ${esc(c.street)}</b><div class="muted" style="margin-top:4px">${c.status === 'online' ? `En línea · ${c.fps} fps` : c.status === 'degraded' ? `Degradada · ${c.fps} fps` : 'Sin señal'} · ${c.compute}</div><div class="dim mono" style="margin-top:2px">${c.lat.toFixed(5)}, ${c.lon.toFixed(5)}</div>`; }
+    let html = '', card = false;
     const geo = (o) => `<div class="geo"><span class="ms">location_on</span>${Geo.str(o)}</div>`;
-    if (info.kind === 'camera') html += geo(S.cameras.find((q) => q.id === info.id));
-    if (info.kind === 'unit') { const o = City.unitObjs.get(info.id); html = `<b>${o.u.id} · ${o.u.type}</b><div class="muted" style="margin-top:4px">${o.u.status[0].toUpperCase() + o.u.status.slice(1)} · fuente MAIC</div>${geo({ x: o.s.position.x, z: o.s.position.z })}`; }
+    if (info.kind === 'camera') { html = cameraCard(info.id); card = true; }
+    if (info.kind === 'unit') { html = unitCard(info.id); card = true; }
+    if (info.kind === 'group') { html = groupCard(info); card = true; }
     if (info.kind === 'zone') { const z = S.zones.find((q) => q.id === info.id); html = `<b>${z.name}</b><div class="muted" style="margin-top:4px">${fmt(z.est)} estimadas · ${fmt(z.planned)} previstas · ${fmt(z.area)} m²</div>${geo(z)}`; }
     if (info.kind === 'incident') { const a = Api.state.alerts.find((q) => q.id === info.id); if (!a) return; html = `<b>${esc(a.title)}</b><div class="muted" style="margin-top:4px">${esc(a.sub)} · ${hhmm(a.ts)}</div>${geo(a)}`; }
     if (info.kind === 'blind') html = `<b>Punto ciego</b><div class="muted" style="margin-top:4px">Tramo de vía principal sin cobertura de cámara</div>${geo(info)}`;
     if (!html) { el.classList.add('hidden'); return; }
-    el.innerHTML = html; el.style.left = x + 'px'; el.style.top = y + 'px'; el.classList.remove('hidden');
+    el.className = card ? 'hudcard' : ''; el.innerHTML = html;
+    // La ficha se acomoda para no salirse de la pantalla
+    const w = card ? 276 : 240, h = el.offsetHeight || 200;
+    el.style.left = Math.min(x + 16, innerWidth - w - 12) + 'px'; el.style.top = Math.min(y + 16, innerHeight - h - 12) + 'px';
   }
 
   /* ---------- Eventos de interfaz (delegación) ---------- */
@@ -484,9 +538,9 @@ const UI = (() => {
       else {
         const a = t.dataset.action, id = t.dataset.id;
         if (a === 'close-sheet') { closeSheet(); S.sel = null; City.clearTrace(); document.querySelectorAll('.item.sel').forEach((el) => el.classList.remove('sel')); City.focusZone(null); }
-        if (a === 'dispatch') dispatchZone(id).then((d) => { const z = S.zones.find((q) => q.id === id); if (d) { City.dispatchUnits(d.units, z, 9); City.pulse(z.x, z.z, COLOR.lime, 1); } });
-        if (a === 'dispatch-all') S.zones.filter((z) => zoneStatus(z) === 'critical' && !S.dispatchByZone[z.id]).forEach((z, i) => setTimeout(() => dispatchZone(z.id).then((d) => { if (d) { City.dispatchUnits(d.units, z, 9); City.pulse(z.x, z.z, COLOR.lime, 1); } }), i * 400));
-        if (a === 'zone-cams') { const z = S.zones.find((q) => q.id === id); City.flyTo(z.x, z.z, 620, .7); z.cameras.forEach((cid) => { const c = S.cameras.find((q) => q.id === cid); City.pulse(c.x, c.z, COLOR.skyHi, .3); }); }
+        if (a === 'dispatch') dispatchZone(id).then((d) => { const z = S.zones.find((q) => q.id === id); if (d) { City.dispatchUnits(d.units, z, 9); City.pulse(z.x, z.z, COLOR.primary, 1); } });
+        if (a === 'dispatch-all') S.zones.filter((z) => zoneStatus(z) === 'critical' && !S.dispatchByZone[z.id]).forEach((z, i) => setTimeout(() => dispatchZone(z.id).then((d) => { if (d) { City.dispatchUnits(d.units, z, 9); City.pulse(z.x, z.z, COLOR.primary, 1); } }), i * 400));
+        if (a === 'zone-cams') { const z = S.zones.find((q) => q.id === id); City.flyTo(z.x, z.z, 620, .7); z.cameras.forEach((cid) => { const c = S.cameras.find((q) => q.id === cid); City.pulse(c.x, c.z, COLOR.muted, .3); }); }
         if (a === 'plate-search') searchPlate($('#plateQ').value);
         if (a === 'trace') { if (S.lastSightings) { City.showTrace(S.lastSightings, { path: S.lastPath }); City.setLayer('trace', true); } }
         if (a === 'intercept') intercept(id);

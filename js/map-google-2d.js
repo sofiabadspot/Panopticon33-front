@@ -31,31 +31,31 @@ const GMap = (() => {
   /** Estilo del mapa de Google en la paleta SPOTVISION (formato de estilos JSON de Google Maps).
       Los colores operativos (lima, rojo, amarillo) no se usan aquí para que las alertas destaquen. */
   const ROADMAP_STYLE = [
-    { elementType: 'geometry', stylers: [{ color: '#0b1217' }] },
-    { elementType: 'labels.text.fill', stylers: [{ color: '#8fa3af' }] },
-    { elementType: 'labels.text.stroke', stylers: [{ color: '#05090c' }, { weight: 3 }] },
+    { elementType: 'geometry', stylers: [{ color: '#111111' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#9f9f9f' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#080808' }, { weight: 3 }] },
     { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-    { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#2a3b45' }] },
-    { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#c4d2da' }] },
-    { featureType: 'administrative.neighborhood', elementType: 'labels.text.fill', stylers: [{ color: '#a9bac4' }] },
-    { featureType: 'landscape.man_made', elementType: 'geometry.fill', stylers: [{ color: '#0e161c' }] },
-    { featureType: 'landscape.man_made', elementType: 'geometry.stroke', stylers: [{ color: '#1f2d37' }] },
-    { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#0b1217' }] },
-    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#111b22' }] },
-    { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6f8794' }] },
+    { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#383838' }] },
+    { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#cfcfcf' }] },
+    { featureType: 'administrative.neighborhood', elementType: 'labels.text.fill', stylers: [{ color: '#b7b7b7' }] },
+    { featureType: 'landscape.man_made', elementType: 'geometry.fill', stylers: [{ color: '#151515' }] },
+    { featureType: 'landscape.man_made', elementType: 'geometry.stroke', stylers: [{ color: '#2b2b2b' }] },
+    { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#111111' }] },
+    { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+    { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#838383' }] },
     { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
-    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#0f1c14' }] },
-    { featureType: 'poi.sports_complex', elementType: 'geometry', stylers: [{ color: '#10201a' }] },
-    { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#1c2932' }] },
-    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#0b1217' }] },
-    { featureType: 'road.local', elementType: 'labels.text.fill', stylers: [{ color: '#6f8794' }] },
-    { featureType: 'road.arterial', elementType: 'geometry.fill', stylers: [{ color: '#2a3c47' }] },
-    { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#35505e' }] },
-    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#0d4f68' }] },
-    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#16212a' }] },
-    { featureType: 'transit.station', elementType: 'labels.text.fill', stylers: [{ color: '#6f8794' }] },
-    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0a2a38' }] },
-    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#4f7385' }] },
+    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#191919' }] },
+    { featureType: 'poi.sports_complex', elementType: 'geometry', stylers: [{ color: '#1c1c1c' }] },
+    { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#272727' }] },
+    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#111111' }] },
+    { featureType: 'road.local', elementType: 'labels.text.fill', stylers: [{ color: '#838383' }] },
+    { featureType: 'road.arterial', elementType: 'geometry.fill', stylers: [{ color: '#393939' }] },
+    { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#4c4c4c' }] },
+    { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#484848' }] },
+    { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#202020' }] },
+    { featureType: 'transit.station', elementType: 'labels.text.fill', stylers: [{ color: '#838383' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#262626' }] },
+    { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#6d6d6d' }] },
   ];
 
   const loadScript = (src) => new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => fail(new Error('No se pudo cargar ' + src)); document.head.appendChild(s); });
@@ -90,38 +90,43 @@ const GMap = (() => {
         container: 'gmap', attributionControl: false, center: [-88.9, 13.75], zoom: 8.1, pitch: 0, bearing: 0, minZoom: 5, maxZoom: 19.4, maxPitch: 62, fadeDuration: 150,
         style: { version: 8,
           // Horizonte oscuro: al inclinar el mapa, el cielo y la niebla usan el fondo de la consola
-          sky: { 'sky-color': '#05090c', 'horizon-color': '#0b1217', 'fog-color': '#05090c', 'fog-ground-blend': .55, 'horizon-fog-blend': .9, 'sky-horizon-blend': 1, 'atmosphere-blend': 0 },
-          sources: { gmap: raster('map'), gsat: raster('sat'), country: empty, cones: empty, blind: empty, zones: empty, heat: empty, routes: empty, trace: empty, tracePts: empty, units: empty, cams: empty },
+          sky: { 'sky-color': '#080808', 'horizon-color': '#111111', 'fog-color': '#080808', 'fog-ground-blend': .55, 'horizon-fog-blend': .9, 'sky-horizon-blend': 1, 'atmosphere-blend': 0 },
+          sources: { gmap: raster('map'), gsat: raster('sat'), country: empty, cones: empty, blind: empty, zones: empty, heat: empty, routes: empty, trace: empty, tracePts: empty, units: empty, cams: empty, coneHi: empty },
           layers: [
-            { id: 'bg', type: 'background', paint: { 'background-color': '#05090c' } },
+            { id: 'bg', type: 'background', paint: { 'background-color': '#080808' } },
             { id: 'gmap', type: 'raster', source: 'gmap' },
             { id: 'gsat', type: 'raster', source: 'gsat', layout: { visibility: 'none' }, paint: { 'raster-brightness-max': .72, 'raster-saturation': -.35, 'raster-contrast': .08 } },
-            { id: 'country', type: 'line', source: 'country', maxzoom: 12.5, paint: { 'line-color': '#b3c452', 'line-width': 2, 'line-opacity': .9 } },
+            { id: 'country', type: 'line', source: 'country', maxzoom: 12.5, paint: { 'line-color': '#b9b9b9', 'line-width': 2, 'line-opacity': .9 } },
             // Cobertura: campo de visión de cada cámara operativa y celdas sin cobertura (puntos ciegos)
-            { id: 'blind-fill', type: 'fill', source: 'blind', minzoom: 12.5, paint: { 'fill-color': '#bf5a52', 'fill-opacity': .07 } },
-            { id: 'blind-line', type: 'line', source: 'blind', minzoom: 12.5, paint: { 'line-color': '#bf5a52', 'line-opacity': .55, 'line-width': 1, 'line-dasharray': [3, 3] } },
-            { id: 'cones-fill', type: 'fill', source: 'cones', minzoom: 12.5, paint: { 'fill-color': '#78b2c8', 'fill-opacity': .1 } },
-            { id: 'cones-line', type: 'line', source: 'cones', minzoom: 13.5, paint: { 'line-color': '#78b2c8', 'line-opacity': .35, 'line-width': 1 } },
+            { id: 'blind-fill', type: 'fill', source: 'blind', minzoom: 12.5, paint: { 'fill-color': '#e0453c', 'fill-opacity': .07 } },
+            { id: 'blind-line', type: 'line', source: 'blind', minzoom: 12.5, paint: { 'line-color': '#e0453c', 'line-opacity': .55, 'line-width': 1, 'line-dasharray': [3, 3] } },
+            { id: 'cones-fill', type: 'fill', source: 'cones', minzoom: 13.5, paint: { 'fill-color': '#e6e6e6', 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, .05, 16, .1] } },
+            { id: 'cones-line', type: 'line', source: 'cones', minzoom: 13.5, paint: { 'line-color': '#e6e6e6', 'line-opacity': .32, 'line-width': 1 } },
+            // Cono de la cámara bajo el cursor: dónde mira, con qué ángulo y hasta dónde
+            { id: 'cone-hi-fill', type: 'fill', source: 'coneHi', paint: { 'fill-color': '#f4f4f4', 'fill-opacity': .2 } },
+            { id: 'cone-hi-line', type: 'line', source: 'coneHi', paint: { 'line-color': '#f4f4f4', 'line-opacity': .9, 'line-width': 1.5 } },
             // Aglomeraciones: mapa de calor de lejos, área de la zona de cerca (zoom semántico)
             { id: 'heat', type: 'heatmap', source: 'heat', minzoom: 11, paint: {
               'heatmap-weight': ['get', 'w'], 'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 11, .6, 16, 1.6], 'heatmap-radius': ['interpolate', ['exponential', 2], ['zoom'], 11, 6, 16, 60, 18, 190],
               'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 14.5, .75, 17, .45],
-              'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(120,178,200,0)', .25, 'rgba(120,178,200,.3)', .55, 'rgba(207,197,106,.42)', .85, 'rgba(191,90,82,.55)', 1, 'rgba(206,120,112,.68)'] } },
+              'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(255,255,255,0)', .25, 'rgba(255,255,255,.1)', .55, 'rgba(255,255,255,.24)', .8, 'rgba(224,69,60,.4)', 1, 'rgba(224,69,60,.62)'] } },
             { id: 'zones-line', type: 'line', source: 'zones', minzoom: 12.5, paint: { 'line-color': ['get', 'color'], 'line-width': 1.6, 'line-opacity': .9 } },
             { id: 'zones-fill', type: 'fill', source: 'zones', minzoom: 12.5, paint: { 'fill-color': ['get', 'color'], 'fill-opacity': .08 } },
-            { id: 'routes', type: 'line', source: 'routes', paint: { 'line-color': '#b3c452', 'line-width': 2.2, 'line-dasharray': [2, 2] } },
+            { id: 'routes', type: 'line', source: 'routes', paint: { 'line-color': '#b9b9b9', 'line-width': 2.2, 'line-dasharray': [2, 2] } },
             { id: 'trace', type: 'line', source: 'trace', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': .95 } },
-            { id: 'tracePts', type: 'circle', source: 'tracePts', paint: { 'circle-radius': 6, 'circle-color': '#05090c', 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 2.5 } },
-            { id: 'units', type: 'symbol', source: 'units', minzoom: 12, layout: { 'icon-image': ['case', ['get', 'busy'], 'unit-busy', 'unit'], 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, .34, 16, .62], 'icon-allow-overlap': true, 'icon-ignore-placement': true } },
+            { id: 'tracePts', type: 'circle', source: 'tracePts', paint: { 'circle-radius': 4, 'circle-color': ['get', 'color'], 'circle-stroke-color': '#090909', 'circle-stroke-width': 2 } },
+            { id: 'units-hit', type: 'circle', source: 'units', minzoom: 12, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 9, 16, 18], 'circle-color': '#000', 'circle-opacity': 0 } },
+            { id: 'units', type: 'symbol', source: 'units', minzoom: 12, layout: { 'icon-image': ['concat', 'unit-', ['get', 'ukind'], ['case', ['get', 'busy'], '-busy', '']], 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, .46, 16, .82], 'icon-allow-overlap': true, 'icon-ignore-placement': true } },
             // Cámaras: color según salud (en línea, degradada, sin señal)
-            { id: 'cams-halo', type: 'circle', source: 'cams', minzoom: 12, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 5, 16, 13], 'circle-color': ['get', 'color'], 'circle-opacity': .18 } },
+            { id: 'cams-halo', type: 'circle', source: 'cams', minzoom: 12, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 7, 16, 18], 'circle-color': ['get', 'color'], 'circle-opacity': .22, 'circle-blur': 1 } },
             { id: 'cams', type: 'symbol', source: 'cams', minzoom: 12, layout: { 'icon-image': ['concat', 'cam-', ['get', 'status']], 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, .4, 16, .78], 'icon-allow-overlap': true, 'icon-ignore-placement': true } },
           ] },
       });
       await new Promise((ok) => S.map.once('load', ok));
       // Placas de icono (cámara CCTV y unidad) compartidas con las otras vistas del mapa
       const img = (id, name, color) => { const c = Glyph.badge(name, color); S.map.addImage(id, c.getContext('2d').getImageData(0, 0, c.width, c.height), { pixelRatio: 2 }); };
-      img('cam-online', 'cctv', '#78b2c8'); img('cam-degraded', 'cctv', '#cfc56a'); img('cam-offline', 'cctv', '#bf5a52'); img('unit', 'unit', '#a3c3d0'); img('unit-busy', 'unit', '#b3c452');
+      const img2 = (id, name, color, opts) => { const c = Glyph.badge(name, color, opts); S.map.addImage(id, c.getContext('2d').getImageData(0, 0, c.width, c.height), { pixelRatio: 2 }); };
+      img('cam-online', 'cctv', '#a8a8a8'); img('cam-degraded', 'cctv', '#f3ff00'); img('cam-offline', 'cctv', '#e0453c'); ['auto', 'moto', 'pie'].forEach((k) => { img2('unit-' + k, 'unit', '#bdbdbd', { kind: k }); img2('unit-' + k + '-busy', 'unit', '#f4f4f4', { kind: k, busy: true }); });
       setData('country', [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: GEO.sv[0].reduce((a, v, i, arr) => (i % 2 ? a : a.concat([[v, arr[i + 1]]])), []) } }]);
       bindInteraction();
       S.map.on('moveend', credits);
@@ -163,12 +168,11 @@ const GMap = (() => {
   }
 
   /* ---------- Capas operativas ---------- */
-  const camColor = (st) => st === 'online' ? '#78b2c8' : st === 'degraded' ? '#cfc56a' : '#bf5a52';
-  const zoneColor = (st) => st === 'critical' ? '#bf5a52' : st === 'medium' ? '#cfc56a' : '#78b2c8';
+  const camColor = (st) => st === 'online' ? '#a8a8a8' : st === 'degraded' ? '#f3ff00' : '#e0453c';
+  const zoneColor = (st) => st === 'critical' ? '#e0453c' : st === 'medium' ? '#f3ff00' : '#a8a8a8';
   function drawCameras() {
     const cams = MockDB.cameras;
-    setData('cams', cams.map((c) => ({ type: 'Feature', properties: { kind: 'camera', id: c.id, status: c.status, color: camColor(c.status) }, geometry: { type: 'Point', coordinates: ll(c.x, c.z) } })));
-    setData('cones', cams.filter((c) => c.status !== 'offline').map((c) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [Coverage.cone(c).map(([x, z]) => ll(x, z))] } })));
+    drawCamPoints();
     S.coverage = Coverage.compute(cams);
     setData('blind', S.coverage.blind.map((b) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[ll(b.x, b.z), ll(b.x + b.size, b.z), ll(b.x + b.size, b.z + b.size), ll(b.x, b.z + b.size), ll(b.x, b.z)]] } })));
   }
@@ -185,31 +189,80 @@ const GMap = (() => {
       const r = mulberry32(z.id.charCodeAt(3) * 131); const pts = Array.from({ length: 36 }, () => Geo.sample(z.poly, r));
       S.zones.set(z.id, { el, mk, pts, z });
     });
-    zones.forEach(updateZone); setInterval(tick, 600); tick(); S.map.on('moveend', declutter); S.map.on('zoom', declutter);
+    zones.forEach(updateZone); setInterval(tick, 600); tick(); S.map.on('move', declutterSoon); declutterSoon();
   }
   function updateZone(z) {
     const o = S.zones.get(z.id); if (!o) return;
-    o.el.className = 'gm-zone ' + z.status; o.el.innerHTML = `<b>${z.name}</b><span>${fmt(z.est)}</span><em>${Geo.str(z)}</em>`;
+    const hidden = o.el.classList.contains('gm-hide'); o.el.className = 'gm-zone ' + z.status + (hidden ? ' gm-hide' : ''); o.el.innerHTML = `<b>${z.name}</b><span>${fmt(z.est)}</span><em>${Geo.str(z)}</em>`; if (z.status !== o.lastStatus) { o.lastStatus = z.status; declutterSoon(); }
     const all = [...S.zones.values()];
     setData('zones', all.map((q) => ({ type: 'Feature', properties: { kind: 'zone', id: q.z.id, color: zoneColor(q.z.status) }, geometry: { type: 'Polygon', coordinates: [q.z.poly.concat([q.z.poly[0]]).map(([x, zz]) => ll(x, zz))] } })));
     setData('heat', all.flatMap((q) => q.pts.map(([x, zz]) => ({ type: 'Feature', properties: { w: clamp(q.z.est / 90000, .03, 1) }, geometry: { type: 'Point', coordinates: ll(x, zz) } }))));
   }
-  /** Evita que las etiquetas de zona se monten: la de mayor asistencia conserva su lugar y las demás bajan. */
+  /** Evita que las etiquetas de zona se monten (propuesta P6). Manda la prioridad: crítica, media, baja
+      y, dentro del mismo nivel, la de más asistencia. Cada etiqueta prueba su lugar y dos lugares más abajo;
+      si igual choca, se esconde hasta que el zoom le haga lugar. La zona sigue dibujada en el mapa. */
+  const RANK = { critical: 0, medium: 1, low: 2 };
   function declutter() {
-    const placed = []; const items = [...S.zones.values()].sort((a, b) => b.z.est - a.z.est);
-    items.forEach((o) => { o.mk.setOffset([0, -6]); });
+    const placed = []; const items = [...S.zones.values()].sort((a, b) => (RANK[a.z.status] ?? 3) - (RANK[b.z.status] ?? 3) || b.z.est - a.z.est);
+    items.forEach((o) => { o.mk.setOffset([0, -6]); o.el.classList.remove('gm-hide'); });
+    const hits = (r, dy) => placed.some((p) => !(r.right < p.left - 6 || r.left > p.right + 6 || r.bottom + dy < p.top - 4 || r.top + dy > p.bottom + 4));
     items.forEach((o) => {
-      let r = o.el.getBoundingClientRect(), dy = 0, guard = 0;
-      while (guard++ < 6 && placed.some((p) => !(r.right < p.left - 4 || r.left > p.right + 4 || r.bottom + dy < p.top - 2 || r.top + dy > p.bottom + 2))) dy += r.height + 4;
+      const r = o.el.getBoundingClientRect(); if (!r.width) return;
+      const step = r.height + 6; const dy = [0, step, step * 2].find((d) => !hits(r, d));
+      if (dy === undefined) { o.el.classList.add('gm-hide'); return; }
       if (dy) o.mk.setOffset([0, -6 + dy]);
       placed.push({ left: r.left, right: r.right, top: r.top + dy, bottom: r.bottom + dy });
     });
   }
+  let declutterRaf = 0;
+  const declutterSoon = () => { if (!declutterRaf) declutterRaf = requestAnimationFrame(() => { declutterRaf = 0; declutter(); }); };
+  function drawCamPoints() {
+    const cams = MockDB.cameras.filter((c) => !S.hidden.cams.has(c.id));
+    setData('cams', cams.map((c) => ({ type: 'Feature', properties: { kind: 'camera', id: c.id, status: c.status, color: camColor(c.status) }, geometry: { type: 'Point', coordinates: ll(c.x, c.z) } })));
+    setData('cones', cams.filter((c) => c.status !== 'offline').map((c) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [Coverage.cone(c).map(([x, z]) => ll(x, z))] } })));
+  }
   function setCameraStatus() { if (S.available) drawCameras(); }
+
+  /* ---------- Agrupación al alejar el zoom ----------
+     Lejos, los elementos del mismo tipo que caen cerca en pantalla se juntan en un grupo con su
+     cantidad: cámaras, unidades e incidentes por separado (el grupo de incidentes toma el nivel
+     más alto de los que contiene). Al acercarse se separan solos. Clic en un grupo: acerca ahí. */
+  S.hidden = { cams: new Set(), units: new Set(), inc: new Set() }; S.groups = new Map();
+  const SEV_RANK = { critical: 3, medium: 2, low: 1 };
+  function groupCell() { const z = S.map.getZoom(); return z >= 16.2 ? 0 : z >= 15.2 ? 46 : z >= 14 ? 58 : 72; }
+  function regroup() {
+    if (!S.available || !S.active) return; const cell = groupCell(), m = S.map;
+    const items = [];
+    if (S.layers.cams) MockDB.cameras.forEach((c) => items.push({ cat: 'cams', id: c.id, x: c.x, z: c.z, sev: c.status === 'offline' ? 'critical' : c.status === 'degraded' ? 'medium' : 'low', sub: c.status }));
+    if (S.layers.units) City.unitObjs.forEach((o) => items.push({ cat: 'units', id: o.u.id, x: o.s.position.x, z: o.s.position.z, sub: Glyph.unitKind(o.u), busy: o.u.status !== 'patrullando' }));
+    if (S.layers.incidents) S.incidents.forEach((inc, id) => { const a = Api.state.alerts.find((q) => q.id === id); if (a) items.push({ cat: 'inc', id, x: inc.loc.x, z: inc.loc.z, sev: a.severity, ack: a.status === 'en atención' }); });
+    const buckets = new Map();
+    if (cell) items.forEach((it) => { const p = m.project(ll(it.x, it.z)); const k = `${it.cat}:${Math.floor(p.x / cell)}:${Math.floor(p.y / cell)}`; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(it); });
+    const hidden = { cams: new Set(), units: new Set(), inc: new Set() }; const seen = new Set();
+    buckets.forEach((list, k) => {
+      if (list.length < 2) return; list.forEach((it) => hidden[it.cat].add(it.id)); seen.add(k);
+      const cx = list.reduce((s, it) => s + it.x, 0) / list.length, cz = list.reduce((s, it) => s + it.z, 0) / list.length;
+      let g = S.groups.get(k);
+      if (!g) { const el = document.createElement('button'); el.dataset.group = k; el.addEventListener('click', (e) => { e.stopPropagation(); m.easeTo({ center: ll(g.cx, g.cz), zoom: Math.min(17, m.getZoom() + 1.6), duration: 700 }); }); el.addEventListener('mouseenter', (e) => UI.tip({ kind: 'group', cat: g.cat, list: g.list }, e.clientX, e.clientY)); el.addEventListener('mouseleave', () => UI.tip(null)); g = { el, mk: new ML.Marker({ element: el }).setLngLat(ll(cx, cz)).addTo(m) }; S.groups.set(k, g); }
+      g.cat = list[0].cat; g.list = list; g.cx = cx; g.cz = cz; g.mk.setLngLat(ll(cx, cz));
+      const top = list.reduce((s, it) => Math.max(s, SEV_RANK[it.sev] || 0), 0); const sev = top === 3 ? 'critical' : top === 2 ? 'medium' : 'low';
+      const busy = list.filter((it) => it.busy).length;
+      g.el.className = `gm-group g-${g.cat} ${g.cat === 'units' ? '' : sev}`;
+      g.el.setAttribute('aria-label', `${list.length} ${g.cat === 'cams' ? 'cámaras' : g.cat === 'units' ? 'unidades' : 'incidentes'} agrupados`);
+      g.el.innerHTML = `<i></i><b>${list.length}</b>${g.cat === 'units' && busy ? `<em>${busy}</em>` : ''}`;
+    });
+    S.groups.forEach((g, k) => { if (!seen.has(k)) { g.mk.remove(); S.groups.delete(k); } });
+    const changed = ['cams', 'units', 'inc'].some((c) => hidden[c].size !== S.hidden[c].size || [...hidden[c]].some((id) => !S.hidden[c].has(id)));
+    S.hidden = hidden;
+    if (changed) { drawCamPoints(); setUnits(); S.incidents.forEach((inc, id) => inc.el.classList.toggle('gm-grouped', hidden.inc.has(id))); }
+  }
   /** Posición en vivo de las unidades PNC (la simulación vive en City). */
   function tick() {
     if (!S.available || !S.active) return;
-    setData('units', [...City.unitObjs.values()].map((o) => ({ type: 'Feature', properties: { kind: 'unit', id: o.u.id, busy: o.u.status !== 'patrullando' }, geometry: { type: 'Point', coordinates: ll(o.s.position.x, o.s.position.z) } })));
+    regroup(); setUnits();
+  }
+  function setUnits() {
+    setData('units', [...City.unitObjs.values()].filter((o) => !S.hidden.units.has(o.u.id)).map((o) => ({ type: 'Feature', properties: { kind: 'unit', id: o.u.id, busy: o.u.status !== 'patrullando', ukind: Glyph.unitKind(o.u) }, geometry: { type: 'Point', coordinates: ll(o.s.position.x, o.s.position.z) } })));
   }
   /** Pulso de alerta: anillos animados con CSS sobre el punto. */
   function pulse(x, z, color = COLOR.red, big = 1) {
@@ -244,12 +297,12 @@ const GMap = (() => {
       let inc = S.incidents.get(a.id);
       if (!inc) {
         const el = document.createElement('button'); el.dataset.alert = a.id; el.setAttribute('aria-label', a.title);
-        el.innerHTML = `<i></i><span class="ms">${ICON[a.type] || 'priority_high'}</span><u></u>`;
+        el.innerHTML = `<b></b><i></i><span class="ms">${ICON[a.type] || 'priority_high'}</span><s></s><u></u>`;
         el.addEventListener('mouseenter', (e) => UI.tip({ kind: 'incident', id: a.id }, e.clientX, e.clientY)); el.addEventListener('mouseleave', () => UI.tip(null));
         const k = [...S.incidents.values()].filter((q) => Math.hypot(q.loc.x - loc.x, q.loc.z - loc.z) < 5).length; // separa los que caen en el mismo punto
         inc = { el, loc, mk: pinned(el, { anchor: 'bottom', offset: [k * 14, 0] }, loc.x, loc.z) }; // la punta del asta toca la coordenada exacta S.incidents.set(a.id, inc);
       }
-      inc.el.className = `gm-inc ${a.severity} ${a.status === 'en atención' ? 'ack' : ''}`;
+      inc.el.className = `gm-inc ${a.severity} ${a.status === 'en atención' ? 'ack' : ''} ${S.hidden.inc.has(a.id) ? 'gm-grouped' : ''}`;
     });
     S.incidents.forEach((inc, id) => { if (!seen.has(id)) { inc.mk.remove(); S.incidents.delete(id); } });
     applyLayers();
@@ -259,7 +312,9 @@ const GMap = (() => {
   function applyLayers() {
     if (!S.available) return; const vis = (on) => on ? 'visible' : 'none', L = S.layers, m = S.map;
     ['cams', 'cams-halo'].forEach((id) => m.setLayoutProperty(id, 'visibility', vis(L.cams)));
-    ['cones-fill', 'cones-line', 'blind-fill', 'blind-line'].forEach((id) => m.setLayoutProperty(id, 'visibility', vis(L.coverage)));
+    ['cones-fill', 'cones-line'].forEach((id) => m.setLayoutProperty(id, 'visibility', vis(L.cams || L.coverage)));
+    ['blind-fill', 'blind-line'].forEach((id) => m.setLayoutProperty(id, 'visibility', vis(L.coverage)));
+    regroup();
     ['zones-fill', 'zones-line', 'heat'].forEach((id) => m.setLayoutProperty(id, 'visibility', vis(L.zones)));
     S.zones.forEach((o) => { o.el.style.display = L.zones ? '' : 'none'; });
     m.setLayoutProperty('units', 'visibility', vis(L.units));
@@ -285,9 +340,11 @@ const GMap = (() => {
 
   /* ---------- Interacción ---------- */
   function bindInteraction() {
-    const m = S.map, pickable = ['cams', 'units', 'blind-fill', 'zones-fill'];
-    m.on('mousemove', (e) => { UI.cursor(e.lngLat.lat, e.lngLat.lng); const f = m.queryRenderedFeatures(e.point, { layers: pickable })[0]; m.getCanvas().style.cursor = f ? 'pointer' : ''; UI.tip(f ? (f.properties.kind ? f.properties : { kind: 'blind', lat: e.lngLat.lat, lon: e.lngLat.lng }) : null, e.originalEvent.clientX, e.originalEvent.clientY); });
-    m.on('mouseout', () => UI.tip(null));
+    const m = S.map, pickable = ['cams', 'units', 'units-hit', 'blind-fill', 'zones-fill']; let hiCam = null;
+    const highlight = (id) => { if (id === hiCam) return; hiCam = id; const c = id && MockDB.cameras.find((q) => q.id === id); setData('coneHi', c && c.status !== 'offline' ? [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [Coverage.cone(c, 24).map(([x, z]) => ll(x, z))] } }] : []); };
+    m.on('moveend', regroup);
+    m.on('mousemove', (e) => { UI.cursor(e.lngLat.lat, e.lngLat.lng); const f = m.queryRenderedFeatures(e.point, { layers: pickable })[0]; m.getCanvas().style.cursor = f ? 'pointer' : ''; highlight(f && f.properties.kind === 'camera' ? f.properties.id : null); UI.tip(f ? (f.properties.kind ? f.properties : { kind: 'blind', lat: e.lngLat.lat, lon: e.lngLat.lng }) : null, e.originalEvent.clientX, e.originalEvent.clientY); });
+    m.on('mouseout', () => { UI.tip(null); highlight(null); });
     m.on('click', (e) => { const f = m.queryRenderedFeatures(e.point, { layers: pickable })[0]; if (f && f.properties.kind && GMap.onPick) GMap.onPick(f.properties); });
   }
 

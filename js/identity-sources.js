@@ -27,7 +27,7 @@ const SourceLab = (() => {
     if (!connected) body = `<div class="src-ph">${Evidence.placeholder('', '')}</div><div class="src-inst"><b>${s.inst}</b><span>Aporta: ${s.gives}</span></div><button class="btn secondary xs" data-connect="${s.id}"><span class="ms">link</span>Cómo conectar</button>`;
     else if (r === 'run') body = `<div class="src-run"><span class="ms">progress_activity</span>Consultando…</div><div class="prog"><i style="width:70%"></i></div>`;
     else if (r && !r.length) body = `<div class="src-inst"><b>${s.inst}</b></div><div class="dim" style="font-size:12px">Sin coincidencias en esta fuente.</div>`;
-    else if (r) body = `<div class="src-res">${r.map((c) => `<div class="row"><span class="mono">${c.ref}</span><span class="dim">${c.list}</span><b style="color:${c.score >= .85 ? '#d6a09a' : 'inherit'}">${Math.round(c.score * 100)} %</b></div>`).join('')}</div><div class="dim" style="font-size:11px">Candidatos sobre el umbral 0.85 requieren verificación humana.</div>`;
+    else if (r) body = `<div class="src-res">${r.map((c) => `<div class="row"><span class="mono">${c.ref}</span><span class="dim">${c.list}</span><b style="color:${c.score >= .85 ? '#ef6b62' : 'inherit'}">${Math.round(c.score * 100)} %</b></div>`).join('')}</div><div class="dim" style="font-size:11px">Candidatos sobre el umbral 0.85 requieren verificación humana.</div>`;
     else body = `<div class="src-inst"><b>${s.inst}</b><span>Aporta: ${s.gives}</span></div><div class="dim" style="font-size:12px">Lista para consultar.</div>`;
     return `<section class="src-win ${connected ? 'on' : 'off'} ${on ? '' : 'muted'} ${r === 'run' ? 'run' : ''}" data-src="${s.id}"><header><div><span class="grp">${GROUPS.find((g) => g[0] === s.group)[1]}</span><b>${s.name}</b></div><span class="chip ${demo ? 'medium' : connected ? 'ok' : 'neutral'}">${demo ? 'Muestra' : connected ? 'Conectada' : 'Por conectar'}</span></header><div class="bd">${body}</div></section>`;
   }
@@ -122,7 +122,7 @@ permisos: los del operador que consulta</pre></details>
   function open(f) {
     face = f; S.results = {}; S.drawer = null; Sfx.whoosh(); UI.closeSheet();
     $('#fullSlot').innerHTML = `<section class="full" role="dialog" aria-label="Búsqueda de identidad">
-      <header class="f-hd"><span class="ms" style="color:var(--sky-hi)">person_search</span><h2>Búsqueda de identidad · ${f.id}</h2><span class="muted" style="font-size:13px">${f.cameraId} · ${hhmmss(f.ts)}</span>
+      <header class="f-hd"><span class="ms" style="color:var(--ink-muted)">person_search</span><h2>Búsqueda de identidad · ${f.id}</h2><span class="muted" style="font-size:13px">${f.cameraId} · ${hhmmss(f.ts)}</span>
         <div class="right"><span id="srcSummary" style="display:flex;gap:6px"></span><button class="iconbtn" data-close-full aria-label="Cerrar"><span class="ms">close</span></button></div></header>
       <div class="f-bd src-grid"><aside id="srcLeft">${left()}</aside><div class="src-canvas" id="srcCanvas"></div><aside class="src-drawer" id="srcDrawer"></aside></div></section>`;
     const root = $('#fullSlot .full');

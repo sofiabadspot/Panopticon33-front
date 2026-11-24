@@ -7,12 +7,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Serif:wght@300;400&display=swap">
+<link rel="stylesheet" href="css/theme.css">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <!--
   PANOPTICON 33 — Prototipo navegable de validación de pantallas
-  SPOTVISION Government · Physical AI Agent: SENTINEL · Orquestación: MAIC · Agente: Jules
+  SPOTVISION Government · Orquestación: MAIC · Agente: Jules
 
   Propósito: validar con el Ministerio de Seguridad la experiencia de la consola antes del
   desarrollo. Todos los datos son SIMULADOS (sin datos reales de ciudadanos). Las vías y
@@ -25,7 +26,7 @@
     §4 Sfx             → audio de interfaz (Web Audio, sin archivos externos)
     §5 Globe           → escena 3D del globo (intro)
     §6 City            → escena 3D del sector Salvador del Mundo (consola)
-    §7 Cctv            → evidencia sintética (sustituir por frames/clips reales de SENTINEL)
+    §7 Cctv            → evidencia sintética (sustituir por frames/clips reales de Panopticon)
     §8 UI              → navegación, vistas, hojas laterales
     §9 FaceLab         → análisis y reconstrucción facial 3D
     §10 SceneLab       → reconstrucción de escena 3D multicámara
@@ -47,7 +48,7 @@
   <header class="intro-head">
     <div class="lockup"><img src="assets/logo-spotvision.png" alt="SPOTVISION"><span class="x">×</span><span class="p33">Panopticon 33</span></div>
     <h1 class="intro-title">Presencia continua sobre el territorio.</h1>
-    <p class="intro-sub">SENTINEL observa cada cámara las 24 horas, detecta lo que importa y lo convierte en acción a través de MAIC.</p>
+    <p class="intro-sub">Panopticon observa cada cámara las 24 horas, detecta lo que importa y lo convierte en acción a través de MAIC.</p>
   </header>
   <div class="intro-stats" id="introStats"></div>
   <div class="globe-card" id="globeCard" style="opacity:0"></div>
@@ -55,7 +56,7 @@
     <button class="btn primary lg" id="enterBtn"><span class="ms">radar</span>Entrar al centro de mando</button>
     <span class="note">Activa el audio de la consola · Prototipo con datos simulados</span>
   </div>
-  <div class="ticker" id="introTicker"><span class="dot"></span><span class="txt">SENTINEL en línea · 40 cámaras en Salvador del Mundo</span></div>
+  <div class="ticker" id="introTicker"><span class="dot"></span><span class="txt">Panopticon en línea · 40 cámaras en Salvador del Mundo</span></div>
 </section>
 
 <!-- ================= CONSOLA ================= -->
@@ -64,6 +65,7 @@
     <div class="brand"><img src="assets/logo-spotvision.png" alt="SPOTVISION"><span class="p33">Panopticon 33</span></div>
     <div class="tabs" role="tablist" id="tabs"></div>
     <div class="right">
+      <div class="seg mode-seg" id="modeSeg" role="group" aria-label="Modo de uso"></div>
       <span class="sim-badge">Simulación</span>
       <span class="clock" id="clock">--:--:--</span>
       <button class="iconbtn" id="soundBtn" title="Sonido de la consola" aria-label="Sonido"><span class="ms">volume_off</span></button>
@@ -83,6 +85,8 @@
   </div>
   <section id="wall" class="hidden" aria-label="Muro de video"></section>
   <div id="bannerSlot"></div>
+  <div id="brief" class="brief" aria-live="polite"></div>
+  <div id="noticeSlot" aria-live="assertive"></div>
   <div class="legend panel" id="legend"></div>
 </div>
 
@@ -91,9 +95,9 @@
 <div id="fullSlot"></div>
 
 <!-- ================= JULES ================= -->
-<button id="jules-btn" class="hidden" aria-label="Abrir Jules"><img src="assets/jules-orb.gif" alt=""></button>
+<button id="jules-btn" class="hidden" aria-label="Abrir Jules"><span class="jg" data-jules-mark style="--jg-size:40px"></span></button>
 <section id="jules" class="closed" aria-label="Jules">
-  <div class="j-hd"><img src="assets/jules-orb.gif" alt=""><div><b>Jules</b><small>Agente orquestador · conectado a SENTINEL y MAIC</small></div><button class="iconbtn" id="julesClose" style="margin-left:auto" aria-label="Cerrar"><span class="ms">close</span></button></div>
+  <div class="j-hd"><span class="jg" data-jules-mark style="--jg-size:24px"></span><div><b>Jules</b><small>Agente orquestador · conectado a Panopticon y MAIC</small></div><button class="iconbtn" id="julesClose" style="margin-left:auto" aria-label="Cerrar"><span class="ms">close</span></button></div>
   <div class="j-body" id="jBody"></div>
   <div class="j-sugg" id="jSugg"></div>
   <div class="j-in"><input id="jInput" placeholder="Pídele algo a Jules…" aria-label="Mensaje para Jules" autocomplete="off"><button class="btn primary sm" id="jSend" aria-label="Enviar"><span class="ms">arrow_upward</span></button></div>
@@ -112,6 +116,8 @@
 <script src="js/ui.js"></script>
 <script src="js/video-wall.js"></script>
 <script src="js/identity-sources.js"></script>
+<script src="js/ops.js"></script>
 <script src="js/app.js"></script>
+<script type="module" src="js/jules-mark/mark.js"></script>
 </body>
 </html>

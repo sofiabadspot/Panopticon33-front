@@ -1,4 +1,4 @@
-/* Evidencia real usada en el prototipo: clips de SENTINEL y recortes de trazabilidad (rostros pixelados). */
+/* Evidencia real usada en el prototipo: clips de Panopticon y recortes de trazabilidad (rostros pixelados). */
 const MEDIA = {
   "logo": "assets/logo-spotvision-bn.png",
   "mark": "assets/isotipo-spotvision-bn.png",

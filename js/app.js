@@ -26,7 +26,7 @@ function makeStage(host, opts = {}) {
 /* =====================================================================
    §9 FACELAB — análisis facial: mejora + reconstrucción 3D + candidatos.
    La geometría es un modelo paramétrico de demostración; en producción
-   SENTINEL entrega la malla 3D (p. ej. 468 puntos faciales + textura).
+   Panopticon entrega la malla 3D (p. ej. 468 puntos faciales + textura).
    ===================================================================== */
 const FaceLab = (() => {
   let stage = null, timers = [], face = null;
@@ -51,7 +51,7 @@ const FaceLab = (() => {
   }
   function buildHead(seed) {
     const N = 16000, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), scat = new Float32Array(N * 3), land = [];
-    const ga = Math.PI * (3 - Math.sqrt(5)); const cA = new THREE.Color(COLOR.sky), cB = new THREE.Color(0xd8f6ff);
+    const ga = Math.PI * (3 - Math.sqrt(5)); const cA = new THREE.Color(COLOR.subtle), cB = new THREE.Color(0xf0f0f0);
     let k = 0;
     for (let i = 0; i < N; i++) {
       let p;
@@ -75,21 +75,21 @@ const FaceLab = (() => {
     face = f; const slot = $('#fullSlot'); Sfx.whoosh();
     const audit = Api.audit('Análisis facial', f.id);
     slot.innerHTML = `<section class="full" role="dialog" aria-label="Análisis facial">
-      <header class="f-hd"><span class="ms" style="color:var(--sky-hi)">face_retouching_natural</span><h2>Análisis facial · ${f.id}</h2><span class="muted" style="font-size:13px">${f.cameraId} · ${hhmmss(f.ts)}</span>
+      <header class="f-hd"><span class="ms" style="color:var(--ink-muted)">face_retouching_natural</span><h2>Análisis facial · ${f.id}</h2><span class="muted" style="font-size:13px">${f.cameraId} · ${hhmmss(f.ts)}</span>
         <div class="right"><span class="chip info"><span class="ms">verified_user</span>Consulta auditada ${audit.id}</span><button class="iconbtn" data-close-full aria-label="Cerrar"><span class="ms">close</span></button></div></header>
       <div class="f-bd face-grid">
         <aside>
           <div><div class="caption" style="margin-bottom:8px">Captura original</div><div class="crop">${Evidence.placeholder('', `${f.cameraId} · 24 × 24 px`)}</div></div>
-          <div><div class="caption" style="margin-bottom:8px">Mejorada por SENTINEL</div><div class="crop" id="flEnh">${Evidence.placeholder('', 'En espera')}</div></div>
+          <div><div class="caption" style="margin-bottom:8px">Mejorada por Panopticon</div><div class="crop" id="flEnh">${Evidence.placeholder('', 'En espera')}</div></div>
           <dl class="details"><dt>Resolución del rostro</dt><dd class="mono">24 × 24 px</dd><dt>Calidad</dt><dd>${f.quality.toFixed(2)}</dd><dt>Ángulo</dt><dd>${f.angle}°</dd></dl>
         </aside>
         <div class="stage3d" id="flStage">
-          <div class="overlay"><div><div class="caption">Reconstrucción 3D · modelo sintético</div><div style="font-family:var(--f-display);font-size:22px;margin-top:4px" id="flHead">Preparando análisis</div></div>
+          <div class="overlay"><div><div class="caption">Reconstrucción 3D · modelo sintético</div><div style="font-family:var(--font-display);font-size:22px;margin-top:4px" id="flHead">Preparando análisis</div></div>
             <div class="seg" id="flMode"><button data-m="points" class="on">Nube de puntos</button><button data-m="wire">Malla</button><button data-m="solid">Superficie</button></div></div>
           <div style="position:absolute;left:20px;bottom:20px;right:20px"><ul class="steps" id="flSteps"></ul><div class="prog" style="margin-top:12px"><i id="flProg"></i></div></div>
         </div>
         <aside>
-          <div><h3 style="margin:0;font-family:var(--f-display);font-weight:400;font-size:18px">Candidatos</h3><div class="dim" style="font-size:12px;margin-top:2px">Listas autorizadas · umbral 0.85</div></div>
+          <div><h3 style="margin:0;font-family:var(--font-display);font-weight:400;font-size:18px">Candidatos</h3><div class="dim" style="font-size:12px;margin-top:2px">Listas autorizadas · umbral 0.85</div></div>
           <div id="flCands" style="display:flex;flex-direction:column;gap:8px"><div class="dim" style="font-size:13px">Los candidatos aparecen al terminar la comparación.</div></div>
           <div class="callout warn"><span class="ms">report</span><div>La imagen mejorada y el modelo 3D son reconstrucciones sintéticas. Sirven para orientar la verificación; no constituyen evidencia por sí solos.</div></div>
           <div class="locked"><span class="ms">lock</span>Ver identidad requiere rol Analista. El acceso queda registrado.</div>
@@ -100,18 +100,18 @@ const FaceLab = (() => {
     slot.querySelectorAll('[data-close-full]').forEach((b) => b.addEventListener('click', close));
     $('#flSources').addEventListener('click', () => { close(); SourceLab.open(f); });
     stage = makeStage($('#flStage'), { r: 6.2, phi: 1.42, theta: .55, target: new THREE.Vector3(0, -.25, 0) });
-    stage.scene.add(new THREE.HemisphereLight(0xbfefff, 0x011218, .9)); const dl = new THREE.DirectionalLight(0xffffff, .7); dl.position.set(2, 3, 4); stage.scene.add(dl);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(.95, .965, 128), new THREE.MeshBasicMaterial({ color: COLOR.skyHi, transparent: true, opacity: .35, side: THREE.DoubleSide })); ring.rotation.x = -Math.PI / 2; ring.position.y = -1.48; stage.scene.add(ring);
+    stage.scene.add(new THREE.HemisphereLight(0xe6e6e6, 0x0f0f0f, .9)); const dl = new THREE.DirectionalLight(0xffffff, .7); dl.position.set(2, 3, 4); stage.scene.add(dl);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(.95, .965, 128), new THREE.MeshBasicMaterial({ color: COLOR.muted, transparent: true, opacity: .35, side: THREE.DoubleSide })); ring.rotation.x = -Math.PI / 2; ring.position.y = -1.48; stage.scene.add(ring);
     const H = buildHead(f.seed); const geo = new THREE.BufferGeometry(); const cur = H.scat.slice();
     geo.setAttribute('position', new THREE.BufferAttribute(cur, 3)); geo.setAttribute('color', new THREE.BufferAttribute(H.col, 3));
     const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: .012, vertexColors: true, transparent: true, opacity: .9, depthWrite: false })); stage.scene.add(pts);
     const lg = new THREE.BufferGeometry(); const lp = new Float32Array(H.land.length * 3); H.land.forEach((k, i) => lp.set([H.pos[k * 3], H.pos[k * 3 + 1], H.pos[k * 3 + 2]], i * 3)); lg.setAttribute('position', new THREE.BufferAttribute(lp, 3));
-    const lm = new THREE.Points(lg, new THREE.PointsMaterial({ size: .035, color: COLOR.lime, transparent: true, opacity: 0, depthWrite: false })); stage.scene.add(lm);
+    const lm = new THREE.Points(lg, new THREE.PointsMaterial({ size: .035, color: COLOR.primary, transparent: true, opacity: 0, depthWrite: false })); stage.scene.add(lm);
     const mg = meshFor(f.seed);
-    const wire = new THREE.Mesh(mg, new THREE.MeshBasicMaterial({ color: COLOR.skyHi, wireframe: true, transparent: true, opacity: .18 })); wire.visible = false; stage.scene.add(wire);
-    const solid = new THREE.Mesh(mg, new THREE.MeshStandardMaterial({ color: 0x6f8f9b, roughness: .62, metalness: .15 })); solid.visible = false; stage.scene.add(solid);
-    const solidWire = new THREE.Mesh(mg, new THREE.MeshBasicMaterial({ color: COLOR.skyHi, wireframe: true, transparent: true, opacity: .06 })); solidWire.scale.setScalar(1.003); solid.add(solidWire);
-    const scan = new THREE.Mesh(new THREE.PlaneGeometry(3, .006), new THREE.MeshBasicMaterial({ color: COLOR.lime, transparent: true, opacity: .0, side: THREE.DoubleSide })); stage.scene.add(scan);
+    const wire = new THREE.Mesh(mg, new THREE.MeshBasicMaterial({ color: COLOR.muted, wireframe: true, transparent: true, opacity: .18 })); wire.visible = false; stage.scene.add(wire);
+    const solid = new THREE.Mesh(mg, new THREE.MeshStandardMaterial({ color: 0x898989, roughness: .62, metalness: .15 })); solid.visible = false; stage.scene.add(solid);
+    const solidWire = new THREE.Mesh(mg, new THREE.MeshBasicMaterial({ color: COLOR.muted, wireframe: true, transparent: true, opacity: .06 })); solidWire.scale.setScalar(1.003); solid.add(solidWire);
+    const scan = new THREE.Mesh(new THREE.PlaneGeometry(3, .006), new THREE.MeshBasicMaterial({ color: COLOR.primary, transparent: true, opacity: .0, side: THREE.DoubleSide })); stage.scene.add(scan);
     const st = { c0: 0, c1: 0, t0: 0, dur: 1700, conv: 0, scan: false, mode: 'points' };
     const convTo = (v) => { st.c0 = st.conv; st.c1 = v; st.t0 = performance.now(); };
     $('#flMode').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.mode = b.dataset.m; $('#flMode').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); Sfx.tick(); });
@@ -133,7 +133,7 @@ const FaceLab = (() => {
     at(7600, async () => {
       setStep(5); $('#flHead').textContent = f.watch ? 'Candidato sobre el umbral' : 'Sin candidatos sobre el umbral'; Sfx[f.watch ? 'critical' : 'confirm']();
       const cands = await Api.analyzeFace(f);
-      $('#flCands').innerHTML = cands.map((c, i) => `<label class="cand" style="cursor:pointer;${i === 0 && f.watch ? 'border-color:#bf5a5280' : ''}"><div class="ph">${Evidence.thumb()}</div><div><div style="font-weight:500">${c.ref}</div><div class="dim" style="font-size:12px">${c.list}</div><div style="margin-top:4px"><input type="radio" name="cand" value="${c.ref}" ${c.score < .85 ? 'disabled' : ''}> <span style="font-size:12px" class="muted">${c.score >= .85 ? 'Seleccionar para verificar' : 'Bajo el umbral'}</span></div></div><div class="score" style="color:${c.score >= .85 ? '#d6a09a' : 'inherit'}">${Math.round(c.score * 100)}<small>%</small></div></label>`).join('');
+      $('#flCands').innerHTML = cands.map((c, i) => `<label class="cand" style="cursor:pointer;${i === 0 && f.watch ? 'border-color:#e0453c80' : ''}"><div class="ph">${Evidence.thumb()}</div><div><div style="font-weight:500">${c.ref}</div><div class="dim" style="font-size:12px">${c.list}</div><div style="margin-top:4px"><input type="radio" name="cand" value="${c.ref}" ${c.score < .85 ? 'disabled' : ''}> <span style="font-size:12px" class="muted">${c.score >= .85 ? 'Seleccionar para verificar' : 'Bajo el umbral'}</span></div></div><div class="score" style="color:${c.score >= .85 ? '#ef6b62' : 'inherit'}">${Math.round(c.score * 100)}<small>%</small></div></label>`).join('');
       $('#flCands').addEventListener('change', () => { $('#flSend').disabled = false; });
       st.mode = 'solid'; $('#flMode').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.m === 'solid'));
     });
@@ -142,7 +142,7 @@ const FaceLab = (() => {
       const d = await Api.dispatch({ label: `Rostro ${f.id}`, faceId: f.id, unitsRequested: 2 }); d.units = units; Sfx.confirm();
       City.dispatchUnits(units, cam, 7); City.pulse(cam.x, cam.z, COLOR.red, .8);
       Api.state.alerts.filter((a) => a.refId === f.id).forEach((a) => { a.status = 'en atención'; });
-      UI.toast(`Candidato confirmado para verificación · MAIC alertó a ${units.length} unidades`, 'send', 'lime'); close();
+      UI.toast(`Candidato confirmado para verificación · MAIC alertó a ${units.length} unidades`, 'send', 'primary'); close();
     });
     /** Sin material real: el marcador indica el estado del paso de mejora. */
     function enhance() { const el = $('#flEnh'); if (el) el.innerHTML = Evidence.placeholder('', 'Mejora ×8 aplicada'); }
@@ -161,33 +161,33 @@ const SceneLab = (() => {
   function open() {
     const slot = $('#fullSlot'); Sfx.whoosh(); UI.closeSheet();
     slot.innerHTML = `<section class="full" role="dialog" aria-label="Reconstrucción de escena">
-      <header class="f-hd"><span class="ms" style="color:var(--sky-hi)">view_in_ar</span><h2>Escenas 3D · Cuadrante Plaza Salvador del Mundo</h2><span class="muted" style="font-size:13px">4 cámaras · 21:40 – 21:48</span>
+      <header class="f-hd"><span class="ms" style="color:var(--ink-muted)">view_in_ar</span><h2>Escenas 3D · Cuadrante Plaza Salvador del Mundo</h2><span class="muted" style="font-size:13px">4 cámaras · 21:40 – 21:48</span>
         <div class="right"><span class="chip neutral">Modelo de demostración</span><button class="iconbtn" data-close-full aria-label="Cerrar"><span class="ms">close</span></button></div></header>
       <div class="f-bd scene-grid">
         <div class="stage3d" id="scStage">
-          <div class="overlay"><div><div class="caption">Vista reconstruida</div><div style="font-family:var(--f-display);font-size:22px;margin-top:4px" id="scHead">Selecciona cámaras y reconstruye</div></div>
+          <div class="overlay"><div><div class="caption">Vista reconstruida</div><div style="font-family:var(--font-display);font-size:22px;margin-top:4px" id="scHead">Selecciona cámaras y reconstruye</div></div>
             <div class="seg" id="scMode"><button data-m="pts" class="on">Nube de puntos</button><button data-m="solid">Volúmenes</button></div></div>
           <div class="thumbs" id="scThumbs">${camsIds.map((c, i) => `<div class="thumb">${Evidence.placeholder('', '')}<span>${c}</span></div>`).join('')}</div>
         </div>
         <aside>
-          <div><h3 style="margin:0;font-family:var(--f-display);font-weight:400;font-size:18px">Fuentes</h3><div class="dim" style="font-size:12px;margin-top:2px">Cámaras con campo de visión compartido</div></div>
-          <ul class="list" style="border:1px solid var(--line);border-radius:10px;overflow:hidden">${camsIds.map((c, i) => `<li class="item" style="grid-template-columns:22px 1fr auto;cursor:default;${i === 0 ? 'border-top:0' : ''}"><input type="checkbox" checked aria-label="${c}"><div><div class="t">${c}</div><div class="s">${['Norte · Estación Salvador del Mundo', 'Este · Alameda Roosevelt', 'Sur · Avenida Olímpica', 'Oeste · Paseo General Escalón'][i]}</div></div><div class="r"><span class="chip ok">25 fps</span></div></li>`).join('')}</ul>
+          <div><h3 style="margin:0;font-family:var(--font-display);font-weight:400;font-size:18px">Fuentes</h3><div class="dim" style="font-size:12px;margin-top:2px">Cámaras con campo de visión compartido</div></div>
+          <ul class="list" style="border:1px solid var(--border);border-radius:10px;overflow:hidden">${camsIds.map((c, i) => `<li class="item" style="grid-template-columns:22px 1fr auto;cursor:default;${i === 0 ? 'border-top:0' : ''}"><input type="checkbox" checked aria-label="${c}"><div><div class="t">${c}</div><div class="s">${['Norte · Estación Salvador del Mundo', 'Este · Alameda Roosevelt', 'Sur · Avenida Olímpica', 'Oeste · Paseo General Escalón'][i]}</div></div><div class="r"><span class="chip ok">25 fps</span></div></li>`).join('')}</ul>
           <button class="btn primary" id="scGo"><span class="ms">deployed_code</span>Reconstruir escena</button>
           <div><ul class="steps" id="scSteps"></ul><div class="prog" style="margin-top:12px"><i id="scProg"></i></div></div>
           <dl class="details hidden" id="scStats"><dt>Puntos fusionados</dt><dd class="mono" id="scPts">0</dd><dt>Error de reproyección</dt><dd class="mono">0.8 px</dd><dt>Personas rastreadas</dt><dd class="mono">36</dd><dt>Vehículos rastreados</dt><dd class="mono">7</dd></dl>
-          <div id="scPlay" class="hidden"><div class="caption" style="margin-bottom:6px">Línea de tiempo</div><div style="display:flex;gap:10px;align-items:center"><button class="iconbtn on" id="scPP" aria-label="Pausar"><span class="ms">pause</span></button><input type="range" min="0" max="480" value="0" id="scT" style="flex:1;accent-color:#b3c452" aria-label="Tiempo"><span class="mono dim" id="scClock" style="font-size:12px">21:40:00</span></div></div>
+          <div id="scPlay" class="hidden"><div class="caption" style="margin-bottom:6px">Línea de tiempo</div><div style="display:flex;gap:10px;align-items:center"><button class="iconbtn on" id="scPP" aria-label="Pausar"><span class="ms">pause</span></button><input type="range" min="0" max="480" value="0" id="scT" style="flex:1;accent-color:#b9b9b9" aria-label="Tiempo"><span class="mono dim" id="scClock" style="font-size:12px">21:40:00</span></div></div>
           <div class="callout"><span class="ms">info</span><div>La reconstrucción combina las cuatro vistas sincronizadas para revisar un incidente desde cualquier ángulo. Es un apoyo de análisis; la evidencia son los videos originales.</div></div>
         </aside>
       </div></section>`;
     slot.querySelectorAll('[data-close-full]').forEach((b) => b.addEventListener('click', close));
     stage = makeStage($('#scStage'), { r: 210, phi: 1.0, theta: .7, fov: 40, auto: .0012, target: new THREE.Vector3(0, 6, 0) });
     const sc = stage.scene; sc.fog = new THREE.Fog(COLOR.bg, 260, 520);
-    sc.add(new THREE.HemisphereLight(0xbfefff, 0x011218, .8)); const dl = new THREE.DirectionalLight(0xffffff, .5); dl.position.set(80, 160, 60); sc.add(dl);
-    const grid = new THREE.GridHelper(400, 40, 0x0b3946, 0x0b2a33); sc.add(grid);
+    sc.add(new THREE.HemisphereLight(0xe6e6e6, 0x0f0f0f, .8)); const dl = new THREE.DirectionalLight(0xffffff, .5); dl.position.set(80, 160, 60); sc.add(dl);
+    const grid = new THREE.GridHelper(400, 40, 0x333333, 0x262626); sc.add(grid);
     // Volúmenes del cuadrante: 4 manzanas, calles cruzadas
     const blocks = [[-55, -55, 60, 28], [55, -55, 50, 34], [-55, 55, 52, 18], [55, 55, 58, 22]];
     const solids = new THREE.Group(); sc.add(solids); solids.visible = false;
-    blocks.forEach(([x, z, s, h]) => { const m = new THREE.Mesh(new THREE.BoxGeometry(s, h, s), new THREE.MeshStandardMaterial({ color: 0x0b3946, transparent: true, opacity: .85, roughness: .8 })); m.position.set(x, h / 2, z); solids.add(m); const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: COLOR.skyHi, transparent: true, opacity: .5 })); e.position.copy(m.position); solids.add(e); });
+    blocks.forEach(([x, z, s, h]) => { const m = new THREE.Mesh(new THREE.BoxGeometry(s, h, s), new THREE.MeshStandardMaterial({ color: 0x333333, transparent: true, opacity: .85, roughness: .8 })); m.position.set(x, h / 2, z); solids.add(m); const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), new THREE.LineBasicMaterial({ color: COLOR.muted, transparent: true, opacity: .5 })); e.position.copy(m.position); solids.add(e); });
     // Cámaras: posición y pirámide de visión
     const camPos = [[0, 22, -70], [72, 18, 0], [0, 16, 74], [-74, 20, 0]];
     camPos.forEach(([x, y, z], i) => {
@@ -195,16 +195,16 @@ const SceneLab = (() => {
       const up = new THREE.Vector3(0, 1, 0), right = dir.clone().cross(up).normalize(), u2 = right.clone().cross(dir).normalize();
       const far = o.clone().addScaledVector(dir, 34); const c = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => far.clone().addScaledVector(right, a * 14).addScaledVector(u2, b * 9));
       const seg = []; c.forEach((p) => seg.push(o, p)); for (let k = 0; k < 4; k++) seg.push(c[k], c[(k + 1) % 4]);
-      sc.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({ color: COLOR.lime, transparent: true, opacity: .8 })));
+      sc.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({ color: COLOR.primary, transparent: true, opacity: .8 })));
       const lb = textSprite(camsIds[i], { worldH: 7, size: 24, font: 'IBM Plex Mono' }); lb.position.copy(o).add(new THREE.Vector3(0, 7, 0)); sc.add(lb);
-      const d = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.glow, color: COLOR.lime, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); d.scale.setScalar(10); d.position.copy(o); sc.add(d);
+      const d = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.glow, color: COLOR.primary, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); d.scale.setScalar(10); d.position.copy(o); sc.add(d);
     });
     // Nube de puntos: muestreo de superficies (fachadas, suelo, techos), etiquetada por cámara
     const P = [], CL = [], CAMI = [];
     const add = (x, y, z, c, ci) => { P.push(x, y, z); CL.push(c.r, c.g, c.b); CAMI.push(ci); };
-    const cG = new THREE.Color(0x21414b), cF = new THREE.Color(0x78b2c8), cT = new THREE.Color(0xa3c3d0);
-    for (let i = 0; i < 26000; i++) { const x = (rnd() - .5) * 240, z = (rnd() - .5) * 240; const road = Math.abs(x) < 18 || Math.abs(z) < 18; add(x, .2, z, road ? cG.clone().lerp(new THREE.Color(0x3a4a50), rnd() * .6) : cG, Math.abs(x) > Math.abs(z) ? (x > 0 ? 1 : 3) : (z > 0 ? 2 : 0)); }
-    blocks.forEach(([bx, bz, s, h]) => { for (let i = 0; i < 9000; i++) { const f = Math.floor(rnd() * 5); let x, y, z; const a = (rnd() - .5) * s, b = rnd() * h; if (f === 0) { x = bx + a; y = b; z = bz - s / 2; } else if (f === 1) { x = bx + a; y = b; z = bz + s / 2; } else if (f === 2) { x = bx - s / 2; y = b; z = bz + a; } else if (f === 3) { x = bx + s / 2; y = b; z = bz + a; } else { x = bx + a; y = h; z = bz + (rnd() - .5) * s; } const win = f < 4 && (Math.floor(b / 3.2) % 2 === 0) && (Math.floor(a / 3) % 2 === 0); add(x, y, z, win ? cT : cF.clone().lerp(new THREE.Color(COLOR.sky), rnd()), Math.abs(x) > Math.abs(z) ? (x > 0 ? 1 : 3) : (z > 0 ? 2 : 0)); } });
+    const cG = new THREE.Color(0x3c3c3c), cF = new THREE.Color(0xa8a8a8), cT = new THREE.Color(0xbdbdbd);
+    for (let i = 0; i < 26000; i++) { const x = (rnd() - .5) * 240, z = (rnd() - .5) * 240; const road = Math.abs(x) < 18 || Math.abs(z) < 18; add(x, .2, z, road ? cG.clone().lerp(new THREE.Color(0x474747), rnd() * .6) : cG, Math.abs(x) > Math.abs(z) ? (x > 0 ? 1 : 3) : (z > 0 ? 2 : 0)); }
+    blocks.forEach(([bx, bz, s, h]) => { for (let i = 0; i < 9000; i++) { const f = Math.floor(rnd() * 5); let x, y, z; const a = (rnd() - .5) * s, b = rnd() * h; if (f === 0) { x = bx + a; y = b; z = bz - s / 2; } else if (f === 1) { x = bx + a; y = b; z = bz + s / 2; } else if (f === 2) { x = bx - s / 2; y = b; z = bz + a; } else if (f === 3) { x = bx + s / 2; y = b; z = bz + a; } else { x = bx + a; y = h; z = bz + (rnd() - .5) * s; } const win = f < 4 && (Math.floor(b / 3.2) % 2 === 0) && (Math.floor(a / 3) % 2 === 0); add(x, y, z, win ? cT : cF.clone().lerp(new THREE.Color(COLOR.subtle), rnd()), Math.abs(x) > Math.abs(z) ? (x > 0 ? 1 : 3) : (z > 0 ? 2 : 0)); } });
     const N = P.length / 3; const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(CL, 3));
     const order = [...Array(N).keys()].sort((a, b) => CAMI[a] - CAMI[b] || rnd() - .5);
     const posSorted = new Float32Array(N * 3), colSorted = new Float32Array(N * 3); order.forEach((k, i) => { posSorted.set(P.slice(k * 3, k * 3 + 3), i * 3); colSorted.set(CL.slice(k * 3, k * 3 + 3), i * 3); });
@@ -214,7 +214,7 @@ const SceneLab = (() => {
     const peopleN = 36, pp = new Float32Array(peopleN * 3), ppl = []; for (let i = 0; i < peopleN; i++) { const lane = rnd() < .5; ppl.push({ lane, off: (rnd() - .5) * 30 + (rnd() < .5 ? 21 : -21), ph: rnd() * 240, sp: .3 + rnd() * .5 }); }
     const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pp, 3));
     const people = new THREE.Points(pg, new THREE.PointsMaterial({ size: 3.4, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false })); sc.add(people);
-    const cars = []; for (let i = 0; i < 7; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(4.4, 1.8, 9), new THREE.MeshStandardMaterial({ color: i === 2 ? COLOR.red : 0x9fb3bb, transparent: true, opacity: 0 })); const lane = i % 2 === 0; m.userData = { lane, off: lane ? (i % 4 ? 6 : -6) : (i % 3 ? 6 : -6), ph: rnd() * 240, sp: .6 + rnd() * .6 }; if (!lane) m.rotation.y = Math.PI / 2; sc.add(m); cars.push(m); }
+    const cars = []; for (let i = 0; i < 7; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(4.4, 1.8, 9), new THREE.MeshStandardMaterial({ color: i === 2 ? COLOR.red : 0xafafaf, transparent: true, opacity: 0 })); const lane = i % 2 === 0; m.userData = { lane, off: lane ? (i % 4 ? 6 : -6) : (i % 3 ? 6 : -6), ph: rnd() * 240, sp: .6 + rnd() * .6 }; if (!lane) m.rotation.y = Math.PI / 2; sc.add(m); cars.push(m); }
     const st = { rev: 0, r0: 0, r1: 0, t0: 0, play: false, time: 0, mode: 'pts', last: performance.now() };
     const revTo = (v, dur) => { st.r0 = st.rev; st.r1 = v; st.t0 = performance.now(); st.dur = dur; };
     $('#scMode').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; st.mode = b.dataset.m; $('#scMode').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); solids.visible = st.mode === 'solid' && st.rev > .97; cloud.material.opacity = st.mode === 'solid' ? .25 : .9; Sfx.tick(); });
@@ -259,16 +259,18 @@ const Jules = (() => {
   function add(role, html) { const d = document.createElement('div'); d.className = 'msg ' + role; d.innerHTML = html; body().appendChild(d); body().scrollTop = 1e6; return d; }
   function greet() {
     greeted = true; const crit = UI.S.zones.filter((z) => UI.zoneStatus(z) === 'critical').length; const on = UI.S.cameras.filter((c) => c.status === 'online').length;
-    add('bot', `Buenas noches. Turno A con <b>${on} de ${UI.S.cameras.length}</b> cámaras en línea. Hay <b>${crit}</b> zonas por encima de lo previsto y SENTINEL sigue leyendo placas y rostros en tiempo real. ¿Qué necesitas?`);
+    add('bot', `Buenas noches. Turno A con <b>${on} de ${UI.S.cameras.length}</b> cámaras en línea. Hay <b>${crit}</b> zonas por encima de lo previsto y Panopticon sigue leyendo placas y rostros en tiempo real. ¿Qué necesitas?`);
     $('#jSugg').innerHTML = SUGG.map((s) => `<button>${s}</button>`).join('');
   }
   async function ask(text) {
     if (!text.trim()) return; $('#jSugg').classList.add('compact'); add('user', esc(text)); $('#jInput').value = '';
-    const typing = add('bot', '<span class="typing"><i></i><i></i><i></i></span>'); await wait(900);
+    const mark = (s) => window.JulesMark && window.JulesMark.state(s);
+    mark('think'); const typing = add('bot', '<span class="typing"><i></i><i></i><i></i></span>'); await wait(900); mark('speak');
     const plan = route(text.toLowerCase(), text); typing.innerHTML = plan.text + (plan.actions.length ? '<div class="act"></div>' : ''); Sfx.blip(); body().scrollTop = 1e6;
     const act = typing.querySelector('.act');
     for (const a of plan.actions) { await wait(550); const r = await a.run(); act.insertAdjacentHTML('beforeend', `<div><span class="ms">check_circle</span>${a.label}${r ? ' · ' + r : ''}</div>`); Sfx.tick(); body().scrollTop = 1e6; }
     if (plan.after) { await wait(400); add('bot', plan.after()); body().scrollTop = 1e6; }
+    await wait(600); mark('idle');
   }
   const wait = (ms) => new Promise((r) => setTimeout(r, REDUCED ? 0 : ms));
   const topZone = () => UI.S.zones.slice().sort((a, b) => b.est / b.planned - a.est / a.planned)[0];
@@ -282,7 +284,7 @@ const Jules = (() => {
     }
     pending = null;
     if (/muro|video ?wall|videopared|todas las c[aá]maras/.test(t)) return { text: 'Abro el muro de video con las cámaras del sector, ordenadas por alerta.', actions: [{ label: 'Muro de video abierto', run: async () => { toggle(false); UI.go('muro'); return `${MockDB.cameras.length} cámaras`; } }] };
-    if (/identidad|base de datos|redes sociales|fuentes|qui[eé]n es|demostraci|ejemplo|coincidencia/.test(t)) { const f = Api.state.faces.find((x) => x.demo) || Api.state.faces[0]; return { text: `Abro la búsqueda de identidad para ${f.id}. Hoy solo está conectada la lista de SENTINEL; las demás fuentes indican cómo conectarse.`, actions: [{ label: 'Búsqueda de identidad abierta', run: async () => { toggle(false); UI.go('rostros', { sel: f.id }); SourceLab.open(f); } }] }; }
+    if (/identidad|base de datos|redes sociales|fuentes|qui[eé]n es|demostraci|ejemplo|coincidencia/.test(t)) { const f = Api.state.faces.find((x) => x.demo) || Api.state.faces[0]; return { text: `Abro la búsqueda de identidad para ${f.id}. Hoy solo está conectada la lista de Panopticon; las demás fuentes indican cómo conectarse.`, actions: [{ label: 'Búsqueda de identidad abierta', run: async () => { toggle(false); UI.go('rostros', { sel: f.id }); SourceLab.open(f); } }] }; }
     if (/colisi|choque|accidente|tr[aá]nsito|infracci/.test(t)) {
       const ev = /infracci|giro/.test(t) ? MockDB.traffic[1] : MockDB.traffic[0];
       return { text: `Abro el evento <b>${ev.title.toLowerCase()}</b> (${ev.id}) con su video de evidencia.`, actions: [
@@ -301,7 +303,7 @@ const Jules = (() => {
     const plateM = raw.toUpperCase().match(/\b([PCMAN])\s?-?(\d{3})-?(\d{3})\b/);
     if (plateM || /placa|veh[ií]culo|robad/.test(t)) {
       const plate = plateM ? `${plateM[1]} ${plateM[2]}-${plateM[3]}` : 'P 512-884'; const w = MockDB.plateWatch[plate];
-      return { text: `Busco <b class="mono">${plate}</b> en las lecturas de SENTINEL y reconstruyo su trayectoria.`, actions: [
+      return { text: `Busco <b class="mono">${plate}</b> en las lecturas de Panopticon y reconstruyo su trayectoria.`, actions: [
         { label: 'Consulta registrada en auditoría', run: async () => '' },
         { label: 'Placa localizada en la red', run: async () => { await UI.searchPlate(plate); return `${Api.tracePlateSync(plate).length} cámaras`; } },
         { label: 'Trayectoria dibujada en el mapa', run: async () => '' },
@@ -311,7 +313,7 @@ const Jules = (() => {
       const z = topZone();
       return { text: `${z.name} es la zona más crítica: ${fmt(z.est)} personas frente a ${fmt(z.planned)} previstas. Pido refuerzo a MAIC.`, actions: [
         { label: 'Vista de aglomeraciones abierta', run: async () => { UI.go('aglomeraciones', { sel: z.id }); UI.selectZone(z.id, true); } },
-        { label: 'Evento enviado a MAIC', run: async () => { const d = await UI.dispatchZone(z.id); if (d) { City.dispatchUnits(d.units, z, 9); City.pulse(z.x, z.z, COLOR.lime, 1); return `${d.units.length} unidades más cercanas`; } return 'ya estaba en atención'; } },
+        { label: 'Evento enviado a MAIC', run: async () => { const d = await UI.dispatchZone(z.id); if (d) { City.dispatchUnits(d.units, z, 9); City.pulse(z.x, z.z, COLOR.primary, 1); return `${d.units.length} unidades más cercanas`; } return 'ya estaba en atención'; } },
       ], after: () => 'MAIC confirmará la asignación en el panel de la zona. Te aviso si la asistencia sigue creciendo.' };
     }
     if (/gente|aglomer|concentr|multitud|personas|d[oó]nde/.test(t)) {
@@ -336,8 +338,8 @@ const Jules = (() => {
     return { text: 'Puedo ubicar concentraciones de personas, pedir refuerzos a MAIC, rastrear placas, analizar rostros y reconstruir escenas en 3D. Prueba con alguna de las sugerencias.', actions: [] };
   }
   /** Con Jules abierto, las alertas críticas llegan por la conversación en lugar del banner. */
-  function notify(a) { if (!greeted) greet(); add('bot', `<b>Alerta crítica.</b> ${esc(a.title)}<br><span class="muted">${esc(a.sub)}</span><div style="margin-top:8px"><button class="btn danger xs" data-action="open-alert" data-id="${a.id}">Atender</button></div>`); }
-  function nudge() { const b = $('#jules-btn'); b.style.boxShadow = '0 0 0 6px #bf5a5233, 0 0 24px #bf5a5266'; }
+  function notify(a) { if (!greeted) greet(); add('bot', `${Ops.voice(a)}<div class="j-acts">${Ops.actionsFor(a).map((x, i) => `<button class="btn xs ${i === 0 ? 'danger' : 'secondary'}" data-ops-act="${a.id}" data-ops-action="${x.id}">${x.label}</button>`).join('')}</div>`); }
+  function nudge() { const b = $('#jules-btn'); b.style.boxShadow = '0 0 0 6px #e0453c33, 0 0 24px #e0453c66'; window.JulesMark && window.JulesMark.state('listen'); }
   function bind() {
     $('#jules-btn').addEventListener('click', () => toggle()); $('#julesClose').addEventListener('click', () => toggle(false));
     $('#jSugg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) ask(b.textContent); });
@@ -365,7 +367,7 @@ const Jules = (() => {
   function hudStatus() {
     const el = $('#hudStatus'); if (!el) return; const now = Date.now(), cov = UI.coverage(), cams = UI.S.cameras;
     const src = (name, ts) => { const s = Math.max(0, Math.round((now - ts) / 1000)); return `<span><i class="dot ${s > 20 ? 'red' : s > 8 ? 'yellow' : ''}"></i>${name} <b>hace ${s} s</b></span>`; };
-    el.innerHTML = src('SENTINEL', Api.state.fresh.sentinel) + src('MAIC', Api.state.fresh.maic) +
+    el.innerHTML = src('Visión', Api.state.fresh.vision) + src('MAIC', Api.state.fresh.maic) +
       `<span>Cámaras <b>${cams.filter((c) => c.status !== 'offline').length}/${cams.length}</b></span><span>Cobertura vial <b>${Math.round(cov.pct * 100)} %</b></span><span>Puntos ciegos <b>${cov.blind.length}</b></span>`;
   }
   function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); [Globe.camera, City.camera].forEach((c) => { c.aspect = w / h; c.updateProjectionMatrix(); }); }
@@ -378,8 +380,8 @@ const Jules = (() => {
   const geoReady = GeoMap.init().then((ok) => { if (ok && mode === 'globe') { geoIntro = true; GeoMap.setActive(true); document.body.classList.add('geo-on'); } return ok; });
 
   // Intro: cifras y tarjeta anclada a San Salvador
-  $('#introStats').innerHTML = [['40', 'Cámaras del sector piloto'], ['24/7', 'Presencia de SENTINEL'], ['1.4 s', 'De la detección a la alerta'], ['3', 'Capacidades: multitudes, placas, rostros']].map(([v, l]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
-  $('#globeCard').innerHTML = '<div class="t"><span>Centro de mando · San Salvador</span><span>POC</span></div><div class="muted" style="margin-top:4px">40 cámaras · Ministerio de Seguridad</div><div style="display:flex;align-items:center;gap:6px;margin-top:6px;color:var(--green)"><span class="dot"></span>SENTINEL en línea</div>';
+  $('#introStats').innerHTML = [['40', 'Cámaras del sector piloto'], ['24/7', 'Presencia de Panopticon'], ['1.4 s', 'De la detección a la alerta'], ['3', 'Capacidades: multitudes, placas, rostros']].map(([v, l]) => `<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  $('#globeCard').innerHTML = '<div class="t"><span>Centro de mando · San Salvador</span><span>POC</span></div><div class="muted" style="margin-top:4px">40 cámaras · Ministerio de Seguridad</div><div style="display:flex;align-items:center;gap:6px;margin-top:6px;color:var(--status-positive)"><span class="dot"></span>Panopticon en línea</div>';
   const introLines = ['Salvador del Mundo — 40 cámaras sincronizadas', 'Plaza Salvador del Mundo — concentración por encima de lo previsto', 'MAIC conectado — 36 unidades PNC visibles', 'Lectura de placas activa — 18,204 hoy', 'SPOTBOX en sitio — 4 de 4 en línea'];
   let li = 0; const introTick = setInterval(() => { li = (li + 1) % introLines.length; $('#introTicker .txt').textContent = introLines[li]; }, 3200);
 
@@ -416,7 +418,7 @@ const Jules = (() => {
     /** Abre la consola: se llama al terminar el vuelo de entrada (táctico o fotorrealista). */
     const openConsole = (mapMode) => {
       mode = 'city'; GeoMap.requireSector(); $('#intro').remove(); $('#app').classList.remove('hidden'); $('#jules-btn').classList.remove('hidden');
-      City.entrance(); UI.render(); UI.bind(); Jules.bind(); Wall.bind(); UI.setMapMode(mapMode, true);
+      City.entrance(); UI.render(); UI.bind(); Jules.bind(); Ops.bind(); Wall.bind(); UI.setMapMode(mapMode, true);
       $('#soundBtn').addEventListener('click', () => Sfx.set(!Sfx.on)); Sfx.set(true); startSim();
     };
     /** Corte suave entre el globo y la vista de consola. */
@@ -482,9 +484,10 @@ const Jules = (() => {
     UI.renderTabs(); UI.refreshMapBar(); syncIncidents(); Wall.render();
     const loc = a.zoneId ? UI.S.zones.find((z) => z.id === a.zoneId) : UI.S.cameras.find((c) => c.id === a.cameraId);
     if (loc) City.pulse(loc.x, loc.z, a.severity === 'critical' ? COLOR.red : COLOR.yellow, a.severity === 'critical' ? 1 : .6);
-    if (a.severity === 'critical') { Sfx.critical(); if ($('#jules').classList.contains('closed')) { UI.banner(a); Jules.nudge(); } else Jules.notify(a); } else Sfx.medium();
+    // Jules avisa (propuesta P1): el aviso flotante lo arma Ops; con el panel abierto entra también a la conversación.
+    if (a.severity === 'critical') { Sfx.critical(); if (!$('#jules').classList.contains('closed')) Jules.notify(a); } else Sfx.medium();
   });
-  Api.on('maic', (d) => { Api.state.fresh.maic = Date.now(); syncIncidents(); if (d.zoneId && UI.S.view === 'aglomeraciones' && UI.S.sel === d.zoneId) UI.selectZone(d.zoneId, true); if (d.readId && UI.S.view === 'placas' && UI.S.sel === d.readId) UI.selectRead(d.readId); if (d.trafficId && UI.S.sel === d.trafficId) UI.selectTraffic(d.trafficId); if (d.trackId && UI.S.sel === d.trackId) UI.selectTrack(d.trackId); if (d.steps.length === 2) UI.toast(`MAIC asignó ${d.units ? d.units.length : ''} unidades · ${d.label}`, 'local_police', 'lime'); });
+  Api.on('maic', (d) => { Api.state.fresh.maic = Date.now(); syncIncidents(); if (d.zoneId && UI.S.view === 'aglomeraciones' && UI.S.sel === d.zoneId) UI.selectZone(d.zoneId, true); if (d.readId && UI.S.view === 'placas' && UI.S.sel === d.readId) UI.selectRead(d.readId); if (d.trafficId && UI.S.sel === d.trafficId) UI.selectTraffic(d.trafficId); if (d.trackId && UI.S.sel === d.trackId) UI.selectTrack(d.trackId); if (d.steps.length === 2) UI.toast(`MAIC asignó ${d.units ? d.units.length : ''} unidades · ${d.label}`, 'local_police', 'primary'); });
   Api.on('audit', (e) => UI.toast(`Consulta registrada en auditoría · ${e.id}`, 'verified_user'));
 
   function startSim() {
@@ -492,7 +495,7 @@ const Jules = (() => {
     // Lecturas de placa continuas
     (function plates() {
       setTimeout(() => {
-        const cam = pick(cams.filter((c) => c.status !== 'offline')); const r = UI.makeRead(Gen.plate(), cam); Api.state.reads.unshift(r); Api.state.platesToday += 1 + Math.floor(rnd() * 3); Api.state.fresh.sentinel = Date.now();
+        const cam = pick(cams.filter((c) => c.status !== 'offline')); const r = UI.makeRead(Gen.plate(), cam); Api.state.reads.unshift(r); Api.state.platesToday += 1 + Math.floor(rnd() * 3); Api.state.fresh.vision = Date.now();
         if (UI.S.view === 'placas') { const l = $('#readsList'); if (l) { l.insertAdjacentHTML('afterbegin', UI.readItem(r, true)); if (l.children.length > 14) l.lastElementChild.remove(); } const c = $('#readsCount'); if (c) c.textContent = fmt(Api.state.platesToday) + ' hoy'; }
         const k = $('#k-plates'); if (k) k.textContent = fmt(Api.state.platesToday);
         plates();

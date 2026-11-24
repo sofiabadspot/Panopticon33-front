@@ -2,9 +2,11 @@
 /* =====================================================================
    §1 CONFIG — constantes, paleta y utilidades
    ===================================================================== */
+/** Espejo de css/theme.css para three.js, canvas y Cesium (no leen variables CSS).
+    Solo grises; el color es solo para estados (red, yellow, green = status-*). */
 const COLOR = {
-  lime: 0xb3c452, sky: 0x2f7d99, skyHi: 0x78b2c8, red: 0xbf5a52, yellow: 0xcfc56a,
-  green: 0x86ad6c, bg: 0x05090c, panel: 0x0b1216, white: 0xe9f8ff, police: 0xa3c3d0,
+  primary: 0xb9b9b9, subtle: 0x737373, muted: 0xa8a8a8, red: 0xe0453c, yellow: 0xf3ff00,
+  green: 0x6cd300, bg: 0x080808, panel: 0x111111, white: 0xf5f5f5, police: 0xbdbdbd,
 };
 /** Origen local: Monumento al Divino Salvador del Mundo (metros ↔ lat/lon). En producción todo viaja en WGS84. */
 const ORIGIN = { lat: 13.7013, lon: -89.2243 };
@@ -17,7 +19,7 @@ const TZ = 'America/El_Salvador';
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** PRNG determinista: el prototipo se ve igual en cada demo. */
-function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function mulberry32(a) { return function () { a |= 0; a = a + 0x4c4c4cF5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const rnd = mulberry32(33);
 const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -185,7 +187,7 @@ const MockDB = (() => {
   /* --- Unidades de la PNC (dato que en producción entrega MAIC) --- */
   const roadPts = [];
   GEO.roads.forEach(([rank, pts]) => { if (rank >= 1) for (let i = 0; i < pts.length; i += 6) if (Math.hypot(pts[i], pts[i + 1]) < 1500) roadPts.push([pts[i], pts[i + 1]]); });
-  const units = Array.from({ length: 36 }, (_, i) => { const q = pick(roadPts), node = Routes.nearest(q[0], q[1]), p = Routes.pos(node); return { id: 'PNC-' + (210 + i * 7), node, x: p[0], z: p[1], type: i % 4 === 0 ? 'Motorizada' : i % 5 === 0 ? 'A pie' : 'Patrulla', status: 'patrullando' }; });
+  const units = Array.from({ length: 36 }, (_, i) => { const q = pick(roadPts), node = Routes.nearest(q[0], q[1]), p = Routes.pos(node); return { id: 'PNC-' + (210 + i * 7), node, x: p[0], z: p[1], type: i % 4 === 0 ? 'Motorizada' : i % 5 === 0 ? 'A pie' : 'Patrulla', status: 'patrullando', plate: i % 5 === 0 && i % 4 !== 0 ? null : `N ${String(4120 + i * 37).padStart(4, '0')}`, crew: i % 4 === 0 ? 1 + (i % 2) : 2 + (i % 3 === 0 ? 1 : 0), radio: `Delta ${String(i + 1).padStart(2, '0')}` }; });
 
   /* --- Listas autorizadas (simuladas) --- */
   const plateWatch = {
@@ -199,7 +201,7 @@ const MockDB = (() => {
     { ref: 'LB-0733', list: 'Orden de captura vigente' },
     { ref: 'LB-2054', list: 'Persona de interés' },
   ];
-  /* --- Tránsito: eventos con EVIDENCIA REAL. Los clips son salidas de SENTINEL sobre video de
+  /* --- Tránsito: eventos con EVIDENCIA REAL. Los clips son salidas de Panopticon sobre video de
          cámaras municipales de San Salvador (los datos del evento se leen del propio clip). --- */
   const traffic = [
     { id: 'T-2201', kind: 'collision', severity: 'critical', clip: 'colision', cameraId: cameras[14].id, source: 'Cámara municipal de San Salvador', title: 'Colisión entre dos vehículos',
@@ -235,7 +237,7 @@ const MockDB = (() => {
          Las instituciones son las que previsiblemente tienen el dato en El Salvador; cuáles se conectan
          y con qué alcance lo define el Ministerio. Mientras una fuente no esté conectada, la consola no muestra datos de ella. --- */
   const sources = [
-    { id: 'sentinel', group: 'spotvision', status: 'connected', name: 'Listas autorizadas en SENTINEL', inst: 'Ministerio de Seguridad · listas cargadas para la demo', gives: 'candidatos con puntaje de similitud', fields: ['referencia', 'lista', 'puntaje'] },
+    { id: 'panopticon', group: 'spotvision', status: 'connected', name: 'Listas autorizadas en Panopticon', inst: 'Ministerio de Seguridad · listas cargadas para la demo', gives: 'candidatos con puntaje de similitud', fields: ['referencia', 'lista', 'puntaje'] },
     { id: 'rnpn', group: 'identidad', status: 'pending', name: 'Registro de identidad (DUI)', inst: 'Registro Nacional de las Personas Naturales (RNPN)', gives: 'nombre, número de DUI y fotografía oficial', fields: ['dui', 'nombres', 'apellidos', 'fotografia', 'fecha_emision'] },
     { id: 'dgme', group: 'identidad', status: 'pending', name: 'Pasaportes y movimientos migratorios', inst: 'Dirección General de Migración y Extranjería (DGME)', gives: 'pasaporte, nacionalidad, entradas y salidas del país', fields: ['pasaporte', 'nacionalidad', 'fotografia', 'movimientos'] },
     { id: 'pnc', group: 'policial', status: 'pending', name: 'Órdenes de captura y antecedentes', inst: 'Policía Nacional Civil (PNC)', gives: 'órdenes de captura vigentes y antecedentes policiales', fields: ['identificador', 'orden', 'estado', 'fotografia'] },
@@ -311,7 +313,7 @@ const Api = (() => {
   const delay = (ms) => new Promise((r) => setTimeout(r, REDUCED ? 0 : ms));
   const state = { alerts: [], reads: [], faces: [], dispatches: [], audit: [], platesToday: 18204, facesToday: 2316,
     /** Última actualización recibida de cada fuente (para los indicadores de frescura del HUD). */
-    fresh: { sentinel: Date.now(), maic: Date.now() } };
+    fresh: { vision: Date.now(), maic: Date.now() } };
   return {
     state,
     /** WS /v1/stream — temas: alerts, plates, faces, zones, cameras, maic */

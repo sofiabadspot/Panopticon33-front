@@ -1,0 +1,657 @@
+/* =====================================================================
+   Jules · estilos de Sync en Panóptico 33
+   ---------------------------------------------------------------------
+   Copia de lo que usa Jules en sync-front:
+   · design-reference/ds/bundle.css (componentes base .sv-*),
+   · src/styles/ds-extension.css (.svx-*, escala --type-*, tema oscuro de Sync),
+   · src/components/jules/Jules.css.
+   Solo lo que Jules necesita, y todo dentro de .jules-ds (el panel de Jules, sus diálogos y el
+   menú que se abre sobre la página), para no tocar el resto de la consola.
+   Los colores salen del tema de Panóptico 33 (theme.css). Donde Sync usa un token que la
+   consola no tiene, se define acá apuntando a uno que sí existe (ver "Tokens").
+   ===================================================================== */
+
+/* ---------- Tokens ----------
+   Medidas, radios y escala tipográfica: los de Sync (tokens.css + ds-extension.css).
+   Colores: el tema oscuro de Sync (ds-extension.css, "TEMA OSCURO DE SYNC") llevado a los
+   tokens de la consola. */
+.jules-ds {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  --type-h1: 600 48px/54px var(--font-display);
+  --type-lead: 400 18px/28px var(--font-sans);
+  --type-body: 400 16px/24px var(--font-sans);
+  --type-body-sm: 400 14px/20px var(--font-sans);
+  --type-label: 600 14px/20px var(--font-sans);
+  --type-strong: 500 14px/20px var(--font-sans);
+  --type-caption: 300 12px/16px var(--font-sans);
+  --type-title: 600 20px/26px var(--font-display);
+  --type-eyebrow: 600 11px/16px var(--font-sans);
+  --type-eyebrow-tracking: 0.08em;
+
+  --layout-panel-width: 380px;
+  --layout-panel-min: 280px;
+  --layout-panel-max: 560px;
+  --layout-charla: 780px;
+  --hit-min: 40px;
+
+  /* Colores de la marca de Jules (fondo de marca, halo del campo): los de la Nebulosa. */
+  --brand-blue: var(--jules-c2);
+  --brand-lime: var(--jules-c1);
+  --chart-4: var(--jules-c4);
+  /* Comparación de períodos: en Sync "ahora" va en el azul de los gráficos. La consola es
+     solo grises (el color es para estados): va en la tinta. */
+  --chart-2: var(--ink);
+
+  /* Niveles: en el oscuro de Sync el globo de la pregunta y los menús van un nivel arriba
+     del panel (--surface-overlay). */
+  --surface-overlay: var(--surface-raised);
+  /* Tooltips: pieza invertida (en el oscuro de Sync, blanco roto con letra oscura). */
+  --surface-inverse: var(--ink);
+  /* Hover suave: en el oscuro de Sync, blanco al 4 %. (--glass de la consola es otra cosa:
+     el fondo de los paneles sobre el mapa.) */
+  --glass: color-mix(in srgb, var(--ink) 4%, transparent);
+  --detect-fill-a: var(--glass-hi);
+  /* Acento (borde que se arrastra): la consola no tiene color de acento; usa el del foco. */
+  --accent: var(--focus);
+  --link: var(--ink);
+  /* Acción principal en el oscuro de Sync: vidrio blanco (poca opacidad, borde fino). */
+  --primary: color-mix(in srgb, var(--ink) 10%, transparent);
+  --primary-hover: color-mix(in srgb, var(--ink) 16%, transparent);
+  --primary-borde: color-mix(in srgb, var(--ink) 35%, transparent);
+  --on-primary: var(--ink);
+  --danger: var(--status-negative-text);
+  --status-negative-tint: color-mix(in srgb, var(--status-negative) 14%, transparent);
+  --shadow-card:
+    inset 0 1px 0 color-mix(in srgb, var(--ink) 5%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  font-family: var(--font-sans);
+  color: var(--ink);
+}
+
+/* ---------- Componentes base del DS de Sync (bundle.css) ---------- */
+:where(.jules-ds) :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: none; }
+:where(.jules-ds) .sv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:where(.jules-ds) .sv-ico { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+:where(.jules-ds) .sv-ico--lg { width: 20px; height: 20px; }
+
+/* Button */
+:where(.jules-ds) .sv-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  font: 600 14px/20px var(--font-sans); padding: var(--space-3) var(--space-6); border-radius: var(--radius-md);
+  border: 1px solid transparent; cursor: pointer; text-decoration: none; transition: background .15s, color .15s, border-color .15s, scale .15s ease-out; }
+:where(.jules-ds) .sv-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+:where(.jules-ds) .sv-btn--primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary-borde); }
+:where(.jules-ds) .sv-btn--primary:hover { background: var(--primary-hover); color: var(--on-primary); border-color: color-mix(in srgb, var(--ink) 60%, transparent); }
+:where(.jules-ds) .sv-btn--primary:active { background: var(--primary); }
+:where(.jules-ds) .sv-btn--secondary { background: transparent; color: var(--ink); border-color: var(--border-strong); }
+:where(.jules-ds) .sv-btn--secondary:hover { border-color: var(--ink); }
+:where(.jules-ds) .sv-btn--ghost { background: transparent; color: var(--link); padding-left: var(--space-2); padding-right: var(--space-2); }
+:where(.jules-ds) .sv-btn--sm { padding: var(--space-2) var(--space-4); font-size: 13px; }
+:where(.jules-ds) .sv-btn--icon { padding: 0; width: 40px; height: 40px; }
+:where(.jules-ds) .sv-btn--danger { background: var(--status-negative-tint); color: var(--status-negative-text); border-color: color-mix(in srgb, var(--status-negative) 55%, transparent); }
+:where(.jules-ds) .sv-btn--danger:hover { background: color-mix(in srgb, var(--status-negative) 22%, transparent); border-color: var(--status-negative); }
+:where(.jules-ds) .sv-btn[disabled] { opacity: .45; cursor: not-allowed; }
+:where(.jules-ds) .sv-btn:not([disabled]):active { scale: .96; }
+/* Grosor de íconos: en botones con texto (letra 600), trazo de 2px. */
+:where(.jules-ds) .sv-btn:not(.sv-btn--icon) .sv-ico { stroke-width: 2; }
+/* Zona clickeable mínima de 40px de alto en los botones chicos, sin cambiar cómo se ven. */
+:where(.jules-ds) .sv-btn--sm,
+:where(.jules-ds) .sv-tabs__tab { position: relative; }
+:where(.jules-ds) .sv-btn--sm::after,
+:where(.jules-ds) .sv-tabs__tab::after { content: ""; position: absolute; inset: calc((100% - var(--hit-min)) / 2) 0; }
+
+/* Badge de estado */
+:where(.jules-ds) .sv-badge { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/16px var(--font-sans);
+  padding: 4px var(--space-2); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--ink); }
+:where(.jules-ds) .sv-badge::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--status-neutral); box-shadow: inset 0 0 0 1px var(--border-strong); }
+:where(.jules-ds) .sv-badge--positive::before { background: var(--status-positive); box-shadow: none; }
+:where(.jules-ds) .sv-badge--negative::before { background: var(--status-negative); box-shadow: none; }
+
+/* Field */
+:where(.jules-ds) .sv-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+:where(.jules-ds) .sv-label { font: 600 14px/20px var(--font-sans); color: var(--ink); }
+:where(.jules-ds) .sv-input,
+:where(.jules-ds) .sv-textarea {
+  width: 100%; font: 400 15px/22px var(--font-sans); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-md); padding: 9px 12px; transition: border-color .15s, box-shadow .15s; }
+:where(.jules-ds) .sv-input::placeholder,
+:where(.jules-ds) .sv-textarea::placeholder { color: var(--ink-muted); opacity: .8; }
+:where(.jules-ds) .sv-input:hover,
+:where(.jules-ds) .sv-textarea:hover { border-color: var(--ink); }
+:where(.jules-ds) .sv-input:focus,
+:where(.jules-ds) .sv-textarea:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px var(--glass), 0 0 0 1px var(--focus); }
+:where(.jules-ds) .sv-textarea { min-height: 96px; resize: vertical; }
+:where(.jules-ds) .sv-inputgroup { position: relative; display: flex; align-items: center; }
+:where(.jules-ds) .sv-inputgroup .sv-ico { position: absolute; left: 12px; color: var(--ink-muted); pointer-events: none; }
+:where(.jules-ds) .sv-inputgroup .sv-input { padding-left: 36px; }
+
+/* Skeleton */
+:where(.jules-ds) .sv-skeleton { background: linear-gradient(90deg, var(--surface-raised) 0%, var(--border) 50%, var(--surface-raised) 100%); background-size: 200% 100%; animation: sv-shimmer 1.4s linear infinite; border-radius: var(--radius-sm); }
+:where(.jules-ds) .svx-skeleton-texto { height: var(--space-2); }
+@keyframes sv-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* Tabs (píldora) */
+:where(.jules-ds) .sv-tabs__list { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--border); }
+:where(.jules-ds) .sv-tabs__tab { background: none; border: 0; font: 600 14px/20px var(--font-sans); color: var(--ink-muted); padding: 10px var(--space-4); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+:where(.jules-ds) .sv-tabs__tab:hover { color: var(--ink); }
+:where(.jules-ds) .sv-tabs__tab[aria-selected="true"] { color: var(--ink); }
+:where(.jules-ds) .sv-tabs--pill .sv-tabs__list { border: 0; background: var(--surface-raised); padding: 4px; border-radius: var(--radius-md); display: inline-flex; }
+:where(.jules-ds) .sv-tabs--pill .sv-tabs__tab { border: 0; margin: 0; border-radius: calc(var(--radius-md) - var(--space-1)); padding: 6px 14px; }
+:where(.jules-ds) .sv-tabs--pill .sv-tabs__tab[aria-selected="true"] { background: var(--surface); box-shadow: var(--shadow-card); }
+
+/* Dialog (dialog nativo) */
+:where(.jules-ds) .sv-dialog { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0; width: min(480px, calc(100% - 32px)); background: var(--surface); color: var(--ink); box-shadow: 0 24px 64px rgba(0, 0, 0, .5); }
+:where(.jules-ds) .sv-dialog::backdrop { background: var(--scrim); }
+:where(.jules-ds) .sv-dialog__inner { padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2); }
+:where(.jules-ds) .sv-dialog__title { font: 600 22px/28px var(--font-display); margin: 0; padding-right: var(--space-8); }
+:where(.jules-ds) .sv-dialog__desc { font: 400 14px/20px var(--font-sans); color: var(--ink-muted); margin: 0; }
+:where(.jules-ds) .sv-dialog__actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
+:where(.jules-ds) .sv-dialog__close { position: absolute; top: var(--space-3); right: var(--space-3); background: none; border: 0; color: var(--ink-muted); cursor: pointer; padding: 6px; border-radius: var(--radius-sm); }
+
+/* Dropdown menu */
+:where(.jules-ds).sv-menu,
+:where(.jules-ds) .sv-menu { position: relative; display: inline-block; }
+:where(.jules-ds) .sv-menu__content { position: absolute; top: calc(100% + 6px); left: 0; min-width: 220px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-float); padding: 4px; z-index: 50; }
+:where(.jules-ds) .sv-menu__content[hidden] { display: none; }
+:where(.jules-ds) .sv-menu__item { display: flex; align-items: center; gap: var(--space-2); width: 100%; background: none; border: 0; text-align: left; font: 400 14px/20px var(--font-sans); color: var(--ink); padding: 8px 10px; border-radius: calc(var(--radius-md) - var(--space-1) - 1px); cursor: pointer; }
+:where(.jules-ds) .sv-menu__item:hover,
+:where(.jules-ds) .sv-menu__item:focus-visible { background: var(--surface-raised); outline: none; }
+:where(.jules-ds) .sv-menu__item--danger { color: var(--status-negative-text); }
+:where(.jules-ds) .sv-menu__sep { height: 1px; background: var(--border); margin: 4px 0; }
+:where(.jules-ds) .sv-menu__header { padding: 10px 10px 8px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+:where(.jules-ds) .sv-menu__label { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+:where(.jules-ds) .sv-menu__label small { font-size: 12px; line-height: 16px; color: var(--ink-subtle); }
+:where(.jules-ds) .sv-menu__icon { display: inline-flex; width: 16px; justify-content: center; color: var(--ink-muted); }
+:where(.jules-ds) .sv-menu__check { width: 16px; height: 16px; flex: none; color: var(--ink); }
+:where(.jules-ds) .sv-menu__item--on { background: var(--glass); }
+/* Menú abierto hacia la izquierda (botón pegado al borde derecho). */
+:where(.jules-ds) .svx-menu__content--end { left: auto; right: 0; }
+/* Menú fijo: su contenido va al final de la página; el contenedor no ocupa lugar. */
+body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height: 0; z-index: 70; }
+
+/* Tag / Chip */
+:where(.jules-ds) .sv-tag { display: inline-flex; align-items: center; gap: 6px; font: 400 13px/18px var(--font-sans); padding: 4px 10px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); color: var(--ink); background: transparent; cursor: pointer; }
+
+/* Empty state (sutil) */
+:where(.jules-ds) .sv-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--space-2); padding: var(--space-12) var(--space-6); border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); }
+:where(.jules-ds) .sv-empty h3 { font: 600 20px/26px var(--font-display); margin: 0; }
+:where(.jules-ds) .sv-empty p { font: 400 14px/20px var(--font-sans); color: var(--ink-muted); margin: 0 0 var(--space-3); max-width: 360px; }
+:where(.jules-ds) .svx-empty--sutil { align-items: flex-start; text-align: left; gap: var(--space-1); padding: var(--space-2); border: 0; }
+:where(.jules-ds) .svx-empty--sutil h3 { font: var(--type-body-sm); font-weight: 600; color: var(--ink-muted); }
+:where(.jules-ds) .svx-empty--sutil p { margin: 0; max-width: none; font: var(--type-body-sm); color: var(--ink-muted); }
+
+/* ---------- Extensión del DS de Sync (ds-extension.css) ---------- */
+/* Título chiquito en mayúsculas. */
+:where(.jules-ds) .svx-eyebrow { margin: 0; font: var(--type-eyebrow); letter-spacing: var(--type-eyebrow-tracking); text-transform: uppercase; color: var(--ink-muted); }
+
+/* Globo del mensaje que la persona le manda a Jules. */
+:where(.jules-ds) .svx-bubble {
+  margin: 0;
+  align-self: flex-end;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  font: var(--type-body);
+}
+
+/* Tooltip (data-tip="Copiar"): etiqueta chica arriba del botón al pasar el mouse o con teclado. */
+:where(.jules-ds) [data-tip] { position: relative; }
+:where(.jules-ds) [data-tip]::before {
+  content: attr(data-tip);
+  position: absolute;
+  top: auto;
+  right: auto;
+  z-index: 10;
+  bottom: calc(100% + var(--space-1));
+  left: 50%;
+  translate: -50% var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inverse);
+  color: var(--ink-inverse);
+  font: var(--type-caption);
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .15s ease-out, translate .15s ease-out;
+}
+:where(.jules-ds) [data-tip]:hover::before,
+:where(.jules-ds) [data-tip]:focus-visible::before { opacity: 1; translate: -50% 0; }
+@media (prefers-reduced-motion: reduce) {
+  :where(.jules-ds) [data-tip]::before { transition: none; }
+}
+
+:where(.jules-ds) .svx-interactivo { transition-property: background-color, border-color, color, box-shadow; transition-duration: .15s; }
+:where(.jules-ds) .svx-interactivo:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Fondo de marca en oscuro (Sync, "Ajuste 3"): un solo brillo suave arriba (azul de marca + un
+   toque de lima) y el resto del color del panel. */
+.jules-ds.svx-fondo-marca {
+  /* Panopticon: solo grises (sin el azul ni la lima de Spotvision). Una luz blanca muy tenue arriba. */
+  background-color: var(--surface-panel);
+  background-image: radial-gradient(80% 40% at 20% 0%, color-mix(in srgb, var(--ink) 5%, transparent) 0%, transparent 70%);
+}
+
+/* Campo para escribirle a Jules (PromptInput). */
+:where(.jules-ds) .svx-prompt {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  transition: border-color .15s, box-shadow .15s;
+}
+:where(.jules-ds) .svx-prompt--md { padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); box-shadow: var(--shadow-card); }
+:where(.jules-ds) .svx-prompt--sm { padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4); }
+:where(.jules-ds) .svx-prompt:focus-within { border-color: var(--focus); }
+/* Foco: halo suave con los colores de Jules, difuminado detrás del campo. */
+:where(.jules-ds) .svx-prompt::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: calc(-1 * var(--space-1));
+  border-radius: var(--radius-xl);
+  background: linear-gradient(100deg, var(--chart-4), var(--brand-blue), var(--brand-lime));
+  filter: blur(var(--space-3));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .28s ease-out;
+}
+:where(.jules-ds) .svx-prompt:focus-within::before { opacity: .35; }
+:where(.jules-ds) .svx-prompt::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--surface);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :where(.jules-ds) .svx-prompt::before { transition: none; }
+}
+:where(.jules-ds) .svx-prompt__input {
+  flex-grow: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  padding: var(--space-2) 0;
+  resize: none;
+  max-height: calc(6lh + var(--space-4));
+  overflow-y: auto;
+  font: var(--type-body);
+  box-shadow: none;
+}
+:where(.jules-ds) .svx-prompt__input::placeholder { color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:where(.jules-ds) .svx-prompt > :not(.svx-prompt__input) { flex-shrink: 0; }
+/* Radios concéntricos del botón dentro del campo. */
+:where(.jules-ds) .svx-prompt--md > .sv-btn { border-radius: calc(var(--radius-lg) - var(--space-2) - 1px); }
+:where(.jules-ds) .svx-prompt--sm > .sv-btn { border-radius: calc(var(--radius-lg) - var(--space-1) - 1px); }
+
+/* Mientras se arrastra un borde: el cursor no cambia y no se selecciona texto. */
+.svx-arrastrando { cursor: col-resize; user-select: none; }
+
+/* ---------- Jules (Jules.css de Sync) ---------- */
+
+/* El panel ocupa la columna derecha de la consola (en Sync, el lateral mide
+   --layout-panel-width; acá el ancho lo da la columna, que sigue al borde arrastrado). */
+.jules-lateral {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Minimizado: franja de --space-16 con la Nebulosa; toda la franja abre a Jules. */
+.jules-lateral--minimizado { width: var(--space-16); }
+
+/* Maximizado: tapa la consola debajo de la barra (lista y mapa).
+   Conversaciones a la izquierda, a todo lo alto; a la derecha el encabezado, la charla y el
+   campo, centrados en una columna de lectura (--layout-charla) con --space-8 de aire. */
+.rcol:has(> .jules-lateral--maximizado) {
+  grid-column: 1 / -1;
+  position: relative;
+  z-index: 30;
+  border-left: 0;
+}
+
+.jules-lateral--maximizado {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.jules-lateral--maximizado > .conversaciones { grid-column: 1; grid-row: 1 / -1; }
+.jules-lateral--maximizado > :not(.conversaciones) { grid-column: 2; }
+.jules-lateral--maximizado .jules-lateral__charla,
+.jules-lateral--maximizado .jules-lateral__pie { padding-inline: max(var(--space-8), (100% - var(--layout-charla)) / 2); }
+.jules-lateral--maximizado .jules-lateral__charla { padding-top: var(--space-8); }
+.jules-lateral--maximizado .jules-lateral__pie { border-top: 0; padding-bottom: var(--space-6); }
+.jules-lateral--maximizado .jules-lateral__intro { font: var(--type-lead); }
+
+/* Bienvenida (maximizado, sin preguntas todavía): como un chat nuevo, todo centrado. */
+.jules-lateral__charla--bienvenida {
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-4);
+  padding-bottom: var(--space-8);
+  text-align: center;
+}
+.jules-bienvenida__saludo { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); margin-bottom: var(--space-4); }
+.jules-bienvenida__textos { display: flex; flex-direction: column; gap: var(--space-2); }
+.jules-bienvenida__titulo { margin: 0; font: var(--type-h1); color: var(--ink); text-wrap: balance; }
+.jules-bienvenida__campo { align-self: stretch; text-align: left; }
+.jules-lateral__charla--bienvenida .jules-lateral__tarjetas { align-self: stretch; text-align: left; }
+.jules-lateral__charla--bienvenida .jules-lateral__globos { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+
+/* Cada pregunta nueva arranca un turno: --space-6 en el lateral; --space-8 maximizado. */
+.jules-lateral__persona:not(:first-child) { margin-top: var(--space-2); }
+.jules-lateral--maximizado .jules-lateral__persona:not(:first-child) { margin-top: var(--space-4); }
+
+.jules-lateral[hidden],
+.jules-lateral [hidden] { display: none; }
+
+.jules-lateral__abrir {
+  position: relative;
+  overflow: hidden;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+/* Fondo de la franja minimizada: la Nebulosa estirada a lo alto, difuminada y atenuada. */
+.jules-lateral__aura {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: .25;
+  filter: blur(var(--space-3));
+}
+.jules-lateral__aura > .jg { scale: 1.4 14; }
+.jules-lateral__abrir > :not(.jules-lateral__aura) { position: relative; }
+/* El nombre escrito de costado en la franja minimizada. */
+.jules-lateral__vertical { writing-mode: vertical-rl; color: var(--ink); }
+.jules-lateral__abrir:hover { color: var(--ink); background: var(--glass); }
+.jules-lateral__abrir:active { background: var(--detect-fill-a); }
+.jules-lateral__abrir:focus-visible { outline-offset: -2px; }
+
+/* Borde para cambiar el ancho del lateral (usa .conversaciones__borde), adentro del panel. */
+.jules-lateral__borde.conversaciones__borde { left: 0; }
+.jules-lateral__borde.conversaciones__borde::after { left: 0; }
+
+/* Logo y título pegados (--space-2): son un solo bloque. Sin línea abajo. */
+.jules-lateral__encabezado {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+}
+.jules-lateral__opciones { display: flex; align-items: center; gap: var(--space-1); }
+
+/* Íconos de Jules en --ink. */
+.jules-icono.sv-btn--ghost,
+.jules-accion.sv-btn--ghost { color: var(--ink); }
+
+/* Tooltips del encabezado: abajo del ícono y alineados a la derecha. */
+.jules-lateral__opciones [data-tip]::before {
+  top: calc(100% + var(--space-1));
+  bottom: auto;
+  left: auto;
+  right: 0;
+  translate: 0 calc(-1 * var(--space-1));
+}
+.jules-lateral__opciones [data-tip]:hover::before,
+.jules-lateral__opciones [data-tip]:focus-visible::before,
+.jules-lateral__mas[data-tip]:focus-within::before { translate: 0 0; }
+
+/* Diálogo de opinión general: pestañas → pregunta → Enviar, a --space-4. */
+.jules-opinion-general { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-4); }
+
+.jules-lateral__nombre { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; }
+.jules-lateral__titulo { font: var(--type-title); color: var(--ink); }
+
+/* Nombre del agente junto a su logo (manual de marca): "jules" en Erbaum Light, en minúscula.
+   Pisa la letra de título de Sync solo en el nombre. */
+.jules-nombre.jules-lateral__titulo,
+.jules-nombre { font: 300 22px/26px var(--font-producto); letter-spacing: .04em; text-transform: lowercase; }
+
+.jules-lateral__charla {
+  flex-grow: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-4) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+/* La charla arranca abajo, pegada al campo (como Claude). */
+.jules-lateral__charla:not(.jules-lateral__charla--bienvenida) > :first-child { margin-top: auto; }
+
+.jules-lateral__intro,
+.jules-lateral__texto { margin: 0; font: var(--type-body); color: var(--ink); text-wrap: pretty; }
+.jules-lateral__intro { color: var(--ink-muted); }
+
+/* La pregunta de la persona: globo a la derecha, relleno un nivel arriba del panel. */
+.svx-bubble.jules-lateral__pregunta {
+  max-width: 85%;
+  font: var(--type-body);
+  border-color: transparent;
+  background: var(--surface-overlay);
+  overflow-wrap: anywhere;
+}
+.jules-lateral__persona { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
+/* Debajo de la pregunta: hora, copiar y editar, al pasar el mouse o con teclado. */
+.jules-lateral__persona-acciones { display: flex; align-items: center; gap: var(--space-1); opacity: 0; transition: opacity .15s ease-out; }
+.jules-lateral__persona:hover .jules-lateral__persona-acciones,
+.jules-lateral__persona-acciones:focus-within { opacity: 1; }
+@media (hover: none) {
+  .jules-lateral__persona-acciones { opacity: 1; }
+}
+
+/* Botón para volver a lo último. */
+.jules-lateral__abajo.sv-btn {
+  position: sticky;
+  bottom: var(--space-3);
+  align-self: center;
+  margin-top: auto;
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-card);
+}
+
+.jules-lateral__hora { font: var(--type-body-sm); font-variant-numeric: tabular-nums; color: var(--ink-muted); }
+
+/* Respuesta de Jules en partes (RespuestaJules). Conclusión → detalle: --space-1. Entre partes: --space-3. */
+.jules-respuesta { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.jules-respuesta__textos { display: flex; flex-direction: column; gap: var(--space-1); }
+.jules-respuesta__conclusion { margin: 0; font: var(--type-body); font-weight: 500; color: var(--ink); text-wrap: pretty; }
+/* Cifras clave: fichas con borde y radio; la cifra arriba y su etiqueta abajo. */
+.jules-respuesta__datos { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; }
+.jules-respuesta__dato { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.jules-respuesta__valor { order: -1; margin: 0; font: var(--type-title); font-variant-numeric: tabular-nums; color: var(--ink); }
+.jules-respuesta__etiqueta { font: var(--type-body-sm); color: var(--ink-muted); }
+/* Botones de una respuesta: en fila, como los accesos de la bienvenida de Sync. */
+.jules-respuesta__botones { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.jules-respuesta__pie { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.jules-respuesta__acciones { display: flex; align-items: center; gap: var(--space-1); }
+.jules-respuesta__pie .jules-accion[aria-pressed="true"] { background: var(--glass); }
+.jules-opinion { margin-top: var(--space-2); }
+.jules-respuesta__fuente { font: var(--type-body-sm); color: var(--ink-muted); }
+.jules-respuesta__visual { align-self: stretch; min-width: 0; }
+
+.jules-lateral__pensando { font: var(--type-body); color: var(--ink-muted); }
+
+/* Turno de Jules: Nebulosa a la izquierda mientras piensa y el texto a la derecha. */
+.jules-ds .jules-turno { display: flex; align-items: flex-start; gap: var(--space-3); }
+.jules-ds .jules-turno--pensando { align-items: center; }
+.jules-ds .jules-turno__marca { flex: none; display: flex; }
+.jules-ds .jules-turno__cuerpo { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+
+/* «Trabajó 1 s»: gris y chico, arriba de la respuesta; se abre para ver los pasos. */
+.jules-trabajo { margin: 0; font: var(--type-body-sm); color: var(--ink-muted); }
+.jules-trabajo__boton { display: inline-flex; align-items: center; gap: var(--space-1); padding: 0; border: 0; border-radius: var(--radius-sm); background: none; font: inherit; color: inherit; cursor: pointer; }
+.jules-trabajo__boton:hover { color: var(--ink); }
+.jules-trabajo__boton:active { color: var(--ink-muted); }
+.jules-trabajo__pasos { margin: var(--space-2) 0; padding: 0 0 0 var(--space-3); border-left: 1px solid var(--border); list-style: none; display: flex; flex-direction: column; gap: var(--space-1); }
+.jules-trabajo__paso { display: flex; align-items: center; gap: var(--space-2); }
+
+.jules-lateral__sugerencias { display: flex; flex-direction: column; gap: var(--space-2); }
+.jules-lateral__sugerencias--seguir { margin-top: var(--space-2); }
+.jules-lateral__globos { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+/* Preguntas sugeridas: globo con relleno y el borde suave del DS. */
+.jules-lateral__sugerencia.sv-tag {
+  max-width: 100%;
+  height: auto;
+  padding: var(--space-2) var(--space-3);
+  border-color: var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  font: var(--type-body);
+  text-align: left;
+  white-space: normal;
+}
+.jules-lateral__sugerencia.sv-tag:hover { border-color: var(--ink); }
+.jules-lateral__sugerencia.sv-tag:active { background: var(--surface-raised); }
+
+.jules-lateral__pie { flex-shrink: 0; padding: var(--space-3) var(--space-4) var(--space-4); }
+
+.jules-lateral__tarjetas { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* --- Panel de conversaciones (PanelConversaciones) --- */
+.conversaciones {
+  position: relative;
+  width: clamp(var(--layout-panel-min), var(--conversaciones-ancho, var(--layout-panel-width)), var(--layout-panel-max));
+  flex-shrink: 0;
+  background-color: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Borde para arrastrar: zona de 8px sobre la línea; al pasar el mouse o arrastrar, se marca. */
+.conversaciones__borde {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--space-1) * -1);
+  width: var(--space-2);
+  z-index: 1;
+  cursor: col-resize;
+  touch-action: none;
+}
+.conversaciones__borde::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--space-1) - 1px);
+  width: 2px;
+  background: transparent;
+  transition: background-color .15s;
+}
+.conversaciones__borde:hover::after,
+.conversaciones__borde:focus-visible::after,
+.svx-arrastrando .conversaciones__borde::after { background: var(--accent); }
+.conversaciones__borde:focus-visible { outline: none; }
+.conversaciones--izquierda { border-left: 0; border-right: 1px solid var(--border); }
+.conversaciones--izquierda .conversaciones__borde { left: auto; right: calc(var(--space-1) * -1); }
+.conversaciones--cerrado { width: var(--space-16); }
+.conversaciones__abrir { flex-grow: 1; display: flex; flex-direction: column; align-items: center; gap: var(--space-4); padding: var(--space-3) 0; border: 0; background: none; cursor: pointer; }
+.conversaciones__vertical { writing-mode: vertical-rl; transform: rotate(180deg); }
+.conversaciones__abrir:hover .conversaciones__vertical { color: var(--ink); }
+.conversaciones__encabezado { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border); }
+.conversaciones__titulo { flex-grow: 1; }
+.conversaciones__contraer { color: var(--ink-muted); }
+.conversaciones__buscador { padding: var(--space-4) var(--space-4) 0; }
+.conversaciones__lista { flex-grow: 1; min-height: 0; overflow: auto; padding: 0 var(--space-3) var(--space-4); display: flex; flex-direction: column; }
+.conversaciones__grupo { display: flex; flex-direction: column; }
+.conversaciones__grupo-titulo { padding: var(--space-4) var(--space-2) var(--space-1); }
+.conversacion { display: flex; flex-direction: column; width: 100%; padding: var(--space-2); border: 0; border-radius: var(--radius-md); background: none; text-align: left; color: var(--ink); cursor: pointer; }
+.conversacion:active { background: var(--detect-fill-a); }
+.conversacion:hover { background: var(--glass); }
+/* La conversación actual: como la pestaña elegida (relleno y sombra). */
+.conversacion--activa,
+.conversacion--activa:hover { background: var(--surface); box-shadow: var(--shadow-card); }
+.conversaciones__cargando { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4) var(--space-2) var(--space-2); }
+.conversaciones__vacio { margin-top: var(--space-3); }
+.conversacion__titulo { font: var(--type-body-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conversacion__meta { font: var(--type-body-sm); color: var(--ink-muted); }
+
+/* Comparación de dos períodos (Comparacion). */
+.jules-comparacion { margin: 0; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.jules-comparacion__leyenda { display: flex; flex-wrap: wrap; gap: var(--space-3); font: var(--type-body-sm); color: var(--ink-muted); }
+.jules-comparacion__clave { display: inline-flex; align-items: center; gap: var(--space-1); }
+.jules-comparacion__clave::before { content: ""; inline-size: var(--space-2); block-size: var(--space-2); border-radius: var(--radius-sm); background: var(--comparacion-color); }
+.jules-comparacion__clave--antes,
+.jules-comparacion__fila--antes { --comparacion-color: var(--border-strong); }
+.jules-comparacion__clave--ahora,
+.jules-comparacion__fila--ahora { --comparacion-color: var(--chart-2); }
+.jules-comparacion__medidas { margin: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.jules-comparacion__medida { display: flex; flex-direction: column; gap: var(--space-1); }
+.jules-comparacion__nombre { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font: var(--type-label); color: var(--ink); }
+.jules-comparacion__barras { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.jules-comparacion__fila { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); }
+.jules-comparacion__pista { display: block; block-size: var(--space-2); border-radius: var(--radius-full); background: var(--surface-raised); overflow: hidden; }
+.jules-comparacion__barra { display: block; block-size: 100%; border-radius: var(--radius-full); background: var(--comparacion-color); }
+.jules-comparacion__valor { font: var(--type-body-sm); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-muted); }
+.jules-comparacion__fila--ahora .jules-comparacion__valor { color: var(--ink); font-weight: 500; }
+
+/* Título de la charla (maximizado): se toca para cambiarlo. */
+.jules-lateral__titulo-boton {
+  align-self: flex-start;
+  max-width: 100%;
+  margin-inline: calc(-1 * var(--space-2));
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  text-align: left;
+  cursor: text;
+}
+.jules-lateral__titulo-texto { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jules-lateral__titulo-boton:hover { background: var(--glass); }
+.jules-lateral__titulo-boton:active { background: var(--surface-raised); }
+.jules-lateral__titulo-boton[data-tip]::before { top: calc(100% + var(--space-1)); bottom: auto; left: 0; translate: 0 calc(-1 * var(--space-1)); }
+.jules-lateral__titulo-boton[data-tip]:hover::before,
+.jules-lateral__titulo-boton[data-tip]:focus-visible::before { translate: 0 0; }
+.jules-lateral__titulo-campo.sv-input { margin-inline: calc(-1 * var(--space-2)); padding: var(--space-1) var(--space-2); font: var(--type-title); }
+
+/* ---------- Panóptico 33 ---------- */
+/* Resumen del mando (saludo + puntos, estilos de app.css) dentro de la charla: sin la línea de
+   abajo, porque en Sync la intro y la charla son un mismo espacio. */
+.jules-ds .jbrief { border-bottom: 0; padding-bottom: 0; margin-bottom: 0; }
+.jules-lateral__charla--bienvenida .jbrief { text-align: left; }
