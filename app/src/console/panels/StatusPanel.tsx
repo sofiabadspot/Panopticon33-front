@@ -4,7 +4,7 @@ import { eventStatus, forOperator, useApi } from '../../api';
 import { ago, fmtCrowd, pct } from '../../api/format';
 import { KIND_LABEL, KIND_PHRASE } from '../../api/labels';
 import type { AlertKind } from '../../api/types';
-import { KindIcon, StatusChip, useNow } from '../../ui/kit';
+import { Icon, KindIcon, StatusChip, useNow, EmptyState } from '../../ui/kit';
 import { useZoneSeverity } from '../../views/shared';
 import { useSession } from '../../shell/session';
 import { canOpenPanel, useConsole } from '../ctx';
@@ -18,6 +18,7 @@ export function StatusPanel() {
   const alerts = useApi((s) => s.alerts);
   const events = useApi((s) => s.events);
   const policeSource = useApi((s) => s.policeSource);
+  const goingUnits = useApi((s) => s.units).filter((u) => u.enRoute).length;
   const sevOf = useZoneSeverity(alerts);
 
   const measured = zones.filter((z) => status[z.id]?.count != null);
@@ -36,7 +37,7 @@ export function StatusPanel() {
     <>
       <div className="pb">
         <div className="kicker caption">El Salvador · San Salvador · ahora</div>
-        <div className="kpis" style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+        <div className="kpis" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
           <div className="kpi">
             <div className="v">{fmtCrowd(sum('count'))}</div><div className="l">Personas en zonas vigiladas</div>
             <div className="x">entre {fmtCrowd(sum('low'))} y {fmtCrowd(sum('high'))}</div>
@@ -44,7 +45,8 @@ export function StatusPanel() {
           </div>
           <div className={`kpi ${active.some((a) => a.review === 'por_revisar') ? 'alert' : ''}`}>
             <div className="v">{active.length}</div><div className="l">Alertas activas</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>{byKind.map(([k, n]) => <span key={k} className="chip" style={{ height: 20, fontSize: 11 }}>{KIND_LABEL[k]} <b className="mono">{n}</b></span>)}</div>
+            {!active.length && <div className="x">{alerts.some(forOperator) ? 'Todo gestionado' : 'Sin alertas en el turno'}</div>}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>{byKind.map(([k, n]) => <span key={k} className="chip" style={{ height: 20, fontSize: 'var(--fs-xs)' }}>{KIND_LABEL[k]} <b className="mono">{n}</b></span>)}</div>
           </div>
           <button className="kpi" style={{ textAlign: 'left' }} onClick={() => (live[0] ? c.open({ k: 'evento', id: live[0].id }) : c.setPanel('eventos'))}>
             <div className="v">{live.length}</div><div className="l">Eventos en curso</div>
@@ -66,7 +68,7 @@ export function StatusPanel() {
                       <div className="t">{sev && <span className={`sev ${sev}`} aria-label={sev === 'critica' ? 'Crítica' : 'Media'} />}{z.name}</div>
                       <div className={`cap ${nd ? 'nodata' : ''}`} aria-hidden>{!nd && <i className={sev ?? ''} style={{ width: `${Math.min(100, s.occupancy! * 100)}%` }} />}</div>
                     </div>
-                    <div className="r">{nd ? <span className="chip nodata">Sin cobertura</span> : <><b className="mono" style={{ color: 'var(--ink)', fontSize: 13, fontWeight: 500 }}>{fmtCrowd(s.count!)}</b><span>{pct(s.occupancy!)}</span></>}</div>
+                    <div className="r">{nd ? <span className="chip nodata">Sin cobertura</span> : <><b className="mono" style={{ color: 'var(--ink)', fontSize: 'var(--fs-md)', fontWeight: 500 }}>{fmtCrowd(s.count!)}</b><span>{pct(s.occupancy!)}</span></>}</div>
                   </button>
                 </li>
               );
@@ -77,6 +79,8 @@ export function StatusPanel() {
         {canSeeAlerts && (
           <div className="box flush">
             <div className="bh"><h3>Alertas recientes</h3>{canOpenPanel(role, 'alertas') && <button className="btn ghost xs" onClick={() => c.setPanel('alertas')}>Ver bandeja</button>}</div>
+            {!recent.length ? <div className="bb"><EmptyState icon="visibility" title="Sin alertas">Panopticon sigue mirando {cameras.length} cámaras.</EmptyState></div>
+              : !recent.some((a) => a.review === 'por_revisar') && <div className="bb es-inline"><span className="es-ic" aria-hidden><Icon name="done_all" /></span><span><b>Todo gestionado.</b> {goingUnits > 0 ? `${goingUnits} ${goingUnits === 1 ? 'unidad sigue' : 'unidades siguen'} en camino.` : 'Nada espera decisión.'}</span></div>}
             <ul className="list bb">
               {recent.map((a) => (
                 <li key={a.id}>

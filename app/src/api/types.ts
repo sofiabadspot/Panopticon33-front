@@ -39,7 +39,9 @@ export type UnitType = 'Patrulla' | 'Motorizada' | 'A pie';
 export type UnitStatus = 'disponible' | 'en_servicio' | 'sin_reporte' | 'desconocida';
 export interface Unit { id: string; type: UnitType; status: UnitStatus; lat: number; lon: number; lastReportAt: number; zoneId: string | null;
   /** Placa del vehículo (las unidades a pie no tienen). Simulada hasta conectar MAIC. */
-  plate?: string | null }
+  plate?: string | null;
+  /** Despachada por Maic: va hacia un lugar (la alerta que la convocó). Sin esto, está en su puesto. */
+  enRoute?: { lat: number; lon: number; label: string; alertId?: string; since: number } | null }
 
 export type AlertKind = 'aglomeracion' | 'brecha_presencia' | 'placa_en_lista' | 'camara_caida';
 export type Severity = 'critica' | 'media' | 'baja';
@@ -97,3 +99,17 @@ export interface WatchList {
 export interface AuditEntry { id: string; at: number; user: string; role: Role; action: string; object: string; detail: string; reason?: string }
 
 export interface MaicLink { connected: boolean; lastMessageAt: number; mode: 'sandbox' | 'producción' }
+
+/** Investigación del analista: parte de un hecho (dónde y cuándo) y junta lo que se fija de lo que pasó ahí. */
+export interface InvNote { at: number; by: string; text: string }
+export interface InvPlace { lat: number; lon: number; label: string; radiusM: number }
+export interface Investigation {
+  id: string; title: string;
+  /** Motivo y número de caso: se dan una vez, al crearla, y cubren cada consulta que se hace dentro. */
+  reason: string;
+  place: InvPlace; from: number; to: number;
+  createdAt: number; createdBy: string;
+  /** Vehículos fijados, en el orden en que se fijaron. */
+  plates: string[];
+  notes: InvNote[];
+}

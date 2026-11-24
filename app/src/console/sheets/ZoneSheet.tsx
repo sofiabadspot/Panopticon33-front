@@ -3,7 +3,7 @@
    unidades presentes, cámaras y alertas. El mapa encuadra la zona. */
 import { useEffect } from 'react';
 import { eventStatus, forOperator, openZone, presence, useApi } from '../../api';
-import { ago, dec1, fmt, fmtCrowd, pct } from '../../api/format';
+import { ago, dec1, fmt, fmtCrowd, pct, hhmm } from '../../api/format';
 import { CAMERA_LABEL, KIND_PHRASE, UNIT_LABEL } from '../../api/labels';
 import { useSession } from '../../shell/session';
 import { CoverageChip, Icon, KindIcon, Sparkline, StatusChip, useNow } from '../../ui/kit';
@@ -43,11 +43,11 @@ export function ZoneSheet({ id }: { id: string }) {
       <SheetHead
         kicker={<><span className="mono">{zone.id}</span>·<span>{fmt(zone.areaM2)} m²</span>·<span>capacidad {fmt(zone.capacity)}</span></>}
         title={<>{sev && <span className={`sev ${sev}`} aria-hidden />}{zone.name}</>}
-        aside={<>{s && <CoverageChip coverage={s.coverage} />}{ev && <button className="chip outline" onClick={() => c.open({ k: 'evento', id: ev.id })}><Icon name="flag" />{ev.name.split(' · ')[0]}</button>}</>}
+        aside={<>{s && <CoverageChip coverage={s.coverage} />}{ev && <button className="chip outline" onClick={() => c.open({ k: 'evento', id: ev.id })}><Icon name="flag" />{ev.name.split(' · ')[0]} · hasta {hhmm(ev.end)}</button>}</>}
       />
       <div className="pb">
         {nd && <div className="callout"><Icon name="visibility_off" /><span className="grow"><b>{s?.coverage === 'sin_cobertura' ? 'Sin cobertura.' : 'Sin datos.'}</b> {s?.coverage === 'sin_cobertura' ? 'La cámara PTZ está fuera de su preset: se detectan personas pero la zona no se mide.' : 'Ninguna cámara de la zona envía video.'} No significa que esté vacía.</span></div>}
-        <div className="kpis" style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+        <div className="kpis" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
           <div className={`kpi ${nd ? 'nodata' : ''}`}><div className="v">{nd ? 'Sin medición' : fmtCrowd(s.count!)}</div><div className="l">Personas</div>{!nd && <div className="x">entre {fmtCrowd(s.low!)} y {fmtCrowd(s.high!)}</div>}</div>
           <div className={`kpi ${nd ? 'nodata' : s.occupancy! * 100 > occMax ? 'alert' : ''}`}>
             <div className="v">{nd ? '—' : pct(s.occupancy!)}</div><div className="l">Ocupación · {nd ? '' : `${dec1(s.densityPerM2!)} p/m²`}</div>
@@ -74,7 +74,7 @@ export function ZoneSheet({ id }: { id: string }) {
 
         <div className="box flush">
           <div className="bh"><h3>Unidades presentes</h3><span className="sub">{presence.radiusM} m · {presence.windowMin} min</span></div>
-          {!policeSource ? <div className="bb"><span className="dim" style={{ fontSize: 12 }}>Sin acceso a la ubicación policial.{ev && ` Referencia: ${ev.plannedOfficers} policías planificados.`}</span></div> : (
+          {!policeSource ? <div className="bb"><span className="dim" style={{ fontSize: 'var(--fs-sm)' }}>Sin acceso a la ubicación policial.{ev && ` Referencia: ${ev.plannedOfficers} policías planificados.`}</span></div> : (
             <ul className="list bb">
               {!zunits.length && <li className="empty">Ninguna unidad en la zona.</li>}
               {zunits.map((u) => (
@@ -93,13 +93,13 @@ export function ZoneSheet({ id }: { id: string }) {
             {zcams.map((x) => (
               <li key={x.id}><button className="item" onClick={() => c.open({ k: 'camara', id: x.id })}>
                 <span className="ic"><Icon name={x.status === 'caida' ? 'videocam_off' : 'videocam'} /></span>
-                <div><div className="t"><span className="mono">{x.id}</span>{x.ptz && <span className="chip" style={{ height: 18, fontSize: 10 }}>PTZ</span>}</div><div className="s">{x.street}</div></div>
+                <div><div className="t"><span className="mono">{x.id}</span>{x.ptz && <span className="chip" style={{ height: 18, fontSize: 'var(--fs-2xs)' }}>PTZ</span>}</div><div className="s">{x.street}</div></div>
                 <div className="r"><span className={`chip ${x.status === 'operativa' ? 'ok' : x.status === 'caida' ? 'critica' : x.status === 'degradada' ? 'media' : 'nodata'}`}>{CAMERA_LABEL[x.status]}</span></div>
               </button></li>
             ))}
           </ul>
         </div>
-        <p className="dim" style={{ fontSize: 11, margin: 0 }}>El refuerzo se ordena por Maic o por radio. Si varias cámaras cubren la zona, cuenta la de mayor cobertura.</p>
+        <p className="dim" style={{ fontSize: 'var(--fs-xs)', margin: 0 }}>El refuerzo se ordena por Maic o por radio. Si varias cámaras cubren la zona, cuenta la de mayor cobertura.</p>
       </div>
     </>
   );

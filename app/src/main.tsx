@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider, createBrowserRouter, Navigate } from 'react-router-dom';
 import '@fontsource/ibm-plex-sans/300.css';
@@ -18,7 +18,8 @@ import { Login } from './shell/Login';
 import { ToastProvider } from './ui/kit';
 
 // Una sola pantalla: la consola. Paneles y fichas se abren sobre el mapa (?p=…&s=…).
-const router = createBrowserRouter([
+// El router se crea al entrar (no al cargar la página): así lee la dirección ya limpia por signIn.
+const makeRouter = () => createBrowserRouter([
   { path: '/', element: <Console /> },
   // Hoja de referencia del sistema iconográfico (se revisa antes de aplicarlo al mapa)
   { path: '/iconos', element: <IconSheet /> },
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
 // Sin sesión, la pantalla de ingreso; con sesión, la consola.
 function Gate() {
   const { signedIn } = useSession();
+  const router = useMemo(() => (signedIn ? makeRouter() : null), [signedIn]);
   // Al entrar, el ingreso queda un momento encima de la consola para fundirse con ella (sin negro entre medio).
   // showLogin sigue en true en el primer render con sesión: así el ingreso no se desmonta ni vuelve a empezar.
   const [showLogin, setShowLogin] = useState(!signedIn);
@@ -38,7 +40,7 @@ function Gate() {
   }, [signedIn]);
   return (
     <>
-      {signedIn && <RouterProvider key="app" router={router} />}
+      {signedIn && router && <RouterProvider key="app" router={router} />}
       {(showLogin || !signedIn) && <div key="login" className={`login-shell ${signedIn ? 'leaving' : ''}`}><Login /></div>}
     </>
   );

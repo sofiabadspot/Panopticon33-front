@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { ago, hhmm, pct } from '../../api/format';
 import { FACIAL_DISCARD, discardFacial, notifyAgent, useFacial } from '../../api/facial';
 import { useSession } from '../../shell/session';
-import { Icon, useNow, useToast } from '../../ui/kit';
+import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
 import { useConsole } from '../ctx';
 import { SheetHead } from './SheetHead';
 
@@ -24,11 +24,14 @@ export function FacialPanel() {
     <>
       <Phase3Notice />
       <div className="sect">Coincidencias en puntos de control</div>
+      {/* Vacía: no hubo coincidencias. Con coincidencias pero ninguna pendiente: se dice antes de la lista. */}
+      {!matches.length && <EmptyState icon="visibility" title="Sin coincidencias">Los puntos de control no encontraron rostros de la lista de personas buscadas. Si aparece una, llega acá con un aviso.</EmptyState>}
+      {matches.length > 0 && !matches.some((m) => m.status === 'por_revisar') && <div className="es-inline"><span className="es-ic" aria-hidden><Icon name="done_all" /></span><span><b>Todo revisado.</b> Ninguna coincidencia espera decisión.</span></div>}
       <ul className="list pb flush">
         {matches.map((m) => (
           <li key={m.id}>
             <button className={`item ${c.sheet?.k === 'facial' && c.sheet.id === m.id ? 'sel' : ''}`} style={{ gridTemplateColumns: '44px 1fr auto' }} onClick={() => c.open({ k: 'facial', id: m.id })}>
-              <img src={m.capture} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }} />
+              <img src={m.capture} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }} />
               <div><div className="t">Coincidencia {pct(m.score)}</div><div className="s">{m.reason} · {m.listRef}</div><div className="s">{m.checkpoint.replace('Punto de control · ', '')}</div></div>
               <div className="r"><span>{ago(m.at, now)}</span><span className={`chip ${m.status === 'por_revisar' ? 'outline' : m.status === 'descartada' ? '' : 'ok'}`}>{STATUS[m.status]}</span></div>
             </button>
@@ -70,7 +73,7 @@ export function FacialSheet({ id }: { id: string }) {
           <dt>Procesado en</dt><dd className="mono">{m.spotbox}</dd>
           <dt>Agente</dt><dd>{m.agent}</dd>
         </dl></div></div>
-        <div className="box"><div className="bh"><h3>Contexto de la cámara</h3></div><div className="bb"><img src={m.scene} alt="Escena del punto de control" style={{ width: '100%', borderRadius: 8, display: 'block' }} /></div></div>
+        <div className="box"><div className="bh"><h3>Contexto de la cámara</h3></div><div className="bb"><img src={m.scene} alt="Escena del punto de control" style={{ width: '100%', borderRadius: 'var(--radius-md)', display: 'block' }} /></div></div>
         <div className="box"><div className="bh"><h3>Estados</h3></div><div className="bb"><ol className="timeline">
           {m.timeline.map((t, i) => <li key={i} className={i === m.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
         </ol></div></div>
@@ -81,12 +84,12 @@ export function FacialSheet({ id }: { id: string }) {
           <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />No coincide</button>
         </>}
         {m.status === 'por_revisar' && discarding && <>
-          <span style={{ fontSize: 12, width: '100%', color: 'var(--ink-muted)' }}>Motivo del descarte</span>
+          <span style={{ fontSize: 'var(--fs-sm)', width: '100%', color: 'var(--ink-muted)' }}>Motivo del descarte</span>
           {FACIAL_DISCARD.map((r) => <button key={r} className="btn secondary xs" onClick={() => { discardFacial(m.id, r, user); setDiscarding(false); }}>{r}</button>)}
           <button className="btn ghost xs" onClick={() => setDiscarding(false)}>Cancelar</button>
         </>}
-        {m.status === 'agente_avisado' && <span style={{ fontSize: 12 }}><Icon name="check_circle" /> El agente verifica en sitio y registra el resultado. Si se confirma, llega a Maic.</span>}
-        {m.status === 'descartada' && <span className="muted" style={{ fontSize: 12 }}>Descartada. El rostro no se guarda.</span>}
+        {m.status === 'agente_avisado' && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> El agente verifica en sitio y registra el resultado. Si se confirma, llega a Maic.</span>}
+        {m.status === 'descartada' && <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Descartada. El rostro no se guarda.</span>}
       </div>
     </>
   );

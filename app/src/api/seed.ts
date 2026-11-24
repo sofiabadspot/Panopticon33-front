@@ -105,7 +105,8 @@ export const rules: Rule[] = [
 export const presence = { radiusM: 200, windowMin: 5 };
 
 /* ---------- Eventos masivos ---------- */
-const today = new Date(NOW); today.setHours(16, 0, 0, 0);
+// El evento de la Plaza empezó a la hora en punto de hace 3 h y dura 8 h: al abrir la consola está en curso.
+const today = new Date(NOW - 3 * 60 * MIN); today.setMinutes(0, 0, 0);
 export const events: MassEvent[] = [
   { id: 'EV-1207', name: 'Festividades de diciembre · Plaza Salvador del Mundo', venue: 'Plaza Salvador del Mundo y alrededores', zoneIds: ['Z-01', 'Z-02', 'Z-04'],
     start: today.getTime(), end: today.getTime() + 8 * 60 * MIN, expected: 90000, plannedOfficers: 120,

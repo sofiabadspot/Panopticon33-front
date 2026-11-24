@@ -65,7 +65,7 @@ function Zones() {
           <div className="callout"><Icon name="edit_note" /><span className="grow">Haz clic en el mapa, a la izquierda, para marcar cada vértice. Con 3 o más puntos, ponle nombre y guarda.</span></div>
           <div className="form-row" style={{ gridTemplateColumns: '1fr auto' }}>
             <div className="field"><label htmlFor="zn">Nombre de la zona</label><input id="zn" className="fld sm" value={name} onChange={(e) => setName(e.target.value)} placeholder="Catedral Metropolitana" /></div>
-            <div className="dim" style={{ fontSize: 12, alignSelf: 'end', paddingBottom: 8 }}>{pts.length} vértices{pts.length >= 3 && ` · ${fmt(area(pts))} m²`}</div>
+            <div className="dim" style={{ fontSize: 'var(--fs-sm)', alignSelf: 'end', paddingBottom: 8 }}>{pts.length} vértices{pts.length >= 3 && ` · ${fmt(area(pts))} m²`}</div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn ghost sm" onClick={() => setPts((p) => p.slice(0, -1))} disabled={!pts.length}><Icon name="undo" />Deshacer</button>
@@ -80,7 +80,7 @@ function Zones() {
           <tbody>
             {zones.map((z) => (
               <tr key={z.id} className="click" onClick={() => c.focus(z.ring, 'z' + z.id)}>
-                <td>{z.name}<div className="dim mono" style={{ fontSize: 11 }}>{z.id}</div></td>
+                <td>{z.name}<div className="dim mono" style={{ fontSize: 'var(--fs-xs)' }}>{z.id}</div></td>
                 <td className="r mono">{fmt(z.areaM2)} m²</td><td className="r mono">{fmt(z.capacity)}</td><td className="r mono">{z.cameras.length}</td>
                 <td>{status[z.id]?.coverage === 'medida' ? <span className="chip ok">Medida</span> : <span className="chip nodata">Sin cobertura</span>}</td>
               </tr>

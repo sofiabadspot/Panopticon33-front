@@ -22,7 +22,17 @@ let matches: FacialMatch[] = [
     capture: '/media/demo/face.jpg', listPhoto: '/media/demo/portrait.jpg', scene: '/media/demo/cctv.jpg',
     status: 'por_revisar', agent: 'Agente PNC-224 (en el punto de control)', timeline: [{ at: NOW - 3 * 60_000, label: 'Coincidencia creada en el SpotBox (puntaje 96 %)' }] },
 ];
+const base = matches;
+/** Escenario de la consola (ver setScenario en index): sin coincidencias, o todas ya revisadas. */
+function forScenario(sc: string | null): FacialMatch[] {
+  if (sc === 'sin_alertas' || sc === 'cargando') return [];
+  if (sc === 'gestionadas') return base.map((m) => (m.status === 'por_revisar' ? { ...m, status: 'descartada', timeline: [...m.timeline, { at: m.at + 2 * 60_000, label: 'Descartada: no es la misma persona', by: 'Karla Méndez' }] } : m));
+  return base;
+}
+const readSc = () => { try { return localStorage.getItem('p33.escenario'); } catch { return null; } };
+matches = forScenario(readSc());
 const subs = new Set<() => void>();
+if (typeof window !== 'undefined') window.addEventListener('p33:escenario', (e) => { matches = forScenario((e as CustomEvent<string>).detail); subs.forEach((f) => f()); });
 const set = (fn: (m: FacialMatch) => FacialMatch, id: string) => { matches = matches.map((m) => (m.id === id ? fn(m) : m)); subs.forEach((f) => f()); };
 export const useFacial = () => useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => matches);
 

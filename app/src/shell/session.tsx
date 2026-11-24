@@ -33,6 +33,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const set = (r: Role) => { write('p33.role', r); setRole(r); };
   const signIn = (r: Role) => {
+    // Cada ingreso empieza limpio: el mapa con la pestaña inicial del rol y el lateral cerrado
+    // (lo que haya quedado en la dirección de la sesión anterior no se reabre). Jefatura sigue
+    // viendo a Jules a la derecha: no es una ficha, aparece cuando el lateral está cerrado.
+    try { window.history.replaceState(null, '', `${window.location.pathname}?s=`); } catch { /* sin historial */ }
     set(r);
     write('p33.session', '1');
     setSignedIn(true);

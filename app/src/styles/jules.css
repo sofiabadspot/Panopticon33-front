@@ -12,40 +12,14 @@
    ===================================================================== */
 
 /* ---------- Tokens ----------
-   Medidas, radios y escala tipográfica: los de Sync (tokens.css + ds-extension.css).
-   Colores: el tema oscuro de Sync (ds-extension.css, "TEMA OSCURO DE SYNC") llevado a los
-   tokens de la consola. */
+   Espaciado, radios y escala tipográfica: ya no viven acá. Son los de toda la consola
+   (app.css, :root), con los nombres de Sync. Acá quedan solo las medidas del panel de
+   Jules y los colores del tema oscuro de Sync llevados a los tokens de la consola. */
 .jules-ds {
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-12: 48px;
-  --space-16: 64px;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  --radius-full: 9999px;
-
-  --type-h1: 600 48px/54px var(--font-display);
-  --type-lead: 400 18px/28px var(--font-sans);
-  --type-body: 400 16px/24px var(--font-sans);
-  --type-body-sm: 400 14px/20px var(--font-sans);
-  --type-label: 600 14px/20px var(--font-sans);
-  --type-strong: 500 14px/20px var(--font-sans);
-  --type-caption: 300 12px/16px var(--font-sans);
-  --type-title: 600 20px/26px var(--font-display);
-  --type-eyebrow: 600 11px/16px var(--font-sans);
-  --type-eyebrow-tracking: 0.08em;
-
   --layout-panel-width: 380px;
   --layout-panel-min: 280px;
   --layout-panel-max: 560px;
   --layout-charla: 780px;
-  --hit-min: 40px;
 
   /* Colores de la marca de Jules (fondo de marca, halo del campo): los de la Nebulosa. */
   --brand-blue: var(--jules-c2);
@@ -92,7 +66,7 @@
 
 /* Button */
 :where(.jules-ds) .sv-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
-  font: 600 14px/20px var(--font-sans); padding: var(--space-3) var(--space-6); border-radius: var(--radius-md);
+  font: 600 var(--fs-base)/20px var(--font-sans); padding: var(--space-3) var(--space-6); border-radius: var(--radius-md);
   border: 1px solid transparent; cursor: pointer; text-decoration: none; transition: background .15s, color .15s, border-color .15s, scale .15s ease-out; }
 :where(.jules-ds) .sv-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 :where(.jules-ds) .sv-btn--primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary-borde); }
@@ -101,7 +75,7 @@
 :where(.jules-ds) .sv-btn--secondary { background: transparent; color: var(--ink); border-color: var(--border-strong); }
 :where(.jules-ds) .sv-btn--secondary:hover { border-color: var(--ink); }
 :where(.jules-ds) .sv-btn--ghost { background: transparent; color: var(--link); padding-left: var(--space-2); padding-right: var(--space-2); }
-:where(.jules-ds) .sv-btn--sm { padding: var(--space-2) var(--space-4); font-size: 13px; }
+:where(.jules-ds) .sv-btn--sm { padding: var(--space-2) var(--space-4); font-size: var(--fs-md); }
 :where(.jules-ds) .sv-btn--icon { padding: 0; width: 40px; height: 40px; }
 :where(.jules-ds) .sv-btn--danger { background: var(--status-negative-tint); color: var(--status-negative-text); border-color: color-mix(in srgb, var(--status-negative) 55%, transparent); }
 :where(.jules-ds) .sv-btn--danger:hover { background: color-mix(in srgb, var(--status-negative) 22%, transparent); border-color: var(--status-negative); }
@@ -116,7 +90,7 @@
 :where(.jules-ds) .sv-tabs__tab::after { content: ""; position: absolute; inset: calc((100% - var(--hit-min)) / 2) 0; }
 
 /* Badge de estado */
-:where(.jules-ds) .sv-badge { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/16px var(--font-sans);
+:where(.jules-ds) .sv-badge { display: inline-flex; align-items: center; gap: 6px; font: 600 var(--fs-sm)/16px var(--font-sans);
   padding: 4px var(--space-2); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--ink); }
 :where(.jules-ds) .sv-badge::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--status-neutral); box-shadow: inset 0 0 0 1px var(--border-strong); }
 :where(.jules-ds) .sv-badge--positive::before { background: var(--status-positive); box-shadow: none; }
@@ -124,10 +98,10 @@
 
 /* Field */
 :where(.jules-ds) .sv-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-:where(.jules-ds) .sv-label { font: 600 14px/20px var(--font-sans); color: var(--ink); }
+:where(.jules-ds) .sv-label { font: 600 var(--fs-base)/20px var(--font-sans); color: var(--ink); }
 :where(.jules-ds) .sv-input,
 :where(.jules-ds) .sv-textarea {
-  width: 100%; font: 400 15px/22px var(--font-sans); color: var(--ink); background: var(--surface);
+  width: 100%; font: 400 var(--fs-lg)/22px var(--font-sans); color: var(--ink); background: var(--surface);
   border: 1px solid var(--border-strong); border-radius: var(--radius-md); padding: 9px 12px; transition: border-color .15s, box-shadow .15s; }
 :where(.jules-ds) .sv-input::placeholder,
 :where(.jules-ds) .sv-textarea::placeholder { color: var(--ink-muted); opacity: .8; }
@@ -147,7 +121,7 @@
 
 /* Tabs (píldora) */
 :where(.jules-ds) .sv-tabs__list { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--border); }
-:where(.jules-ds) .sv-tabs__tab { background: none; border: 0; font: 600 14px/20px var(--font-sans); color: var(--ink-muted); padding: 10px var(--space-4); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+:where(.jules-ds) .sv-tabs__tab { background: none; border: 0; font: 600 var(--fs-base)/20px var(--font-sans); color: var(--ink-muted); padding: 10px var(--space-4); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 :where(.jules-ds) .sv-tabs__tab:hover { color: var(--ink); }
 :where(.jules-ds) .sv-tabs__tab[aria-selected="true"] { color: var(--ink); }
 :where(.jules-ds) .sv-tabs--pill .sv-tabs__list { border: 0; background: var(--surface-raised); padding: 4px; border-radius: var(--radius-md); display: inline-flex; }
@@ -158,8 +132,8 @@
 :where(.jules-ds) .sv-dialog { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0; width: min(480px, calc(100% - 32px)); background: var(--surface); color: var(--ink); box-shadow: 0 24px 64px rgba(0, 0, 0, .5); }
 :where(.jules-ds) .sv-dialog::backdrop { background: var(--scrim); }
 :where(.jules-ds) .sv-dialog__inner { padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2); }
-:where(.jules-ds) .sv-dialog__title { font: 600 22px/28px var(--font-display); margin: 0; padding-right: var(--space-8); }
-:where(.jules-ds) .sv-dialog__desc { font: 400 14px/20px var(--font-sans); color: var(--ink-muted); margin: 0; }
+:where(.jules-ds) .sv-dialog__title { font: 600 var(--fs-3xl)/28px var(--font-display); margin: 0; padding-right: var(--space-8); }
+:where(.jules-ds) .sv-dialog__desc { font: 400 var(--fs-base)/20px var(--font-sans); color: var(--ink-muted); margin: 0; }
 :where(.jules-ds) .sv-dialog__actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
 :where(.jules-ds) .sv-dialog__close { position: absolute; top: var(--space-3); right: var(--space-3); background: none; border: 0; color: var(--ink-muted); cursor: pointer; padding: 6px; border-radius: var(--radius-sm); }
 
@@ -168,14 +142,14 @@
 :where(.jules-ds) .sv-menu { position: relative; display: inline-block; }
 :where(.jules-ds) .sv-menu__content { position: absolute; top: calc(100% + 6px); left: 0; min-width: 220px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-float); padding: 4px; z-index: 50; }
 :where(.jules-ds) .sv-menu__content[hidden] { display: none; }
-:where(.jules-ds) .sv-menu__item { display: flex; align-items: center; gap: var(--space-2); width: 100%; background: none; border: 0; text-align: left; font: 400 14px/20px var(--font-sans); color: var(--ink); padding: 8px 10px; border-radius: calc(var(--radius-md) - var(--space-1) - 1px); cursor: pointer; }
+:where(.jules-ds) .sv-menu__item { display: flex; align-items: center; gap: var(--space-2); width: 100%; background: none; border: 0; text-align: left; font: 400 var(--fs-base)/20px var(--font-sans); color: var(--ink); padding: 8px 10px; border-radius: calc(var(--radius-md) - var(--space-1) - 1px); cursor: pointer; }
 :where(.jules-ds) .sv-menu__item:hover,
 :where(.jules-ds) .sv-menu__item:focus-visible { background: var(--surface-raised); outline: none; }
 :where(.jules-ds) .sv-menu__item--danger { color: var(--status-negative-text); }
 :where(.jules-ds) .sv-menu__sep { height: 1px; background: var(--border); margin: 4px 0; }
 :where(.jules-ds) .sv-menu__header { padding: 10px 10px 8px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
 :where(.jules-ds) .sv-menu__label { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-:where(.jules-ds) .sv-menu__label small { font-size: 12px; line-height: 16px; color: var(--ink-subtle); }
+:where(.jules-ds) .sv-menu__label small { font-size: var(--fs-sm); line-height: 16px; color: var(--ink-subtle); }
 :where(.jules-ds) .sv-menu__icon { display: inline-flex; width: 16px; justify-content: center; color: var(--ink-muted); }
 :where(.jules-ds) .sv-menu__check { width: 16px; height: 16px; flex: none; color: var(--ink); }
 :where(.jules-ds) .sv-menu__item--on { background: var(--glass); }
@@ -185,12 +159,12 @@
 body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height: 0; z-index: 70; }
 
 /* Tag / Chip */
-:where(.jules-ds) .sv-tag { display: inline-flex; align-items: center; gap: 6px; font: 400 13px/18px var(--font-sans); padding: 4px 10px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); color: var(--ink); background: transparent; cursor: pointer; }
+:where(.jules-ds) .sv-tag { display: inline-flex; align-items: center; gap: 6px; font: 400 var(--fs-md)/18px var(--font-sans); padding: 4px 10px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); color: var(--ink); background: transparent; cursor: pointer; }
 
 /* Empty state (sutil) */
 :where(.jules-ds) .sv-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--space-2); padding: var(--space-12) var(--space-6); border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); }
-:where(.jules-ds) .sv-empty h3 { font: 600 20px/26px var(--font-display); margin: 0; }
-:where(.jules-ds) .sv-empty p { font: 400 14px/20px var(--font-sans); color: var(--ink-muted); margin: 0 0 var(--space-3); max-width: 360px; }
+:where(.jules-ds) .sv-empty h3 { font: 600 var(--fs-2xl)/26px var(--font-display); margin: 0; }
+:where(.jules-ds) .sv-empty p { font: 400 var(--fs-base)/20px var(--font-sans); color: var(--ink-muted); margin: 0 0 var(--space-3); max-width: 360px; }
 :where(.jules-ds) .svx-empty--sutil { align-items: flex-start; text-align: left; gap: var(--space-1); padding: var(--space-2); border: 0; }
 :where(.jules-ds) .svx-empty--sutil h3 { font: var(--type-body-sm); font-weight: 600; color: var(--ink-muted); }
 :where(.jules-ds) .svx-empty--sutil p { margin: 0; max-width: none; font: var(--type-body-sm); color: var(--ink-muted); }
@@ -272,7 +246,7 @@ body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height
   position: absolute;
   z-index: -1;
   inset: calc(-1 * var(--space-1));
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-2xl);
   background: linear-gradient(100deg, var(--chart-4), var(--brand-blue), var(--brand-lime));
   filter: blur(var(--space-3));
   opacity: 0;
@@ -448,7 +422,7 @@ body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height
 /* Nombre del agente junto a su logo (manual de marca): "jules" en Erbaum Light, en minúscula.
    Pisa la letra de título de Sync solo en el nombre. */
 .jules-nombre.jules-lateral__titulo,
-.jules-nombre { font: 300 22px/26px var(--font-producto); letter-spacing: .04em; text-transform: lowercase; }
+.jules-nombre { font: 300 var(--fs-3xl)/26px var(--font-producto); letter-spacing: .04em; text-transform: lowercase; }
 
 .jules-lateral__charla {
   flex-grow: 1;

@@ -12,7 +12,7 @@ import * as seed from './seed';
 import { normalizePlate } from './format';
 import { KIND_LABEL } from './labels';
 import type {
-  Alert, AuditEntry, Camera, MaicLink, MassEvent, PlateRead, Role, Rule, Unit, User, WatchList, Zone, ZoneStatus,
+  Alert, AuditEntry, Camera, InvPlace, Investigation, MaicLink, MassEvent, PlateRead, Role, Rule, Unit, User, WatchList, Zone, ZoneStatus,
 } from './types';
 
 const MIN = 60_000;
@@ -33,7 +33,24 @@ interface State {
   maic: MaicLink;
   /** ¿Hay acceso a la plataforma de ubicación policial? Sin ella no hay capa de unidades ni brecha de presencia. */
   policeSource: boolean;
+  /** Investigaciones de los analistas. */
+  investigations: Investigation[];
+  /** Escenario en que se muestra la consola (para revisar cada estado de la interfaz). */
+  scenario: Scenario;
+  /** Todavía llegan los primeros datos: paneles y mapa muestran el estado de carga. */
+  loading: boolean;
 }
+
+/* ---------------- Escenarios ----------------
+   La consola tiene que verse bien en todos sus estados, no solo con datos. Cada escenario
+   cambia los datos de entrada; la interfaz es la misma. Se elige en el menú de la cuenta. */
+export type Scenario = 'normal' | 'gestionadas' | 'sin_alertas' | 'sin_eventos' | 'cargando' | 'sin_maic';
+export const SCENARIO_LABEL: Record<Scenario, string> = {
+  normal: 'Con alertas por revisar', gestionadas: 'Todo gestionado', sin_alertas: 'Sin alertas ni coincidencias', sin_eventos: 'Sin eventos',
+  cargando: 'Cargando datos', sin_maic: 'Sin conexión con Maic',
+};
+const SCENARIOS = Object.keys(SCENARIO_LABEL) as Scenario[];
+const readScenario = (): Scenario => { try { const v = localStorage.getItem('p33.escenario'); return SCENARIOS.includes(v as Scenario) ? (v as Scenario) : 'normal'; } catch { return 'normal'; } };
 
 /* Historia de 60 min (cada 2 min) por zona, tomada del prototipo y escalada a la base actual. */
 const history: Record<string, number[]> = {};
@@ -49,7 +66,7 @@ let state: State = {
   zoneStatus: {},
   cameras: seed.cameras,
   units: seed.units,
-  alerts: seed.alerts.map((a) => placeAlert(a, seed.zones)),
+  alerts: [],
   events: seed.events,
   rules: seed.rules,
   lists: seed.lists,
@@ -57,7 +74,37 @@ let state: State = {
   audit: seed.audit,
   maic: { connected: true, lastMessageAt: Date.now(), mode: 'producción' },
   policeSource: true,
+  investigations: [],
+  scenario: 'normal',
+  loading: false,
 };
+
+const baseAlerts = seed.alerts.map((a) => placeAlert(a, seed.zones));
+/** Alertas de cada escenario. "Gestionadas": todo lo que esperaba decisión ya se resolvió y Maic lo cerró. */
+function alertsFor(sc: Scenario): Alert[] {
+  if (sc === 'sin_alertas' || sc === 'cargando') return [];
+  if (sc !== 'gestionadas') return baseAlerts;
+  return baseAlerts.map((a, i) => {
+    const at = a.createdAt + (4 + (i % 5)) * 60000;
+    if (a.review === 'por_revisar' && a.kind === 'camara_caida')
+      return { ...a, review: 'descartada', reviewedBy: 'Karla Méndez', discardReason: 'La cámara volvió a enviar video', updatedAt: at, timeline: [...a.timeline, { at, label: 'Descartada: la cámara volvió a enviar video', by: 'Karla Méndez' }] };
+    if (a.review === 'por_revisar')
+      return { ...a, review: 'confirmada', reviewedBy: 'Karla Méndez', maic: 'cerrada', maicId: `MAIC-${77300 + i}`, updatedAt: at, timeline: [...a.timeline, { at, label: 'Confirmada y enviada a Maic', by: 'Karla Méndez' }, { at: at + 6 * 60000, label: 'Llegó la unidad · cerrada en Maic' }] };
+    return a.maic === 'despachada' ? { ...a, maic: 'cerrada' } : a;
+  });
+}
+function scenarioPatch(sc: Scenario, now = Date.now()): Partial<State> {
+  return { scenario: sc, loading: sc === 'cargando', alerts: alertsFor(sc), events: sc === 'sin_eventos' ? [] : seed.events,
+    maic: { ...state.maic, connected: sc !== 'sin_maic', lastMessageAt: sc === 'sin_maic' ? now - 7 * 60000 : now } };
+}
+/** Cambia el escenario de la consola (queda guardado en este navegador). */
+export function setScenario(sc: Scenario) {
+  try { localStorage.setItem('p33.escenario', sc); } catch { /* sin almacenamiento */ }
+  plateSeq = 0;
+  try { window.dispatchEvent(new CustomEvent('p33:escenario', { detail: sc })); } catch { /* sin ventana */ }
+  commit({ ...scenarioPatch(sc), units: sc === 'cargando' ? [] : seed.units });
+}
+state = { ...state, ...scenarioPatch(readScenario()), units: readScenario() === 'cargando' ? [] : seed.units };
 
 const listeners = new Set<() => void>();
 function commit(patch: Partial<State>) {
@@ -120,9 +167,12 @@ function simulate() {
       ? { ...a, observations: a.observations + 1, updatedAt: now } : a));
   }
   // Demo: llega una alerta de placa nueva a los 48 s y después una por minuto (hasta 4)
-  if (tick === 12 || (tick > 12 && tick <= 57 && tick % 15 === 12)) alerts = [newPlateAlert(now), ...alerts];
-  const units = tick % 4 === 0 ? state.units.map((u) => (u.status === 'sin_reporte' || u.status === 'desconocida' ? u
-    : { ...u, lat: u.lat + (r() - 0.5) * 0.00012, lon: u.lon + (r() - 0.5) * 0.00012, lastReportAt: now })) : state.units;
+  // (solo con alertas: en los escenarios gestionadas, sin alertas y cargando no llegan nuevas)
+  if ((state.scenario === 'normal' || state.scenario === 'sin_maic') && (tick === 12 || (tick > 12 && tick <= 57 && tick % 15 === 12))) alerts = [newPlateAlert(now), ...alerts];
+  const moved = advanceUnits(state.units, now);
+  alerts = closeArrived(alerts, now);
+  const units = tick % 4 === 0 ? moved.map((u) => (u.status === 'sin_reporte' || u.status === 'desconocida' || u.enRoute ? u
+    : { ...u, lat: u.lat + (r() - 0.5) * 0.00012, lon: u.lon + (r() - 0.5) * 0.00012, lastReportAt: now })) : moved;
   const next = { ...state, now, alerts, units, maic: { ...state.maic, lastMessageAt: state.maic.connected ? now : state.maic.lastMessageAt } };
   commit({ ...next, zoneStatus: measure(next) });
 }
@@ -177,6 +227,59 @@ export function openAlert(id: string, user: User) {
   audit(user, 'Abrir alerta', id, KIND_LABEL[a.kind]);
 }
 
+/* ---------------- Unidades en camino ----------------
+   Cuando Maic despacha una alerta, la unidad más cercana (a más de 300 m: si ya está ahí no "va")
+   sale hacia el lugar. En la demo avanza en línea recta ~45 m cada 4 s y al llegar queda en servicio. */
+const metersBetween = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => {
+  const kx = 111320 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot((a.lon - b.lon) * kx, (a.lat - b.lat) * 111320);
+};
+/** Qué sigue la unidad: la alerta, no una dirección. Con placa, el vehículo; si no, el tipo de alerta. */
+function followLabel(a: Alert) {
+  return a.plate ? `Sigue a ${a.plate.listed}` : `Va a ${KIND_LABEL[a.kind].toLowerCase()} · ${a.id}`;
+}
+/** La alerta a seguir ahora: para una placa, la última lectura de ese vehículo (puede haberse movido). */
+function followTarget(alertId: string): Alert | undefined {
+  const a = state.alerts.find((x) => x.id === alertId); if (!a?.plate) return a;
+  return state.alerts.filter((x) => x.plate?.listed === a.plate!.listed).sort((p, q) => q.createdAt - p.createdAt)[0];
+}
+function dispatchTo(alertId: string, minDist = 300) {
+  const a = state.alerts.find((x) => x.id === alertId); if (!a) return;
+  if (state.units.some((u) => u.enRoute?.alertId === alertId)) return;
+  const free = state.units.filter((u) => (u.status === 'disponible' || u.status === 'en_servicio') && !u.enRoute)
+    .map((u) => ({ u, d: metersBetween(u, a) })).filter((x) => x.d > minDist).sort((p, q) => p.d - q.d)[0];
+  if (!free) return;
+  const enRoute = { lat: a.lat, lon: a.lon, label: followLabel(a), alertId, since: Date.now() };
+  commit({ units: state.units.map((u) => (u.id === free.u.id ? { ...u, status: 'en_servicio', enRoute } : u)) });
+}
+/** Unidades que llegaron en este ciclo: su alerta se cierra en Maic. */
+let arrivals: { alertId: string; unitId: string }[] = [];
+/** Llegó la unidad: la alerta (y, si es una placa, las lecturas confirmadas del mismo vehículo) queda cerrada en Maic. */
+function closeArrived(alerts: Alert[], now: number): Alert[] {
+  if (!arrivals.length) return alerts;
+  const done = arrivals; arrivals = [];
+  return alerts.map((x) => {
+    const hit = done.find(({ alertId }) => { const a = alerts.find((y) => y.id === alertId); return x.id === alertId || (!!a?.plate && x.plate?.listed === a.plate.listed); });
+    if (!hit || x.review !== 'confirmada' || !x.maic || x.maic === 'cerrada') return x;
+    return { ...x, maic: 'cerrada', updatedAt: now, timeline: [...x.timeline, { at: now, label: `Llegó ${hit.unitId} · cerrada en Maic` }] };
+  });
+}
+function advanceUnits(units: Unit[], now: number): Unit[] {
+  return units.map((u) => {
+    if (!u.enRoute) return u;
+    // El destino acompaña a la alerta: si el vehículo de la placa aparece en otra cámara, la unidad cambia de rumbo.
+    const t = u.enRoute.alertId ? followTarget(u.enRoute.alertId) : undefined;
+    if (t && (t.lat !== u.enRoute.lat || t.lon !== u.enRoute.lon)) u = { ...u, enRoute: { ...u.enRoute, lat: t.lat, lon: t.lon, alertId: t.id, label: followLabel(t) } };
+    const go = u.enRoute!;
+    const d = metersBetween(u, go);
+    if (d < 30) { if (go.alertId) arrivals.push({ alertId: go.alertId, unitId: u.id }); return { ...u, lat: go.lat, lon: go.lon, enRoute: null, lastReportAt: now, zoneId: state.alerts.find((a) => a.id === go.alertId)?.zoneId ?? u.zoneId }; }
+    const k = Math.min(1, 45 / d);
+    return { ...u, lat: u.lat + (go.lat - u.lat) * k, lon: u.lon + (go.lon - u.lon) * k, lastReportAt: now };
+  });
+}
+// Demo: las alertas ya despachadas al abrir tienen su unidad en camino (desde un poco más lejos, para que se vea el viaje).
+for (const a of state.alerts) if (a.maic === 'despachada') dispatchTo(a.id, 900);
+
 function patchAlert(id: string, fn: (a: Alert) => Alert) {
   commit({ alerts: state.alerts.map((a) => (a.id === id ? fn(a) : a)) });
 }
@@ -188,8 +291,10 @@ export function confirmAlert(id: string, user: User) {
   patchAlert(id, (a) => ({ ...a, review: 'confirmada', reviewedBy: user.name, maic: 'enviada', maicId, updatedAt: now,
     timeline: [...a.timeline, { at: now, label: 'Confirmada y enviada a Maic', by: user.name }] }));
   audit(user, 'Confirmar alerta', id, 'Enviada a Maic');
+  // Sin conexión con Maic: la confirmación queda en cola y sale cuando vuelve el enlace.
+  if (!state.maic.connected) { patchAlert(id, (a) => ({ ...a, timeline: [...a.timeline, { at: now, label: 'En cola: Maic sin conexión' }] })); return; }
   setTimeout(() => patchAlert(id, (a) => ({ ...a, maic: 'recibida', updatedAt: Date.now(), timeline: [...a.timeline, { at: Date.now(), label: `Recibida en Maic (${maicId})` }] })), 2200);
-  setTimeout(() => patchAlert(id, (a) => ({ ...a, maic: 'despachada', updatedAt: Date.now(), timeline: [...a.timeline, { at: Date.now(), label: 'Despachada por Maic' }] })), 9000);
+  setTimeout(() => { patchAlert(id, (a) => ({ ...a, maic: 'despachada', updatedAt: Date.now(), timeline: [...a.timeline, { at: Date.now(), label: 'Despachada por Maic' }] })); dispatchTo(id); }, 9000);
 }
 
 /** POST /v1/alerts/{id}/discard { reason } — el motivo alimenta el ajuste de umbrales. */
@@ -351,6 +456,87 @@ export function vehicleProfile(plate: string): VehicleProfile {
     .map(([p, e]) => ({ plate: p, times: e.reads.size, cameras: e.cams.size, listed: !!seed.plateWatch[p] })).sort((a, b) => b.times - a.times);
 
   return { plate: canon, reads: rs, listed, seen, mismatch, cameras, usualHours, companions };
+}
+
+/* ---------------- Investigaciones ---------------- */
+const inPlace = (p: InvPlace, x: { lat: number; lon: number }) => metersBetween(p, x) <= p.radiusM;
+/** Nombre legible de un punto: la calle de la cámara más cercana. */
+export function placeLabel(lat: number, lon: number) {
+  let best: Camera | null = null, d = Infinity;
+  for (const c of state.cameras) { const m = metersBetween({ lat, lon }, c); if (m < d) { d = m; best = c; } }
+  return best ? (d < 60 ? best.street : `Cerca de ${best.street}`) : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+}
+
+let invSeq = 931;
+const newInvId = () => 'INV-' + String(invSeq++).padStart(4, '0');
+export interface NewInvestigation { title: string; reason: string; place: InvPlace; from: number; to: number }
+/** POST /v1/investigations → auditado. El motivo cubre todas las consultas que se hagan dentro. */
+export function createInvestigation(n: NewInvestigation, user: User): Investigation {
+  const k: Investigation = { ...n, id: newInvId(), createdAt: Date.now(), createdBy: user.name, plates: [], notes: [] };
+  commit({ investigations: [k, ...state.investigations] });
+  audit(user, 'Crear investigación', k.id, `${k.title} · ${k.place.label}`, k.reason);
+  return k;
+}
+const patchInv = (id: string, f: (k: Investigation) => Investigation) => commit({ investigations: state.investigations.map((x) => (x.id === id ? f(x) : x)) });
+/** PATCH /v1/investigations/{id} {place, from, to} → auditado: cambia lo que se consulta. */
+export function moveInvestigation(id: string, patch: Partial<Pick<Investigation, 'place' | 'from' | 'to'>>, user: User) {
+  const k = state.investigations.find((x) => x.id === id); if (!k) return;
+  patchInv(id, (x) => ({ ...x, ...patch }));
+  audit(user, 'Cambiar lugar o ventana', id, patch.place ? `${patch.place.label} · ${patch.place.radiusM} m` : 'Ventana de tiempo', k.reason);
+}
+/** POST /v1/investigations/{id}/plates {plate} → auditado. */
+export function pinPlate(id: string, plate: string, user: User) {
+  const k = state.investigations.find((x) => x.id === id); if (!k || k.plates.includes(plate)) return;
+  patchInv(id, (x) => ({ ...x, plates: [...x.plates, plate] }));
+  audit(user, 'Fijar vehículo', id, plate, k.reason);
+}
+/** DELETE /v1/investigations/{id}/plates/{plate}. */
+export function unpinPlate(id: string, plate: string, user: User) {
+  patchInv(id, (x) => ({ ...x, plates: x.plates.filter((p) => p !== plate) }));
+  audit(user, 'Quitar vehículo', id, plate);
+}
+/** POST /v1/investigations/{id}/notes {text}. */
+export function addInvNote(id: string, text: string, user: User) {
+  patchInv(id, (x) => ({ ...x, notes: [...x.notes, { at: Date.now(), by: user.name, text }] }));
+  audit(user, 'Nota en la investigación', id, text.length > 60 ? text.slice(0, 60) + '…' : text);
+}
+
+export interface PlaceVehicle { plate: string; reads: PlateRead[]; listed: boolean }
+export interface WhatHappened { vehicles: PlaceVehicle[]; reads: number; alerts: Alert[]; cameras: Camera[] }
+/** GET /v1/places/activity?lat=&lon=&r=&from=&to= — qué registraron las cámaras en ese lugar y esa ventana. */
+export function whatHappened(place: InvPlace, from: number, to: number): WhatHappened {
+  const now = Date.now();
+  const cameras = state.cameras.filter((c) => inPlace(place, c));
+  const camIds = new Set(cameras.map((c) => c.id));
+  const rs = seed.reads.filter((x) => camIds.has(x.cameraId) && x.at >= from && x.at <= Math.min(to, now));
+  const by = new Map<string, PlateRead[]>();
+  for (const r of rs) (by.get(r.plate) ?? by.set(r.plate, []).get(r.plate)!).push(r);
+  const vehicles = [...by.entries()].map(([plate, list]) => ({ plate, reads: list.sort((a, b) => a.at - b.at), listed: !!seed.plateWatch[plate] }))
+    .sort((a, b) => Number(b.listed) - Number(a.listed) || b.reads.length - a.reads.length || a.reads[0].at - b.reads[0].at);
+  const alerts = state.alerts.filter((a) => forOperator(a) && a.createdAt >= from && a.createdAt <= to && (camIds.has(a.cameraId) || inPlace(place, a))).sort((a, b) => a.createdAt - b.createdAt);
+  return { vehicles, reads: rs.length, alerts, cameras };
+}
+/** Patrones del lugar: alertas y lecturas por hora del día en los últimos 7 días. */
+export function placePatterns(place: InvPlace) {
+  const now = Date.now(), from = now - 7 * 24 * 3600e3;
+  const camIds = new Set(state.cameras.filter((c) => inPlace(place, c)).map((c) => c.id));
+  const hour = (t: number) => Number(new Date(t).toLocaleString('en-US', { timeZone: 'America/El_Salvador', hour: 'numeric', hourCycle: 'h23' }));
+  const reads = Array(24).fill(0) as number[], alerts = Array(24).fill(0) as number[];
+  for (const r of seed.reads) if (camIds.has(r.cameraId) && r.at >= from && r.at <= now) reads[hour(r.at)]++;
+  const list = state.alerts.filter((a) => forOperator(a) && a.createdAt >= from && (camIds.has(a.cameraId) || inPlace(place, a))).sort((a, b) => b.createdAt - a.createdAt);
+  for (const a of list) alerts[hour(a.createdAt)]++;
+  return { reads, alerts, list };
+}
+
+/* Investigación de ejemplo: el robo del primer vehículo de la lista, en la esquina de su segunda lectura. */
+{
+  const lead = seed.reads.filter((x) => x.plate === Object.keys(seed.plateWatch)[0]).sort((a, b) => a.at - b.at);
+  const at = lead[1] ?? lead[0];
+  if (at) state.investigations = [{
+    id: newInvId(), title: 'Robo de vehículo con conductor', reason: 'Investigación de robo de vehículo · DEN-2026-114827',
+    place: { lat: at.lat, lon: at.lon, label: at.street, radiusM: 250 }, from: lead[0].at - 40 * MIN, to: lead[lead.length - 1].at + 15 * MIN,
+    createdAt: Date.now() - 20 * MIN, createdBy: 'Lucía Hernández', plates: [], notes: [],
+  }];
 }
 
 /** GET /v1/plates/{plate}/reads?limit= — lecturas previas del mismo vehículo (detalle de alerta). */

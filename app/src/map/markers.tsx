@@ -5,7 +5,9 @@
    · Ficha: al pasar el mouse por una unidad, una cámara o un grupo. */
 import type { Alert, Camera, LngLat, Unit, Zone } from '../api/types';
 import { AGENTS } from '../api/seed';
-import { Icon } from '../ui/kit';
+import { Icon, useNow } from '../ui/kit';
+import { cameraClip } from '../api/video';
+import { hhmmss } from '../api/format';
 
 /* ---------- Geometría de cámara ---------- */
 export const CAM_FOV = 62;      // grados
@@ -22,7 +24,6 @@ export function cone(c: Camera, steps = 14): LngLat[] {
 }
 /** Rumbo en grados desde el norte, en sentido horario. */
 export const bearing = (c: Camera) => ((Math.atan2(Math.cos(c.heading), -Math.sin(c.heading)) * 180) / Math.PI + 360) % 360;
-const CARD = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
 
 /* ---------- Unidad ---------- */
 export function UnitGlyph({ type }: { type: Unit['type'] }) {
@@ -76,23 +77,8 @@ export type Hover =
   | { kind: 'group'; cat: GroupCat; ids: string[]; x: number; y: number };
 
 const UNIT_STATUS: Record<Unit['status'], string> = { disponible: 'Disponible', en_servicio: 'En servicio', sin_reporte: 'Sin reporte', desconocida: 'Sin identificar' };
-const CAM_STATUS: Record<Camera['status'], [string, string]> = { operativa: ['Operativa', ''], degradada: ['Degradada', 'media'], caida: ['Caída', 'critica'], fuera_de_preset: ['Fuera de preset', 'media'] };
 const ago = (t: number) => { const m = Math.max(0, Math.round((Date.now() - t) / 60000)); return m < 1 ? 'hace segundos' : `hace ${m} min`; };
 const Row = ({ k, v }: { k: string; v: React.ReactNode }) => <div className="mc-row"><span>{k}</span><b>{v}</b></div>;
-
-function FovDial({ deg }: { deg: number }) {
-  const r = 26, c = 30, a0 = ((deg - CAM_FOV / 2 - 90) * Math.PI) / 180, a1 = ((deg + CAM_FOV / 2 - 90) * Math.PI) / 180;
-  const P = (a: number) => `${(c + Math.cos(a) * r).toFixed(1)},${(c + Math.sin(a) * r).toFixed(1)}`;
-  return (
-    <svg className="mc-fov" viewBox="0 0 60 60" aria-hidden>
-      <circle cx="30" cy="30" r="26" fill="none" stroke="currentColor" strokeOpacity=".18" />
-      <path d="M30 4v4M56 30h-4M30 56v-4M4 30h4" stroke="currentColor" strokeOpacity=".35" />
-      <path d={`M${c},${c} L${P(a0)} A${r},${r} 0 0 1 ${P(a1)} Z`} fill="currentColor" fillOpacity=".22" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="30" cy="30" r="2.6" fill="currentColor" />
-      <text x="30" y="11.5" textAnchor="middle" fontSize="6" fill="currentColor" fillOpacity=".6">N</text>
-    </svg>
-  );
-}
 
 export function MapCard({ h, units, cameras, zones, alerts }: { h: Hover; units: Unit[]; cameras: Camera[]; zones: Zone[]; alerts: Alert[] }) {
   const zoneName = (id: string | null) => zones.find((z) => z.id === id)?.name;
@@ -100,34 +86,31 @@ export function MapCard({ h, units, cameras, zones, alerts }: { h: Hover; units:
   if (h.kind === 'unit') {
     const u = units.find((q) => q.id === h.id); if (!u) return null;
     body = (<>
-      <div className="mc-hd"><span className="mc-eyebrow">Unidad PNC · MAIC</span><span className={`mc-state ${u.status === 'en_servicio' ? 'busy' : u.status === 'disponible' ? '' : 'off'}`}><i />{UNIT_STATUS[u.status]}</span></div>
+      <div className="mc-hd"><span className="mc-eyebrow">Unidad PNC · MAIC</span>{u.enRoute ? <span className="mc-state go"><i />En camino</span> : <span className={`mc-state ${u.status === 'en_servicio' ? 'busy' : u.status === 'disponible' ? '' : 'off'}`}><i />{UNIT_STATUS[u.status]}</span>}</div>
       <div className="mc-title"><span className="mc-ic"><UnitGlyph type={u.type} /></span><div><b>{u.type}</b><small>{u.id}</small></div></div>
       <div className="mc-grid">
         <Row k="Placa" v={u.plate ? <span className="plate">{u.plate}</span> : '—'} />
         <Row k="Agentes" v={AGENTS[u.type]} />
-        <Row k="Zona" v={zoneName(u.zoneId) ?? 'Patrullaje libre'} />
+        {u.enRoute
+          ? <Row k="Despacho" v={<b className="mc-go">{u.enRoute.label}</b>} />
+          : <Row k="Zona" v={zoneName(u.zoneId) ?? 'Patrullaje libre'} />}
         <Row k="Último GPS" v={ago(u.lastReportAt)} />
       </div>
       <div className="mc-foot">{u.lat.toFixed(5)}, {u.lon.toFixed(5)}</div>
     </>);
   } else if (h.kind === 'camera') {
     const c = cameras.find((q) => q.id === h.id); if (!c) return null;
-    const b = bearing(c), [st, sc] = CAM_STATUS[c.status];
-    body = (<>
-      <div className="mc-hd"><span className="mc-eyebrow">Cámara · {c.compute}</span><span className={`mc-state ${sc}`}><i />{st}</span></div>
-      <div className="mc-title"><span className="mc-ic"><svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" strokeWidth="2" /><circle cx="12" cy="12" r="2.2" fill="currentColor" /><path d="M12 2v3M22 12h-3M12 22v-3M2 12h3" stroke="currentColor" strokeWidth="2" /></svg></span><div><b>{c.id}</b><small>{c.street}</small></div></div>
-      <div className="mc-cam"><FovDial deg={b} /><div className="mc-grid">
-        <Row k="Ángulo" v={`${CAM_FOV}°`} />
-        <Row k="Alcance" v={`${CAM_REACH} m`} />
-        <Row k="Mira hacia" v={`${CARD[Math.round(b / 45) % 8]} · ${Math.round(b)}°`} />
-        <Row k="Imagen" v={c.status === 'caida' ? '—' : `${c.fps} fps`} />
-      </div></div>
-      <div className="mc-grid mc-grid2">
-        <Row k="Tipo" v={c.kind === 'mixta' ? 'Mixta' : c.kind === 'vehicular' ? 'Vehicular' : 'Peatonal'} />
-        <Row k="Montaje" v={c.ptz ? `PTZ · ${c.presets.length} presets` : 'Fija'} />
+    const clip = c.status === 'caida' ? null : cameraClip(c.id);
+    // Solo el video: lo que ve la cámara ahora, con su sobreimpresión (código, en vivo y hora). Los datos van en su ficha.
+    body = (
+      <div className="mc-live solo">
+        {clip ? <video src={clip.src} poster={clip.poster} muted loop autoPlay playsInline />
+          : <div className="mc-live-off"><img src="/assets/logo-spotvision-bn.png" alt="" /><span>{c.status === 'caida' ? 'Sin señal' : 'Video en vivo no disponible'}</span></div>}
+        {clip && <span className="mc-live-tag"><i aria-hidden />En vivo</span>}
+        <span className="mc-live-id mono">{c.id}</span>
+        {clip && <LiveClock />}
       </div>
-      <div className="mc-foot">{zoneName(c.zoneId) ? `Zona ${zoneName(c.zoneId)} · ` : ''}{c.lat.toFixed(5)}, {c.lon.toFixed(5)}</div>
-    </>);
+    );
   } else {
     const n = h.ids.length;
     if (h.cat === 'units') {
@@ -142,7 +125,13 @@ export function MapCard({ h, units, cameras, zones, alerts }: { h: Hover; units:
       body = (<><div className="mc-hd"><span className="mc-eyebrow">Grupo · {n} alertas</span></div><div className="mc-grid"><Row k="Placas" v={by('placa_en_lista')} /><Row k="Aglomeración" v={by('aglomeracion')} /><Row k="Falta de policías" v={by('brecha_presencia')} /><Row k="Cámaras sin video" v={by('camara_caida')} /></div><div className="mc-foot">Clic para acercar</div></>);
     }
   }
-  const w = 280;
-  const left = Math.min(h.x + 18, window.innerWidth - w - 12), top = Math.min(h.y + 18, window.innerHeight - 280);
+  const w = h.kind === 'camera' ? 320 : 280;
+  const left = Math.min(h.x + 18, window.innerWidth - w - 12), top = Math.min(h.y + 18, window.innerHeight - (h.kind === 'camera' ? 200 : 280));
   return <div className="mapcard" role="tooltip" style={{ left, top, width: w }}>{body}</div>;
+}
+
+/** Hora del cuadro en vivo, como la sobreimpresión de la cámara. */
+function LiveClock() {
+  const now = useNow(1000);
+  return <span className="mc-live-clock mono">{hhmmss(now)}</span>;
 }

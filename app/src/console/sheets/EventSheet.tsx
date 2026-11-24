@@ -2,7 +2,7 @@
    en el formulario, las zonas se eligen haciendo clic en el mismo mapa. */
 import { useState, type FormEvent } from 'react';
 import { eventStatus, newEventId, saveEvent, useApi } from '../../api';
-import { dateShort, fmt, fmtCrowd, fromLocalInput, hhmm, pct, toLocalInput } from '../../api/format';
+import { dateShort, fmt, fmtCrowd, fromLocalInput, hhmm, pct, toLocalInput, inTime } from '../../api/format';
 import { KIND_PHRASE } from '../../api/labels';
 import type { MassEvent } from '../../api/types';
 import { useSession } from '../../shell/session';
@@ -41,7 +41,14 @@ export function EventSheet({ id }: { id: string }) {
       <SheetHead kicker={<><span className="mono">{ev.id}</span>·<span>{dateShort(ev.start)} {hhmm(ev.start)}–{hhmm(ev.end)}</span></>} title={ev.name} sub={`${ev.venue} · registrado por ${ev.createdBy}`}
         aside={<><EventTag s={st} />{role === 'admin' && <button className="btn secondary xs" onClick={() => c.open({ k: 'evento-form', id: ev.id })}><Icon name="edit_note" />Editar</button>}</>} />
       <div className="pb">
-        <div className="kpis" style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+        {/* Cuándo: lo primero que se pregunta de un evento en curso es hasta qué hora dura */}
+        <div className={`ev-when ${st}`}>
+          <Icon name="schedule" />
+          {st === 'en_curso' ? <span>Termina a las <b>{hhmm(ev.end)}</b> · {inTime(ev.end, now)} <small>(empezó a las {hhmm(ev.start)})</small></span>
+            : st === 'programado' ? <span>Empieza el {dateShort(ev.start)} a las <b>{hhmm(ev.start)}</b> · {inTime(ev.start, now)} <small>(termina a las {hhmm(ev.end)})</small></span>
+            : <span>Terminó el {dateShort(ev.end)} a las <b>{hhmm(ev.end)}</b></span>}
+        </div>
+        <div className="kpis" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
           <div className={`kpi ${st !== 'en_curso' ? 'nodata' : ''}`}><div className="v">{st === 'en_curso' ? fmtCrowd(sum('count')) : st === 'programado' ? 'Aún no empieza' : 'Finalizado'}</div><div className="l">Personas ahora</div>{st === 'en_curso' && <div className="x">entre {fmtCrowd(sum('low'))} y {fmtCrowd(sum('high'))}</div>}</div>
           <div className="kpi"><div className="v">{fmtCrowd(ev.expected)}</div><div className="l">Esperadas</div>{st === 'en_curso' && <div className="x">{pct(sum('count') / ev.expected)} de lo esperado</div>}</div>
           <div className={`kpi ${officers == null ? 'nodata' : ''}`}><div className="v">{officers == null ? 'Sin fuente' : fmt(officers)}<small>/ {fmt(ev.plannedOfficers)}</small></div><div className="l">Policías presentes / planificados</div></div>
@@ -120,9 +127,9 @@ export function EventFormSheet({ id }: { id?: string }) {
           <div className="field"><label htmlFor="ep">Policías planificados</label><input id="ep" inputMode="numeric" className="fld sm mono" value={f.planned} onChange={set('planned')} aria-invalid={tried && !!errors.planned} />{err('planned')}</div>
         </div>
         <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-          <legend style={{ fontSize: 12, color: 'var(--ink-muted)', marginBottom: 6 }}>Zonas · haz clic en el mapa o marca aquí</legend>
+          <legend style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-muted)', marginBottom: 6 }}>Zonas · haz clic en el mapa o marca aquí</legend>
           <div className="grid" style={{ gap: 6 }}>
-            {zones.map((z) => <label key={z.id} className="check"><input type="checkbox" checked={f.zoneIds.includes(z.id)} onChange={() => toggleZone(z.id)} /><span>{z.name} <span className="dim" style={{ fontSize: 11 }}>· capacidad {fmt(z.capacity)}</span></span></label>)}
+            {zones.map((z) => <label key={z.id} className="check"><input type="checkbox" checked={f.zoneIds.includes(z.id)} onChange={() => toggleZone(z.id)} /><span>{z.name} <span className="dim" style={{ fontSize: 'var(--fs-xs)' }}>· capacidad {fmt(z.capacity)}</span></span></label>)}
           </div>{err('zones')}
         </fieldset>
         <label className="toggle"><input type="checkbox" checked={f.own} onChange={(e) => setF({ ...f, own: e.target.checked })} />Umbrales propios (reemplazan a los de cada zona)</label>

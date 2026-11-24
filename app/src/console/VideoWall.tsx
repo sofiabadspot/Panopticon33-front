@@ -13,7 +13,9 @@ import { cameraClip } from '../api/video';
 import { CameraNode } from '../map/icons';
 import { CAM_FOV, CAM_REACH } from '../map/markers';
 import { Evidence, Icon, useNow } from '../ui/kit';
-import { useConsole } from './ctx';
+import { useConsole, type Sheet } from './ctx';
+import { AlertSheet } from './sheets/AlertSheet';
+import { SheetNav } from './sheets/SheetHead';
 
 const GRIDS: [number, number][] = [[2, 2], [3, 3], [4, 3], [5, 4]];
 const LOOKS = [['normal', 'Normal'], ['flir', 'Térmico'], ['nvg', 'Nocturno']] as const;
@@ -28,6 +30,14 @@ export function VideoWall({ onClose }: { onClose: () => void }) {
   const alerts = useApi((s) => s.alerts);
   const zones = useApi((s) => s.zones);
   const [filter, setFilter] = useState<'all' | 'alert' | 'video'>('all');
+  // Alerta abierta dentro del muro (vista de una cámara): la ficha va en el lateral, sin salir del muro.
+  const [wallAlert, setWallAlert] = useState<string | null>(null);
+  /** Qué hace un enlace de la ficha dentro del muro: otra alerta o una cámara se quedan en el muro; lo demás va a la consola. */
+  const wallGo = (s: Sheet) => {
+    if (s.k === 'alerta') setWallAlert(s.id);
+    else if (s.k === 'camara') { setWallAlert(null); setFocus(s.id); }
+    else { onClose(); c.open(s); }
+  };
   const [grid, setGrid] = useState(0);
   const [page, setPage] = useState(0);
   const [look, setLook] = useState<Look>('normal');
@@ -51,12 +61,12 @@ export function VideoWall({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, textarea, select')) return;
-      if (e.key === 'Escape') { e.preventDefault(); if (focus) setFocus(null); else onClose(); }
+      if (e.key === 'Escape') { if (e.defaultPrevented) return; e.preventDefault(); if (wallAlert) setWallAlert(null); else if (focus) setFocus(null); else onClose(); }
       if (!focus && e.key === 'ArrowRight') setPage((p) => (p + 1) % pages);
       if (!focus && e.key === 'ArrowLeft') setPage((p) => (p + pages - 1) % pages);
     };
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
-  }, [focus, pages, onClose]);
+  }, [focus, pages, onClose, wallAlert]);
 
   const n = cameras.length, live = cameras.filter((x) => x.status !== 'caida').length, vid = cameras.filter(hasVideo).length, al = cameras.filter((x) => alertOf(x)).length;
   const time = hhmmss(now);
@@ -73,11 +83,11 @@ export function VideoWall({ onClose }: { onClose: () => void }) {
 
   if (intro) return (
     <section className="wall" aria-label="Muro de video">
-      <div className="w-collate"><div>
+      <div className="w-collate"><div className="w-collate-card" role="status" aria-live="polite">
+        <div className="w-collate-hd"><span className="caption">Muro de video</span><span className="live-dot" aria-hidden /></div>
         <h3>Reuniendo señales disponibles</h3>
-        <p>{n} cámaras del sector · {vid} con video</p>
-        <div className="w-prog"><i style={{ width: '100%' }} /></div>
-        <div className="w-prog"><i style={{ width: `${Math.round((vid / n) * 100)}%` }} /></div>
+        <div className="w-collate-row"><span>Cámaras del sector<b>{n}</b></span><div className="w-prog"><i style={{ width: '100%' }} /></div></div>
+        <div className="w-collate-row"><span>Con video<b>{vid}</b></span><div className="w-prog"><i style={{ width: `${Math.round((vid / n) * 100)}%` }} /></div></div>
       </div></div>
     </section>
   );
@@ -99,6 +109,13 @@ export function VideoWall({ onClose }: { onClose: () => void }) {
             <div className={`feed look-${look}`}>{feed(cam, true)}</div>
             <footer><span>{cam.id}</span><span>{coords(cam)}</span><span>{time}</span></footer>
           </div>
+          {wallAlert ? (
+            <aside className="w-sheet" aria-label="Detalle de la alerta">
+              <SheetNav.Provider value={{ close: () => setWallAlert(null), go: wallGo }}>
+                <div key={wallAlert} className="sheet-swap"><AlertSheet id={wallAlert} /></div>
+              </SheetNav.Provider>
+            </aside>
+          ) : (
           <aside>
             <dl className="details">
               <dt>Estado</dt><dd><CameraNode status={cam.status} size={14} /> {STATUS[cam.status]}{cam.status !== 'caida' && ` · ${cam.fps} fps`}</dd>
@@ -107,14 +124,15 @@ export function VideoWall({ onClose }: { onClose: () => void }) {
               <dt>Campo de visión</dt><dd>{CAM_FOV}° · alcance {CAM_REACH} m</dd>
             </dl>
             <div><div className="caption">Alertas de esta cámara</div>
-              {camAlerts.length ? <ul className="w-alerts">{camAlerts.map((a) => <li key={a.id}><button onClick={() => { onClose(); c.open({ k: 'alerta', id: a.id }); }}><span className="w-al-dot" />{KIND_PHRASE[a.kind]}{a.plate && <span className="plate">{a.plate.listed}</span>}<Icon name="arrow_forward" /></button></li>)}</ul>
-                : <p className="dim" style={{ fontSize: 13, margin: 0 }}>Sin alertas esperando decisión.</p>}
+              {camAlerts.length ? <ul className="w-alerts">{camAlerts.map((a) => <li key={a.id}><button onClick={() => setWallAlert(a.id)}><span className="w-al-dot" />{KIND_PHRASE[a.kind]}{a.plate && <span className="plate">{a.plate.listed}</span>}<Icon name="arrow_forward" /></button></li>)}</ul>
+                : <p className="dim" style={{ fontSize: 'var(--fs-md)', margin: 0 }}>Sin alertas esperando decisión.</p>}
             </div>
             <div><div className="caption">Cámaras vecinas</div>
               <div className="w-near">{near.map(({ x, d }) => <button key={x.id} className="w-near-t" onClick={() => setFocus(x.id)} title={x.street}><div className={`feed look-${look}`}>{feed(x)}</div><span>{x.id} · {Math.round(d)} m</span></button>)}</div>
             </div>
             <button className="btn secondary" onClick={() => { onClose(); c.open({ k: 'camara', id: cam.id }); }}><Icon name="map" />Ver en el mapa</button>
           </aside>
+          )}
         </div>
       </section>
     );

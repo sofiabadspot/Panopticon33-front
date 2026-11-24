@@ -16,6 +16,14 @@ export const dateTime = (t: number) =>
   new Date(t).toLocaleString('es-SV', { timeZone: TZ, hour12: false, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 export const dateShort = (t: number) => new Date(t).toLocaleDateString('es-SV', { timeZone: TZ, day: '2-digit', month: 'short', year: 'numeric' });
 
+/** Cuánto falta para `t`: "en 45 min", "en 4 h 20 min", "en 7 d". */
+export function inTime(t: number, now = Date.now()) {
+  const m = Math.max(0, Math.round((t - now) / 60000));
+  if (m < 60) return `en ${m} min`;
+  const h = Math.floor(m / 60), r = m % 60;
+  if (h >= 48) return `en ${Math.round(h / 24)} d`;
+  return r ? `en ${h} h ${r} min` : `en ${h} h`;
+}
 export function ago(t: number, now = Date.now()) {
   const s = Math.max(0, Math.round((now - t) / 1000));
   if (s < 60) return `hace ${s} s`;

@@ -10,12 +10,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import geo from '../data/generated/geo.json';
 import type { Alert, Camera, LngLat, Unit, Zone, ZoneStatus } from '../api/types';
-import { fmtCrowd } from '../api/format';
+import { fmtCrowd, hhmm } from '../api/format';
 import { Icon } from '../ui/kit';
 import { streetRoute } from './streets';
 import { coverageHexes, hexCounts, hexRing, peopleRes, resForZoom, type HexMetric } from '../api/coverage';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
+
+/** Confirmada y en manos de Maic, todavía sin cerrar: se ve gestionada (gris con tick) y dice en qué está, hasta que llega la unidad. */
+const inMaic = (a: Alert) => a.review === 'confirmada' && !!a.maic && a.maic !== 'cerrada';
 import { GOOGLE_LOGO, googleCopyright, googleSession, googleTiles, hasGoogleKey, type GoogleBase } from './google';
 // El worker del mapa se empaqueta con la app (sin CDN). Vite lo emite como archivo propio.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
@@ -42,6 +45,8 @@ interface Props {
   /** Encuadre: se aplica cada vez que cambia `fitKey`. */
   bounds?: LngLatBoundsLike;
   fitKey?: string;
+  /** Cada vez que cambia, el mapa se aleja un poco (al cerrar una ficha de detalle). */
+  backOutKey?: string;
   selectedZone?: string | null;
   highlightZones?: string[];
   route?: RouteStop[];
@@ -57,6 +62,8 @@ interface Props {
   onEmptyClick?: () => void;
   onZoom?: (z: number) => void;
   severityOf?: (zoneId: string) => 'critica' | 'media' | null;
+  /** Evento en curso en la zona (una zona puede ser parte de un evento con varias zonas). */
+  eventOf?: (zoneId: string) => { name: string; end: number } | null;
   compact?: boolean;
   /** Base de Google pedida; si no está disponible queda la base local. */
   base?: GoogleBase;
@@ -82,6 +89,8 @@ interface Props {
 
 const token = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888888';
 const SHOW_DETAIL = 12.2;
+/** Escala de las alertas según el zoom: nunca bajan de 0,95 (de lejos siguen siendo lo que más se ve) y de cerca crecen hasta 1,5. */
+const alertScale = (z: number) => Math.min(1.5, Math.max(0.95, 1 + (z - 15) * 0.14));
 /** Desde este zoom se ve cada elemento suelto; más lejos, lo que cae cerca se agrupa. */
 const UNGROUP = 17;
 /** Hasta este zoom, todo lo que pertenece a una zona se junta en un solo grupo de esa zona. */
@@ -185,6 +194,7 @@ export function MapView(p: Props) {
       map.addLayer({ id: 'hex-fill', type: 'fill', source: 'hex', paint: { 'fill-color': ink, 'fill-opacity': ['*', 0.5, ['get', 'k']] } });
       map.addLayer({ id: 'hex-line', type: 'line', source: 'hex', paint: { 'line-color': ink, 'line-opacity': ['+', 0.08, ['*', 0.3, ['get', 'k']]], 'line-width': 0.8 } });
       map.addSource('heat', { type: 'geojson', data: fc([]) });
+
       map.addSource('zones', { type: 'geojson', data: fc([]) });
       map.addSource('cameras', { type: 'geojson', data: fc([]) });
       map.addSource('route', { type: 'geojson', data: fc([]) });
@@ -249,16 +259,23 @@ export function MapView(p: Props) {
       // Al mover el mapa, la ficha flotante se va
       map.on('movestart', () => setHover(null));
       map.on('zoomend', () => cb.current.onZoom?.(map.getZoom()));
+      // Tamaño de las alertas: sigue al zoom en cada cuadro (una sola variable CSS, sin redibujar marcadores).
+      const setAz = () => map.getContainer().style.setProperty('--az', String(alertScale(map.getZoom())));
+      setAz(); map.on('zoom', setAz);
       map.on('click', 'cameras', (e: MapLayerMouseEvent) => { if (!cb.current.onMapClick) { e.originalEvent.stopPropagation(); cb.current.onCameraClick?.(String(e.features?.[0]?.properties?.id)); } });
       map.on('click', 'cameras-hit', (e: MapLayerMouseEvent) => { if (!cb.current.onMapClick) { e.originalEvent.stopPropagation(); cb.current.onCameraClick?.(String(e.features?.[0]?.properties?.id)); } });
-      // Al pasar por una cámara se resalta su cono (la ficha es solo para unidades)
-      const camHover = (id: string | null) => {
+      // Al pasar por una cámara se resalta su cono y se abre su ficha con el video en vivo
+      const camHover = (id: string | null, x = 0, y = 0) => {
         if (id !== hoverCam.current) {
-          hoverCam.current = id; const c = id ? cb.current.cameras?.find((q) => q.id === id) : null;
+          hoverCam.current = id;
+          setHover(id ? { kind: 'camera', id, x, y } : null);
+          // Sin cámara bajo el puntero vuelve el cono de la cámara abierta en el lateral (si hay).
+          const sel = cb.current.focusSel?.k === 'camara' ? cb.current.focusSel.id : null;
+          const c = (id ?? sel) ? cb.current.cameras?.find((q) => q.id === (id ?? sel)) : null;
           (map.getSource('coneHi') as GeoJSONSource).setData(fc(c && c.status !== 'caida' ? [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [cone(c, 28)] }, properties: {} }] : []));
         }
       };
-      map.on('mousemove', 'cameras-hit', (e: MapLayerMouseEvent) => { map.getCanvas().style.cursor = 'pointer'; camHover(String(e.features?.[0]?.properties?.id)); });
+      map.on('mousemove', 'cameras-hit', (e: MapLayerMouseEvent) => { map.getCanvas().style.cursor = 'pointer'; camHover(String(e.features?.[0]?.properties?.id), e.originalEvent.clientX, e.originalEvent.clientY); });
       map.on('mouseleave', 'cameras-hit', () => { map.getCanvas().style.cursor = cb.current.onMapClick ? 'crosshair' : ''; camHover(null); });
       map.on('mousemove', (e: maplibregl.MapMouseEvent) => cb.current.onPointer?.([e.lngLat.lng, e.lngLat.lat]));
       map.on('mouseout', () => cb.current.onPointer?.(null));
@@ -282,6 +299,11 @@ export function MapView(p: Props) {
     mm.fitBounds(p.bounds, { padding: pad, duration: 800, maxZoom: 17.2, bearing: mm.getBearing(), pitch: mm.getPitch() });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.fitKey]);
+
+  useEffect(() => {
+    const mm = mapRef.current; if (!p.backOutKey || !mm) return;
+    mm.easeTo({ zoom: Math.max(13.5, mm.getZoom() - 1.2), duration: 700 });
+  }, [p.backOutKey]);
 
   useEffect(() => { if (mapRef.current) mapRef.current.getCanvas().style.cursor = p.onMapClick ? 'crosshair' : ''; }, [p.onMapClick]);
 
@@ -393,6 +415,14 @@ export function MapView(p: Props) {
       return { singles, groups };
     }
     const camSplit = L.cameras && detailZ ? split(P.cameras ?? [], (c) => [c.lon, c.lat], (c) => c.zoneId, -1) : { singles: L.cameras ? P.cameras ?? [] : [], groups: [] };
+    // Cámara abierta en el lateral: se ve siempre (aunque la capa Cámaras esté apagada o la cámara esté en un grupo),
+    // con su campo de visión y una marca que late; las demás quedan atenuadas.
+    const selCam = P.focusSel?.k === 'camara' ? P.cameras?.find((c) => c.id === P.focusSel!.id) ?? null : null;
+    if (selCam) {
+      camSplit.groups = camSplit.groups.map((g) => ({ ...g, items: g.items.filter((x) => x.id !== selCam.id) })).filter((g) => g.items.length > 1 || (g.items.length === 1 && (camSplit.singles.push(g.items[0]), false)));
+      if (!camSplit.singles.some((x) => x.id === selCam.id)) camSplit.singles = [...camSplit.singles, selCam];
+    }
+    if (!hoverCam.current) (map.getSource('coneHi') as GeoJSONSource).setData(fc(selCam && selCam.status !== 'caida' ? [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [cone(selCam, 28)] }, properties: {} }] : []));
     (map.getSource('cameras') as GeoJSONSource).setData(fc(camSplit.singles.map((c) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, properties: { id: c.id, st: c.status, dim: !!P.focusSel && !(P.focusSel.k === 'camara' && P.focusSel.id === c.id) } }))));
     (map.getSource('cones') as GeoJSONSource).setData(fc(camSplit.singles.filter((c) => L.fov && c.status !== 'caida').map((c) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [cone(c)] }, properties: {} }))));
     // ---- Recorrido: modo foco y animación ----
@@ -413,7 +443,7 @@ export function MapView(p: Props) {
     // Marcadores HTML (rótulos de zona, alertas, unidades, paradas del recorrido, sector).
     // Se reconcilian por clave: se actualizan en su lugar en vez de recrearse en cada refresco.
     const seen = new Set<string>();
-    const add = (key: string, lngLat: LngLat, node: React.ReactNode, onClick?: () => void, anchor: maplibregl.PositionAnchor = 'center', label?: string, hv?: (x: number, y: number) => Hover) => {
+    const add = (key: string, lngLat: LngLat, node: React.ReactNode, onClick?: () => void, anchor: maplibregl.PositionAnchor = 'center', label?: string, hv?: (x: number, y: number) => Hover, offset: [number, number] = [0, 0]) => {
       seen.add(key);
       let h = markers.current.get(key);
       if (!h) {
@@ -425,6 +455,7 @@ export function MapView(p: Props) {
         h = { m: new maplibregl.Marker({ element: div, anchor }).setLngLat(lngLat).addTo(map), root, el: div };
         markers.current.set(key, h);
       } else h.m.setLngLat(lngLat);
+      h.m.setOffset(offset);
       h.onClick = onClick; h.hover = hv;
       if (label) h.el.setAttribute('aria-label', label);
       h.root.render(node);
@@ -437,21 +468,38 @@ export function MapView(p: Props) {
       // Sin `zoneStatus` el mapa no mide (placas, formularios): solo el nombre, nunca "Sin datos".
       if (!P.zoneStatus) { add('z' + z.id, [z.lon, z.lat], <span className={`mk-zone ${dimZ ? 'dimz' : ''}`}>{z.name}</span>, P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'center', `Zona ${z.name}`); continue; }
       const nodata = !s || s.count == null;
+      const ev = P.eventOf?.(z.id);
       add('z' + z.id, [z.lon, z.lat], (
         // Rótulo "parado" sobre la zona, como las alertas: chico, con un asta y un anillo en el piso.
-        <span className={`mk-zone ${sev ?? ''} ${nodata ? 'nodata' : ''} ${P.selectedZone === z.id || P.highlightZones?.includes(z.id) ? 'sel' : ''} ${dimZ ? 'dimz' : ''}`}>
-          <span className="zl"><span className="zn">{z.name}</span><b>{nodata ? (s?.coverage === 'sin_cobertura' ? 'Sin cobertura' : 'Sin datos') : fmtCrowd(s.count!)}</b></span>
+        <span className={`mk-zone ${sev ?? ''} ${nodata ? 'nodata' : ''} ${ev ? 'ev' : ''} ${P.selectedZone === z.id || P.highlightZones?.includes(z.id) ? 'sel' : ''} ${dimZ ? 'dimz' : ''}`}>
+          <span className="zl" title={ev ? `Evento en curso: ${ev.name}` : undefined}>{ev && <Icon name="flag" className="zev" />}<span className="zn">{z.name}</span><b>{nodata ? (s?.coverage === 'sin_cobertura' ? 'Sin cobertura' : 'Sin datos') : fmtCrowd(s.count!)}</b></span>
           <u className="zstem" aria-hidden />
         </span>
-      ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'bottom', `Zona ${z.name}`);
+      ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'bottom', `Zona ${z.name}${ev ? ` · evento en curso hasta ${hhmm(ev.end)}` : ''}`);
     }
     const zoomTo = (c: LngLat) => () => map.easeTo({ center: c, zoom: Math.min(17.2, zoom + 1.8), duration: 700 });
     const groupMk = (cat: GroupCat, g: { key: string; items: { id: string }[]; c: LngLat }) =>
       add(`g${cat}${g.key}`, g.c, <GroupChip cat={cat} n={g.items.length} />, zoomTo(g.c), 'center', `${g.items.length} agrupados · acercar`, (x, y) => ({ kind: 'group', cat, ids: g.items.map((i) => i.id), x, y }));
     if (detail) camSplit.groups.forEach((g) => groupMk('cameras', g));
+    if (detail && P.units) {
+      // Las que van en camino no se agrupan: se dibujan aparte, latiendo, con "En camino".
+      // Se ven siempre, aunque la capa Unidades esté apagada: son la respuesta a una alerta gestionada.
+      // No se dice hacia dónde: la unidad sigue a una alerta que puede moverse (un auto); a qué responde
+      // va en la tarjeta al pasar el mouse.
+      const going = P.units.filter((u) => u.enRoute);
+      for (const u of going) {
+        add('u' + u.id, [u.lon, u.lat], (
+          <span className="mk-unit-go">
+            <i className="ug-ring" aria-hidden /><i className="ug-ring r2" aria-hidden />
+            <UnitHex type={u.type} status={u.status} size={24} />
+            <em className="ug-tag">En camino</em>
+          </span>
+        ), undefined, 'center', `${u.id} en camino · ${u.enRoute!.label}`, (x, y) => ({ kind: 'unit', id: u.id, x, y }));
+      }
+    }
     if (detail && L.units && P.units) {
       // Unidades: se ven sueltas hasta más lejos. Por zona recién debajo de zoom 14,5; antes solo se juntan las que se pisan (22 px).
-      const us = split(P.units, (u) => [u.lon, u.lat], (u) => u.zoneId, 1, { zoneBelow: 14.5, cell: zoom >= 17 ? 0 : zoom >= 13.5 ? 22 : 44 });
+      const us = split(P.units.filter((u) => !u.enRoute), (u) => [u.lon, u.lat], (u) => u.zoneId, 1, { zoneBelow: 14.5, cell: zoom >= 17 ? 0 : zoom >= 13.5 ? 22 : 44 });
       for (const u of us.singles) add('u' + u.id, [u.lon, u.lat], <UnitHex type={u.type} status={u.status} size={22} />, undefined, 'center', `${u.id} · ${u.type}`, (x, y) => ({ kind: 'unit', id: u.id, x, y }));
       us.groups.forEach((g) => groupMk('units', g));
     }
@@ -464,8 +512,10 @@ export function MapView(p: Props) {
     alertSplit.groups.forEach((g) => groupMk('alerts', g));
     if (P.alerts) for (const a of alertSplit.singles) {
       // Pin rojo con la punta en el lugar exacto. Todas iguales: el dibujo dice el tipo.
-      add('a' + a.id, [a.lon, a.lat], <span className={P.freshAlerts?.includes(a.id) ? 'is-new' : undefined} onMouseEnter={() => P.onAlertHover?.(a.id)} onMouseLeave={() => P.onAlertHover?.(null)}><AlertMark kind={a.kind} size={34} />{P.freshAlerts?.includes(a.id) && <><i className="new-ring" /><i className="new-ring r2" /><i className="new-ring r3" /></>}</span>, P.onAlertClick ? () => P.onAlertClick!(a.id) : undefined, 'bottom', `Alerta ${a.id}`);
+      // .mk-alert-scale crece con el zoom del mapa (variable --az, ver onZoom), sin esperar a que termine.
+      add('a' + a.id, [a.lon, a.lat], <span className={`mk-alert-scale ${P.freshAlerts?.includes(a.id) ? 'is-new' : ''}`} onMouseEnter={() => P.onAlertHover?.(a.id)} onMouseLeave={() => P.onAlertHover?.(null)}><AlertMark kind={a.kind} size={34} muted={a.review !== 'por_revisar'} />{a.review !== 'por_revisar' && <i className={`mk-done ${a.review === 'confirmada' ? 'ok' : ''}`} aria-label="Gestionada" />}{inMaic(a) && <i className="mk-go-tag">{a.maic === 'despachada' ? 'Unidad en camino' : 'Enviada a Maic'}</i>}{P.freshAlerts?.includes(a.id) && <><i className="new-ring" /><i className="new-ring r2" /><i className="new-ring r3" /></>}</span>, P.onAlertClick ? () => P.onAlertClick!(a.id) : undefined, 'bottom', `Alerta ${a.id}${inMaic(a) ? (a.maic === 'despachada' ? ' · unidad en camino' : ' · enviada a Maic') : ''}`);
     }
+    if (selCam && !focus) add('csel' + selCam.id, [selCam.lon, selCam.lat], <span className="mk-camsel" aria-hidden><i /><i className="r2" /><b>{selCam.id}</b></span>);
     if (P.signal) add('sig' + P.signal.key, [P.signal.lon, P.signal.lat], <span className="mk-signal" aria-hidden><i /><i /><i /><s /><b /><em>{P.signal.label}</em></span>);
     if (P.pin) add('pin', [P.pin.lon, P.pin.lat], <span className="mk-pin"><i /><b>{P.pin.label}</b></span>, undefined, 'bottom');
     if (R) {
@@ -480,7 +530,7 @@ export function MapView(p: Props) {
     // Atenuar todo lo que no es lo seleccionado en el lateral
     if (map.getLayer('heat')) map.setPaintProperty('heat', 'heatmap-opacity', P.focusSel && !focus ? 0.3 : ['interpolate', ['linear'], ['zoom'], 14, 1, 17, 0.7]);
     for (const [key, h] of markers.current) {
-      const keep = !P.focusSel || focus || key === 'a' + (selAlert?.id ?? '') || (selZone && key === 'z' + selZone) || key === 'pin' || key.startsWith('sig') || /^ra?\d/.test(key);
+      const keep = !P.focusSel || focus || key === 'a' + (selAlert?.id ?? '') || (selZone && key === 'z' + selZone) || key === 'pin' || key.startsWith('sig') || key.startsWith('csel') || /^ra?\d/.test(key);
       h.el.classList.toggle('is-dim', !keep && key !== 'a' + P.hoverAlert);
       h.el.classList.toggle('is-hover', !!P.hoverAlert && key === 'a' + P.hoverAlert);
       h.el.classList.toggle('is-sel', !!P.focusSel && !focus && (key === 'a' + (selAlert?.id ?? '') || (P.focusSel.k === 'zona' && key === 'z' + P.focusSel.id)));

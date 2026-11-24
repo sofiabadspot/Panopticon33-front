@@ -51,3 +51,9 @@ export function placeAlert(a: Alert, zones: Zone[]): Alert {
   }
   return { ...a, zoneId: zoneAt(p, zones)?.id ?? null };
 }
+
+/** Círculo de `radiusM` metros alrededor de un punto, como anillo para dibujar en el mapa. */
+export function circleRing(lat: number, lon: number, radiusM: number, n = 40): LngLat[] {
+  const k = Math.cos((lat * Math.PI) / 180) * 111320;
+  return Array.from({ length: n }, (_, i) => { const a = (i / n) * 2 * Math.PI; return [lon + (Math.cos(a) * radiusM) / k, lat + (Math.sin(a) * radiusM) / 111320] as LngLat; });
+}

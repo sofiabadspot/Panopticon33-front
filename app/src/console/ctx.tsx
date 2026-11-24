@@ -10,6 +10,7 @@ import type { RouteStop } from '../map/MapView';
 import { answerJules } from './jules';
 import { useJulesStore, type JulesStore } from '../jules/store';
 
+export interface InvDraft { title: string; lat: number; lon: number; label: string; from: number; to: number }
 export type PanelId = 'estado' | 'alertas' | 'investigar' | 'eventos' | 'config' | 'bitacora' | 'verificacion';
 export type Sheet =
   | { k: 'alerta'; id: string } | { k: 'zona'; id: string } | { k: 'evento'; id: string } | { k: 'evento-form'; id?: string }
@@ -34,7 +35,7 @@ export interface Tool { id: PanelId; label: string; phase?: string }
 export const TOOLS: Record<Role, Tool[]> = {
   command: [{ id: 'estado', label: 'Estado' }, { id: 'alertas', label: 'Alertas' }, { id: 'eventos', label: 'Eventos' }],
   operator_911: [{ id: 'alertas', label: 'Alertas' }, { id: 'verificacion', label: 'Verificación' }, { id: 'estado', label: 'Estado' }],
-  analyst: [{ id: 'investigar', label: 'Investigar' }, { id: 'alertas', label: 'Alertas' }, { id: 'estado', label: 'Estado' }, { id: 'eventos', label: 'Eventos' }],
+  analyst: [{ id: 'investigar', label: 'Investigaciones' }, { id: 'alertas', label: 'Alertas' }, { id: 'estado', label: 'Estado' }, { id: 'eventos', label: 'Eventos' }],
   admin: [{ id: 'config', label: 'Configuración' }, { id: 'eventos', label: 'Eventos' }, { id: 'estado', label: 'Estado' }],
   auditor: [{ id: 'bitacora', label: 'Bitácora' }, { id: 'estado', label: 'Estado' }],
 };
@@ -87,7 +88,12 @@ interface Ctx {
   fresh: string[]; arrival: string | null; dismissArrival: () => void; sound: boolean; setSound: (on: boolean) => void;
   focus: (points: LngLat[], key: string) => void; fitReq: { points: LngLat[]; key: string } | null;
   recents: Recent[]; remember: (r: Recent) => void;
-  plateQuery: string | null; setPlateQuery: (q: string | null) => void;
+  /** Investigación abierta (analista): el mapa pasa a su lugar y su ventana, y abajo va su línea de tiempo. */
+  invId: string | null; setInvId: (id: string | null) => void;
+  /** Esperando un clic en el mapa para mover el lugar de la investigación abierta. */
+  invPick: boolean; setInvPick: (on: boolean) => void;
+  /** Datos para empezar una investigación desde otra ficha (p. ej. una alerta): lugar y hora ya cargados. */
+  invDraft: InvDraft | null; setInvDraft: (d: InvDraft | null) => void;
   /** Charla con Jules (src/jules/store.ts): sigue igual al abrir fichas y volver. */
   jules: JulesStore; askJules: (q: string) => void;
 }
@@ -132,7 +138,10 @@ export function ConsoleProvider({ role, children }: { role: Role; children: Reac
     if (sound) chime();
   }, [allAlerts]); // eslint-disable-line react-hooks/exhaustive-deps
   const [fitReq, setFitReq] = useState<Ctx['fitReq']>(null);
-  const [plateQuery, setPlateQuery] = useState<string | null>(null);
+  const [invId, setInvIdRaw] = useState<string | null>(null);
+  const [invPick, setInvPick] = useState(false);
+  const [invDraft, setInvDraft] = useState<InvDraft | null>(null);
+  const setInvId = useCallback((id: string | null) => { setInvIdRaw(id); setInvPick(false); }, []);
   const jules = useJulesStore();
   const key = `p33.recent.${role}`;
   const [recents, setRecents] = useState<Recent[]>(() => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } });
@@ -153,7 +162,7 @@ export function ConsoleProvider({ role, children }: { role: Role; children: Reac
     overlay, setOverlay, pin, setPin, signal, setSignal, hoverAlert, setHoverAlert,
     fresh, arrival, dismissArrival: () => setArrival(null), sound, setSound,
     focus: (points, k) => setFitReq({ points, key: k + Date.now() }), fitReq,
-    recents, remember, plateQuery, setPlateQuery,
+    recents, remember, invId, setInvId, invPick, setInvPick, invDraft, setInvDraft,
     jules,
     // Mando tiene a Jules fijo en el lateral: se cierra lo que haya abierto para verlo. Los demás roles lo abren como ficha.
     askJules: (q) => {
@@ -162,7 +171,7 @@ export function ConsoleProvider({ role, children }: { role: Role; children: Reac
       jules.preguntar(q, { texto: ans.text, datos: ans.datos, acciones: ans.actions });
       write(undefined, role === 'command' ? null : { k: 'jules' });
     },
-  }), [panel, sheet, write, role, overlay, pin, signal, hoverAlert, fresh, arrival, sound, setSound, fitReq, recents, remember, plateQuery, jules]);
+  }), [panel, sheet, write, role, overlay, pin, signal, hoverAlert, fresh, arrival, sound, setSound, fitReq, recents, remember, invId, setInvId, invPick, invDraft, jules]);
   return <C.Provider value={value}>{children}</C.Provider>;
 }
 

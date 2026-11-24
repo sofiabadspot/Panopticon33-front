@@ -3,7 +3,7 @@
    suele pasar, y los vehículos que viajan con él. Verla exige motivo y queda en la bitácora.
    El titular registrado sale del registro vehicular (sin conectar): no es quien maneja. */
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { audit, forOperator, grantVehicle, useApi, vehicleProfile, vehicleReason } from '../../api';
+import { audit, forOperator, grantVehicle, pinPlate, unpinPlate, useApi, vehicleProfile, vehicleReason } from '../../api';
 import { ago, dateTime, hhmm, pct } from '../../api/format';
 import { KIND_PHRASE, SEARCH_REASONS } from '../../api/labels';
 import { useSession } from '../../shell/session';
@@ -66,6 +66,11 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
   const toggleTrace = () => { if (!trace) audit(user, 'Ver recorrido de placa', p.plate, `${p.reads.length} lecturas en el mapa`, reason); setTrace(!trace); };
   const openCompanion = (plate: string) => { grantVehicle(plate, reason, user, 'Abrir ficha de vehículo asociado'); c.open({ k: 'vehiculo', id: plate }); };
 
+  /* Con una investigación abierta, el vehículo se fija en ella para seguirlo en su línea de tiempo. */
+  const openInv = useApi((s) => s.investigations.find((x) => x.id === c.invId));
+  const pinned = !!openInv?.plates.includes(p.plate);
+
+
   return (
     <>
       <SheetHead
@@ -76,6 +81,7 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
           {p.listed && <span className="chip critica"><Icon name="warning" />En lista</span>}
           {p.mismatch && <span className="chip media"><Icon name="swap_horiz" />No coincide con la lista</span>}
           {!p.reads.length && <span className="chip nodata">Sin lecturas</span>}
+          {openInv && <button className="chip outline" aria-pressed={pinned} onClick={() => (pinned ? unpinPlate(openInv.id, p.plate, user) : pinPlate(openInv.id, p.plate, user))} title={pinned ? 'Quitar de la investigación' : `Fijar en ${openInv.id}`}><Icon name={pinned ? 'check' : 'pin_drop'} />{pinned ? `Fijado en ${openInv.id}` : 'Fijar en la investigación'}</button>}
         </>}
       />
       <div className="pb">
@@ -91,7 +97,7 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
           </dl></div>
         </div>
 
-        <div className="kpis" style={{ borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+        <div className="kpis" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
           <div className="kpi"><div className="v">{p.reads.length}</div><div className="l">Lecturas</div><div className="x">en {p.cameras.length} {p.cameras.length === 1 ? 'cámara' : 'cámaras'}</div></div>
           <div className={`kpi ${last ? '' : 'nodata'}`}><div className="v">{last ? ago(last.at, now) : '—'}</div><div className="l">Última lectura</div>{last && <div className="x">{last.street}</div>}</div>
           <div className={`kpi ${first ? '' : 'nodata'}`}><div className="v">{first ? dateTime(first.at) : '—'}</div><div className="l">Primera lectura</div></div>
@@ -104,7 +110,7 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
             {!p.companions.length && <li className="empty">Ningún vehículo se repite a su lado.</li>}
             {p.companions.map((x) => (
               <li key={x.plate}><button className="item" style={{ gridTemplateColumns: '1fr auto' }} onClick={() => openCompanion(x.plate)}>
-                <div><div className="t"><span className="plate">{x.plate}</span>{x.listed && <span className="chip critica" style={{ height: 18, fontSize: 10 }}>En lista</span>}</div><div className="s">{x.times} {x.times === 1 ? 'vez' : 'veces'} en {x.cameras} cámaras</div></div>
+                <div><div className="t"><span className="plate">{x.plate}</span>{x.listed && <span className="chip critica" style={{ height: 18, fontSize: 'var(--fs-2xs)' }}>En lista</span>}</div><div className="s">{x.times} {x.times === 1 ? 'vez' : 'veces'} en {x.cameras} cámaras</div></div>
                 <div className="r"><Icon name="chevron_right" /></div>
               </button></li>
             ))}
@@ -151,7 +157,7 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
             ))}
           </ul>
         </div>
-        <p className="dim" style={{ fontSize: 11, margin: 0 }}>El titular registrado no es necesariamente quien maneja. Que no haya lecturas no significa que el vehículo no circuló: puede haber pasado por calles sin cámara.</p>
+        <p className="dim" style={{ fontSize: 'var(--fs-xs)', margin: 0 }}>El titular registrado no es necesariamente quien maneja. Que no haya lecturas no significa que el vehículo no circuló: puede haber pasado por calles sin cámara.</p>
       </div>
     </>
   );

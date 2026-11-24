@@ -60,3 +60,14 @@ export function P33Logo({ size = 20, mark = true, className = '' }: { size?: num
     </span>
   );
 }
+
+/** Firma de producto: "Panopticon 33 × SPOTVISION", con el logo de Spotvision. */
+export function BrandLockup({ size = 20, className = '' }: { size?: number; className?: string }) {
+  return (
+    <span className={`brand-lockup ${className}`} style={{ fontSize: size }}>
+      <P33Logo size={size} />
+      <span className="bl-by" aria-hidden="true">×</span>
+      <img className="bl-sv" src="/assets/logo-spotvision.png" alt="SPOTVISION" />
+    </span>
+  );
+}

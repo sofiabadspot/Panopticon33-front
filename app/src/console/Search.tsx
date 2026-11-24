@@ -2,7 +2,7 @@
    Elegir un resultado lo abre en el lugar (ficha o panel) y mueve el mapa hacia él.
    Guarda las búsquedas recientes de cada rol en este navegador. Atajo: / o ⌘K. */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { forOperator, useApi } from '../api';
+import { forOperator, grantVehicle, useApi } from '../api';
 import { normalizePlate } from '../api/format';
 import { KIND_LABEL, KIND_PHRASE } from '../api/labels';
 import { useSession } from '../shell/session';
@@ -14,8 +14,15 @@ interface Result { group: string; icon: string; label: string; sub?: string; ref
 const PLATE_RE = /^[A-Z?*]{1,2}\s?[0-9?*][0-9A-Z?*-]{1,7}$/i;
 
 export function Search() {
-  const { role } = useSession();
+  const { role, user } = useSession();
   const c = useConsole();
+  const investigations = useApi((s) => s.investigations);
+  /* Ficha de vehículo: con una investigación abierta, su motivo la cubre; si no, la ficha pide motivo. */
+  const openVehicle = (plate: string) => {
+    const inv = investigations.find((x) => x.id === c.invId);
+    if (inv) grantVehicle(plate, inv.reason, user, `Abrir ficha de vehículo · ${inv.id}`);
+    c.open({ k: 'vehiculo', id: plate });
+  };
   const zones = useApi((s) => s.zones);
   const alerts = useApi((s) => s.alerts);
   const cameras = useApi((s) => s.cameras);
@@ -44,8 +51,7 @@ export function Search() {
     const np = normalizePlate(q);
     if (role !== 'auditor') out.push({ group: 'Jules', icon: 'auto_awesome', label: `Preguntar a Jules: "${q.trim()}"`, sub: 'Consulta y recomienda; no ejecuta acciones', ref: 'jules:' + q.trim(), run: () => c.askJules(q.trim()) });
     if (PLATE_RE.test(q.trim())) {
-      if (role === 'analyst') out.push({ group: 'Placas', icon: 'directions_car', label: `Buscar la placa ${q.trim().toUpperCase()} en las lecturas`, sub: 'Pide motivo; queda en la bitácora', ref: 'placa:' + np, run: () => { c.setPlateQuery(q.trim().toUpperCase()); c.setPanel('investigar'); } });
-      if (role === 'analyst' && !/[*?]/.test(q)) out.push({ group: 'Placas', icon: 'badge', label: `Ficha del vehículo ${q.trim().toUpperCase()}`, sub: 'Pide motivo; queda en la bitácora', ref: 'vehiculo:' + q.trim().toUpperCase(), run: () => c.open({ k: 'vehiculo', id: q.trim().toUpperCase() }) });
+      if (role === 'analyst' && !/[*?]/.test(q)) out.push({ group: 'Placas', icon: 'badge', label: `Ficha del vehículo ${q.trim().toUpperCase()}`, sub: 'Pide motivo; queda en la bitácora', ref: 'vehiculo:' + q.trim().toUpperCase(), run: () => openVehicle(q.trim().toUpperCase()) });
       for (const a of alerts.filter((x) => x.plate && (normalizePlate(x.plate.listed).includes(np.replace(/[*?]/g, '')) || normalizePlate(x.plate.read).includes(np.replace(/[*?]/g, ''))))) {
         if (role === 'admin' || role === 'auditor') break;
         out.push({ group: 'Placas', icon: 'directions_car', label: `${a.plate!.listed} · ${KIND_PHRASE[a.kind]}`, sub: a.id, ref: 'alerta:' + a.id, run: () => c.open({ k: 'alerta', id: a.id }) });
@@ -62,7 +68,7 @@ export function Search() {
     for (const [s, x] of [...streets].slice(0, 5)) out.push({ group: 'Calles', icon: 'place', label: s, sub: `cruce con cámara ${x.id}`, ref: 'calle:' + s, run: () => { c.setPin({ lat: x.lat, lon: x.lon, label: s }); c.focus([[x.lon - 0.002, x.lat - 0.0015], [x.lon + 0.002, x.lat + 0.0015]], 'calle'); } });
     for (const u of units.filter((u) => has(u.id)).slice(0, 4)) out.push({ group: 'Unidades', icon: 'local_police', label: u.id, sub: u.type, ref: 'unidad:' + u.id, run: () => { c.setPin({ lat: u.lat, lon: u.lon, label: u.id }); c.focus([[u.lon - 0.0015, u.lat - 0.001], [u.lon + 0.0015, u.lat + 0.001]], 'unidad'); } });
     return out;
-  }, [q, zones, alerts, cameras, events, units, role, c]);
+  }, [q, zones, alerts, cameras, events, units, role, c, investigations]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fromRecent = (r: Recent): Result => {
     const [kind, ...rest] = r.ref.split(':'); const id = rest.join(':');
@@ -71,9 +77,8 @@ export function Search() {
       else if (kind === 'alerta') c.open({ k: 'alerta', id });
       else if (kind === 'evento') c.open({ k: 'evento', id });
       else if (kind === 'camara') c.open({ k: 'camara', id });
-      else if (kind === 'vehiculo') c.open({ k: 'vehiculo', id });
+      else if (kind === 'vehiculo' || (kind === 'placa' && role === 'analyst')) openVehicle(kind === 'placa' ? r.q.toUpperCase() : id);
       else if (kind === 'jules') c.askJules(id);
-      else if (kind === 'placa' && role === 'analyst') { c.setPlateQuery(r.q.toUpperCase()); c.setPanel('investigar'); }
       else { setQ(r.q); setOpen(true); return; }
     };
     return { group: 'Recientes', icon: 'history', label: r.label, sub: r.kind, ref: r.ref, run };

@@ -1,8 +1,7 @@
 /* Ficha de alerta — el operador 911 decide en dos clics sin salir del mapa:
    confirmar es un clic (va a Maic); descartar pide un motivo de una lista corta.
    Tras decidir, la ficha pasa sola a la siguiente alerta por revisar. */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { audit, confirmAlert, discardAlert, forOperator, openAlert, readsOf, useApi } from '../../api';
 import { ago, dateTime, dec1, fmt, fmtCrowd, hhmm, pct } from '../../api/format';
 import { DISCARD_REASONS, KIND_LABEL, KIND_PHRASE } from '../../api/labels';
@@ -14,11 +13,13 @@ import { ImageViewer, Inspectable } from '../../ui/ImageInspect';
 import type { Evidence as Ev } from '../../api/types';
 import { byUrgency } from '../../views/shared';
 import { useConsole } from '../ctx';
-import { SheetHead } from './SheetHead';
+import { SheetHead, useSheetGo } from './SheetHead';
 
 export function AlertSheet({ id }: { id: string }) {
   const { user, role } = useSession();
   const c = useConsole();
+  // Abrir otra ficha: en la consola, el lateral; dentro del muro de video, el muro decide (SheetNav).
+  const go = useSheetGo();
   const toast = useToast();
   const now = useNow(5000);
   const alerts = useApi((s) => s.alerts);
@@ -34,6 +35,7 @@ export function AlertSheet({ id }: { id: string }) {
      numeradas y con hora, terminando en la lectura de esta alerta. Queda en la bitácora. */
   const [trace, setTrace] = useState(false);
   const [sent, setSent] = useState(false);
+  const [txSolo, setTxSolo] = useState(false); // la transmisión a Maic ocupa sola la ficha
   useEffect(() => { setTrace(false); setSent(false); }, [id]);
   const traceReads = useMemo(() => [...prev].sort((x, y) => x.at - y.at), [prev]);
   useEffect(() => {
@@ -51,7 +53,7 @@ export function AlertSheet({ id }: { id: string }) {
 
   const canDecide = !!a && role === 'operator_911' && a.review === 'por_revisar';
   const next = () => alerts.filter((x) => forOperator(x) && x.review === 'por_revisar' && x.id !== id).sort(byUrgency)[0];
-  const advance = () => { const n = next(); if (n) c.open({ k: 'alerta', id: n.id }); };
+  const advance = () => { const n = next(); if (n) go({ k: 'alerta', id: n.id }); };
   const pendingCount = alerts.filter((x) => forOperator(x) && x.review === 'por_revisar' && x.id !== id).length;
   /* Confirmar: la ficha se queda en la alerta y muestra la transmisión a Maic paso a paso;
      en el mapa sale una emisión sobre el punto. El operador pasa a la siguiente cuando quiere. */
@@ -86,13 +88,18 @@ export function AlertSheet({ id }: { id: string }) {
       <SheetHead
         kicker={<><span className="mono">{a.id}</span>·{a.review === 'por_revisar' ? <Unattended since={a.createdAt} /> : <span>{ago(a.createdAt, now)}</span>}</>}
         title={KIND_PHRASE[a.kind]}
-        sub={<>{zone ? <button className="linklike" onClick={() => c.open({ k: 'zona', id: zone.id })}>{zone.name}</button> : cam?.street}{cam && <> · <button className="linklike mono" onClick={() => c.open({ k: 'camara', id: cam.id })}>{cam.id}</button></>}</>}
-        aside={a.review === 'por_revisar' ? undefined : <StatusChip alert={a} />}
+        sub={<>{zone ? <button className="linklike" onClick={() => go({ k: 'zona', id: zone.id })}>{zone.name}</button> : cam?.street}{cam && <> · <button className="linklike mono" onClick={() => go({ k: 'camara', id: cam.id })}>{cam.id}</button></>}</>}
+        aside={a.review === 'por_revisar' && role !== 'analyst' ? undefined : <>
+          {a.review !== 'por_revisar' && <StatusChip alert={a} />}
+          {/* Analista: abrir una investigación con el lugar y la hora de esta alerta ya cargados */}
+          {role === 'analyst' && <button className="chip outline" onClick={() => { c.setInvDraft({ title: `${KIND_PHRASE[a.kind]}${a.plate ? ` ${a.plate.listed}` : ''}`, lat: a.lat, lon: a.lon, label: cam?.street ?? zone?.name ?? a.cameraId, from: a.createdAt - 3600e3, to: a.createdAt + 1800e3 }); c.setPanel('investigar'); }}><Icon name="timeline" />Investigar esto</button>}
+        </>}
       />
-      <div className="pb">
-        {sent && a.review === 'confirmada' && <Transmission a={a} />}
-        {a.plate ? <PlateBlocks a={a} camId={cam?.id} place={zone?.name ?? cam?.street} onCamera={cam ? () => c.open({ k: 'camara', id: cam.id }) : undefined} />
-          : (a.kind === 'aglomeracion' || a.kind === 'brecha_presencia') && zone ? <ZoneAlertBlocks a={a} zone={zone} camId={cam?.id} onCamera={cam ? () => c.open({ k: 'camara', id: cam.id }) : undefined} onZone={() => c.open({ k: 'zona', id: zone.id })} /> : (<>
+      <div className={`pb ${!sent ? '' : txSolo ? 'tx-alone' : 'tx-after'}`}>
+        {!sent && a.review !== 'por_revisar' && <Resolved a={a} />}
+        {sent && a.review === 'confirmada' && <Transmission a={a} onSolo={setTxSolo} />}
+        {a.plate ? <PlateBlocks a={a} camId={cam?.id} place={zone?.name ?? cam?.street} onCamera={cam ? () => go({ k: 'camara', id: cam.id }) : undefined} />
+          : (a.kind === 'aglomeracion' || a.kind === 'brecha_presencia') && zone ? <ZoneAlertBlocks a={a} zone={zone} camId={cam?.id} onCamera={cam ? () => go({ k: 'camara', id: cam.id }) : undefined} onZone={() => go({ k: 'zona', id: zone.id })} /> : (<>
           <Evidence ev={a.evidence} tag={<span className="chip"><Icon name="videocam" />{cam?.id}</span>} />
           <div className="box">
             <div className="bh"><h3>Regla que la disparó</h3></div>
@@ -108,7 +115,7 @@ export function AlertSheet({ id }: { id: string }) {
 
         {a.plate && (
           <div className="box flush">
-            <div className="bh"><h3>Lecturas previas de la placa</h3><span className="sub">{prev.length} en 7 días</span>{role === 'analyst' && <button className="linklike" style={{ marginLeft: 'auto', fontSize: 12 }} onClick={() => c.open({ k: 'vehiculo', id: a.plate!.listed })}>Ficha del vehículo</button>}</div>
+            <div className="bh"><h3>Lecturas previas de la placa</h3><span className="sub">{prev.length} en 7 días</span>{role === 'analyst' && <button className="linklike" style={{ marginLeft: 'auto', fontSize: 'var(--fs-sm)' }} onClick={() => go({ k: 'vehiculo', id: a.plate!.listed })}>Ficha del vehículo</button>}</div>
             {prev.length > 0 && (
               <div className="bb trace-cta">
                 <TraceCard on={trace} onToggle={toggleTrace}
@@ -142,81 +149,74 @@ export function AlertSheet({ id }: { id: string }) {
           <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />Descartar<span className="kbd">D</span></button>
         </>}
         {canDecide && discarding && <>
-          <span style={{ fontSize: 12, width: '100%', color: 'var(--ink-muted)' }}>Motivo del descarte</span>
+          <span style={{ fontSize: 'var(--fs-sm)', width: '100%', color: 'var(--ink-muted)' }}>Motivo del descarte</span>
           {DISCARD_REASONS.map((r, i) => <button key={r} className="btn secondary xs" onClick={() => discard(r)}><span className="kbd">{i + 1}</span>{r}</button>)}
           <button className="btn ghost xs" onClick={() => setDiscarding(false)}>Cancelar</button>
         </>}
-        {!canDecide && a.review === 'por_revisar' && <span className="dim" style={{ fontSize: 12 }}><Icon name="lock" /> Solo el operador 911 confirma o descarta.</span>}
+        {!canDecide && a.review === 'por_revisar' && <span className="dim" style={{ fontSize: 'var(--fs-sm)' }}><Icon name="lock" /> Solo el operador 911 confirma o descarta.</span>}
         {a.review === 'confirmada' && sent && (pendingCount > 0
           ? <button className="btn primary" style={{ flex: 1 }} onClick={advance} autoFocus><Icon name="arrow_forward" />Siguiente alerta<span className="chip" style={{ marginLeft: 'auto' }}>{pendingCount} por revisar</span><span className="kbd" style={{ color: 'inherit', borderColor: 'currentColor' }}>↵</span></button>
-          : <span style={{ fontSize: 12 }}><Icon name="check_circle" /> No quedan alertas por revisar.</span>)}
-        {a.review === 'confirmada' && !sent && <span style={{ fontSize: 12 }}><Icon name="check_circle" /> Confirmada por {a.reviewedBy}. El incidente sigue en Maic.</span>}
-        {a.review === 'descartada' && <span className="muted" style={{ fontSize: 12 }}>Descartada por {a.reviewedBy}: {a.discardReason}.</span>}
+          : <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> No quedan alertas por revisar.</span>)}
+        {a.review === 'confirmada' && !sent && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> Confirmada por {a.reviewedBy}. El incidente sigue en Maic.</span>}
+        {a.review === 'descartada' && <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Descartada por {a.reviewedBy}: {a.discardReason}.</span>}
       </div>
     </>
   );
 }
 
 /* Transmisión a Maic: qué pasó con la alerta confirmada, paso a paso, a medida que Maic responde.
-   Al confirmar se ve unos segundos en el centro del mapa (el momento importa) y después vuela a su
-   lugar en la ficha, donde queda. Con movimiento reducido aparece directo en la ficha. */
-const TX_CENTER_MS = 2600, TX_FLY_MS = 700;
-function Transmission({ a }: { a: Alert }) {
-  const lvl = a.maic === 'despachada' || a.maic === 'cerrada' ? 4 : a.maic === 'recibida' ? 3 : 2;
+   Al confirmar ocupa sola la ficha, en el centro (el momento importa). Cuando Maic acusa recibo,
+   sube a su lugar arriba de la ficha y el resto aparece debajo. Con movimiento reducido va directo arriba. */
+const TX_SOLO_MIN_MS = 2400, TX_RISE_MS = 600;
+function Transmission({ a, onSolo }: { a: Alert; onSolo?: (solo: boolean) => void }) {
+  const online = useApi((s) => s.maic.connected);
+  // En cola: Maic sin conexión, la confirmación todavía no salió
+  const queued = !online && a.maic === 'enviada';
+  const lvl = a.maic === 'cerrada' ? 5 : a.maic === 'despachada' ? 4 : a.maic === 'recibida' ? 3 : queued ? 1 : 2;
   const [boot, setBoot] = useState(1); // el paso "Transmitiendo" se ve un instante antes de marcarse
   useEffect(() => { const t = setTimeout(() => setBoot(2), 700); return () => clearTimeout(t); }, []);
   const done = Math.min(lvl, boot === 1 ? 1 : lvl);
   const at = (label: string) => a.timeline.find((t) => t.label.startsWith(label))?.at;
+  // "Llegó U-12 · cerrada en Maic" → "U-12 · 13:42"
+  const arrived = () => { const t = a.timeline.find((x) => x.label.startsWith('Llegó')); return t ? `${t.label.replace(/^Llegó (\S+).*/, '$1')} · ${hhmm(t.at)}` : 'Llegó la unidad'; };
   const steps = [
     { t: 'Confirmada por el operador', s: `${a.reviewedBy ?? ''}${at('Confirmada') ? ' · ' + hhmm(at('Confirmada')!) : ''}` },
-    { t: 'Transmitida a Maic', s: 'Canal cifrado' },
+    { t: queued ? 'En cola para Maic' : 'Transmitida a Maic', s: queued ? 'Maic sin conexión: sale cuando vuelva' : 'Canal cifrado' },
     { t: 'Recibida en Maic', s: lvl >= 3 && a.maicId ? `Caso ${a.maicId}` : 'Esperando acuse de Maic…' },
     { t: 'Despachada', s: lvl >= 4 ? 'Maic asignó unidades' : 'Maic asigna unidades…' },
+    { t: 'Unidad en el lugar', s: lvl >= 5 ? arrived() : lvl >= 4 ? 'La unidad va en camino…' : 'Cuando Maic despache' },
   ];
 
-  // Fase: centro (sobre el mapa) → vuelo (hacia la ficha) → en la ficha
+  // Fase: sola en la ficha → arriba, con el resto debajo
   const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  const [phase, setPhase] = useState<'center' | 'fly' | 'docked'>(reduce ? 'docked' : 'center');
-  const dock = useRef<HTMLElement>(null);
-  const [geo, setGeo] = useState<{ w: number; h: number; cx: number; cy: number; dx: number; dy: number } | null>(null);
-  const measure = () => {
-    const d = dock.current?.getBoundingClientRect(); if (!d) return;
-    const m = (document.querySelector('.mapwrap') as HTMLElement | null)?.getBoundingClientRect();
-    const cx = m ? m.left + m.width / 2 : window.innerWidth / 2, cy = m ? m.top + m.height / 2 : window.innerHeight / 2;
-    setGeo({ w: d.width, h: d.height, cx, cy, dx: d.left, dy: d.top });
-  };
-  useLayoutEffect(() => { if (phase !== 'docked') measure(); }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [solo, setSolo] = useState(!reduce);
+  const [minDone, setMinDone] = useState(false);
+  const el = useRef<HTMLElement>(null);
+  const from = useRef<number | null>(null);
+  useEffect(() => { const t = setTimeout(() => setMinDone(true), TX_SOLO_MIN_MS); return () => clearTimeout(t); }, []);
+  useEffect(() => { onSolo?.(solo); }, [solo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => onSolo?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (phase === 'docked') return undefined;
-    const t1 = setTimeout(() => { measure(); setPhase('fly'); }, TX_CENTER_MS);
-    const t2 = setTimeout(() => setPhase('docked'), TX_CENTER_MS + TX_FLY_MS);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (solo && minDone && (lvl >= 3 || queued)) { from.current = el.current?.getBoundingClientRect().top ?? null; setSolo(false); }
+  }, [solo, minDone, lvl]);
+  // Sube desde donde estaba (FLIP): se mide la nueva posición y se anima la diferencia
+  useLayoutEffect(() => {
+    const n = el.current; if (solo || !n || from.current == null) return;
+    const dy = from.current - n.getBoundingClientRect().top; from.current = null; if (!dy) return;
+    n.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], { duration: TX_RISE_MS, easing: 'cubic-bezier(.6,0,.2,1)' });
+  }, [solo]);
 
   const body = (
     <>
       <div className="tx-hd"><span className="tx-eyebrow">Transmisión a Maic</span>{a.maicId && <span className="mono tx-id">{a.maicId}</span>}</div>
-      <div className="tx-title"><span className="tx-orb" aria-hidden><i /><i /><b /></span><div><b>{lvl >= 4 ? 'Despachada por Maic' : lvl >= 3 ? 'Maic recibió la alerta' : 'Enviando a Maic'}</b><small>{a.plate ? `Placa ${a.plate.listed}` : KIND_LABEL[a.kind]} · {a.id}</small></div></div>
-      <div className="tx-beam" aria-hidden><i style={{ width: `${(done / 4) * 100}%` }} /></div>
+      <div className="tx-title"><span className="tx-orb" aria-hidden><i /><i /><b /></span><div><b>{queued ? 'En cola: Maic sin conexión' : lvl >= 5 ? 'Unidad en el lugar' : lvl >= 4 ? 'Despachada por Maic' : lvl >= 3 ? 'Maic recibió la alerta' : 'Enviando a Maic'}</b><small>{a.plate ? `Placa ${a.plate.listed}` : KIND_LABEL[a.kind]} · {a.id}</small></div></div>
+      <div className="tx-beam" aria-hidden><i style={{ width: `${(done / 5) * 100}%` }} /></div>
       <ol className="tx-steps">
         {steps.map((s, i) => <li key={i} className={i < done ? 'done' : i === done ? 'now' : ''}><span className="tx-b" aria-hidden /><div><div>{s.t}</div><small>{s.s}</small></div></li>)}
       </ol>
     </>
   );
-  const SCALE = 1.18;
-  const floatStyle: CSSProperties | undefined = geo ? (phase === 'center'
-    ? { width: geo.w, left: geo.cx - (geo.w * SCALE) / 2, top: geo.cy - (geo.h * SCALE) / 2, transform: `scale(${SCALE})` }
-    : { width: geo.w, left: geo.dx, top: geo.dy, transform: 'scale(1)', transition: `left ${TX_FLY_MS}ms cubic-bezier(.6,0,.2,1), top ${TX_FLY_MS}ms cubic-bezier(.6,0,.2,1), transform ${TX_FLY_MS}ms cubic-bezier(.6,0,.2,1)` }) : undefined;
-  return (
-    <>
-      <section ref={dock} className={`tx ${lvl >= 4 ? 'ok' : ''} ${phase !== 'docked' ? 'tx-hold' : ''}`} role="status" aria-live="polite">{body}</section>
-      {phase !== 'docked' && geo && createPortal(
-        <>
-          <div className={`tx-scrim ${phase}`} aria-hidden />
-          <section className={`tx tx-float ${phase} ${lvl >= 4 ? 'ok' : ''}`} style={floatStyle} aria-hidden>{body}</section>
-        </>, document.body)}
-    </>
-  );
+  return <section ref={el} className={`tx ${lvl >= 4 ? 'ok' : ''} ${solo ? 'tx-solo' : ''}`} role="status" aria-live="polite">{body}</section>;
 }
 
 /* Alerta de placa, con jerarquía:
@@ -432,4 +432,22 @@ function useInspect(sub: string) {
     <ImageViewer ev={open.ev} title={open.title} sub={sub} rotation={rot[open.key] ?? 0} onRotate={(d) => setR(open.key, d)} onClose={() => setOpen(null)} />
   );
   return { thumb, viewer };
+}
+
+/* Alerta ya gestionada: arriba de todo, un sello de "resuelta" con quién, cuándo y cómo terminó.
+   Confirmada: check verde (y el estado en Maic). Descartada: check gris con el motivo. */
+function Resolved({ a }: { a: Alert }) {
+  const ok = a.review === 'confirmada';
+  const at = a.timeline.find((t) => t.label.startsWith(ok ? 'Confirmada' : 'Descartada'))?.at;
+  const maic = a.maic === 'despachada' ? 'despachada por Maic' : a.maic === 'cerrada' ? 'cerrada en Maic' : a.maic === 'recibida' ? 'recibida en Maic' : 'enviada a Maic';
+  return (
+    <section className={`resolved ${ok ? 'ok' : 'off'}`} role="status">
+      <span className="rs-check" aria-hidden><svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 6.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+      <div className="rs-txt">
+        <span className="rs-eyebrow">Resuelta</span>
+        <b>{ok ? `Confirmada y ${maic}` : `Descartada: ${a.discardReason ?? 'sin motivo'}`}</b>
+        <small>{a.reviewedBy ? `por ${a.reviewedBy}` : ''}{at ? ` · ${dateTime(at)}` : ''}</small>
+      </div>
+    </section>
+  );
 }

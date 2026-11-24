@@ -71,7 +71,7 @@ export function AuditSheet({ action = '' }: { action?: string }) {
           </tbody>
         </table>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, color: 'var(--ink-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 'var(--fs-sm)', color: 'var(--ink-subtle)' }}>
         <span>{rows.length} registros</span>
         {rows.length > PAGE && <>
           <button className="btn ghost xs" style={{ marginLeft: 'auto' }} disabled={page === 0} onClick={() => setPage(page - 1)}><Icon name="chevron_left" />Anteriores</button>

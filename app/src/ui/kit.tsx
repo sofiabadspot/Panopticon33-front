@@ -24,7 +24,14 @@ export function SeverityChip({ severity }: { severity: Severity }) {
 export function StatusChip({ alert }: { alert: Alert }) {
   if (alert.review === 'por_revisar') return <span className="chip outline">{REVIEW_LABEL.por_revisar}</span>;
   if (alert.review === 'descartada') return <span className="chip">Descartada</span>;
-  return <span className="chip ok"><Icon name={alert.maic === 'despachada' || alert.maic === 'cerrada' ? 'done_all' : 'check'} />{alert.maic ? MAIC_LABEL[alert.maic] : 'Confirmada'}</span>;
+  /* Avance en Maic, cada paso distinto (el verde queda solo para "despachada": hay unidades en camino).
+     Enviada: en curso (punto que late) · Recibida: Maic acusó recibo (borde) · Despachada: verde ·
+     Cerrada: terminada, gris. Confirmada sin Maic: como enviada. */
+  const m = alert.maic ?? 'enviada';
+  if (m === 'despachada') return <span className="chip ok"><Icon name="done_all" />{MAIC_LABEL.despachada}</span>;
+  if (m === 'cerrada') return <span className="chip closed"><Icon name="check" />{MAIC_LABEL.cerrada}</span>;
+  if (m === 'recibida') return <span className="chip received"><Icon name="check" />{MAIC_LABEL.recibida}</span>;
+  return <span className="chip sending"><span className="pulse-dot" aria-hidden />{alert.maic ? MAIC_LABEL.enviada : 'Confirmada'}</span>;
 }
 
 export function KindIcon({ alert }: { alert: Alert }) {
@@ -91,4 +98,55 @@ export function download(name: string, text: string, type = 'text/csv;charset=ut
   const url = URL.createObjectURL(new Blob(['﻿' + text], { type }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ---------- Estados de una lista: vacía y cargando ----------
+   Vacía: un ícono, qué pasa en una frase y, si hay, qué se puede hacer. Nunca se ve como un error.
+   Cargando: filas grises con la misma forma que las reales, para que nada salte cuando llegan. */
+export function EmptyState({ icon, title, children, action, tone }: { icon: string; title: string; children?: ReactNode; action?: ReactNode; tone?: 'ok' | 'warn' }) {
+  return (
+    <div className={`empty-state ${tone ?? ''}`} role="status">
+      <span className="es-ic" aria-hidden><Icon name={icon} /></span>
+      <b>{title}</b>
+      {children && <p>{children}</p>}
+      {action}
+    </div>
+  );
+}
+export function SkeletonRows({ n = 4, thumb = false }: { n?: number; thumb?: boolean }) {
+  return (
+    <div className="skel-list" aria-busy="true" aria-label="Cargando">
+      {Array.from({ length: n }, (_, i) => (
+        <div key={i} className={`skel-row ${thumb ? 'sk-with-img' : ''}`}>
+          {thumb && <i className="skel sk-img" />}
+          <span><i className="skel sk-t" style={{ width: `${78 - (i % 3) * 14}%` }} /><i className="skel sk-s" />{thumb && <i className="skel sk-s short" />}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Panel izquierdo mientras llegan los datos: la misma forma que el panel real (filtros, cifras, filas). */
+export function PanelSkeleton({ kind }: { kind: 'lista' | 'imagenes' | 'estado' }) {
+  return (
+    <div className="pb sk-panel" aria-busy="true" aria-label="Cargando">
+      {kind === 'estado'
+        ? <div className="kpis sk-kpis">{[0, 1, 2, 3].map((i) => <div key={i} className="kpi"><i className="skel sk-v" /><i className="skel sk-s" /></div>)}</div>
+        : <div className="sk-chips">{[64, 86, 82, 52].map((w, i) => <i key={i} className="skel sk-chip" style={{ width: w }} />)}</div>}
+      <div className="box flush"><SkeletonRows n={kind === 'estado' ? 4 : 6} thumb={kind === 'imagenes'} /></div>
+    </div>
+  );
+}
+/** Ficha lateral mientras llegan los datos: encabezado, imagen, cifras y filas. */
+export function SheetSkeleton() {
+  return (
+    <div className="sk-sheet" aria-busy="true" aria-label="Cargando la ficha">
+      <div className="sk-head"><i className="skel sk-s" style={{ width: 120 }} /><i className="skel sk-title" /><i className="skel sk-s" style={{ width: 180 }} /></div>
+      <div className="pb">
+        <i className="skel sk-media" />
+        <div className="kpis sk-kpis">{[0, 1].map((i) => <div key={i} className="kpi"><i className="skel sk-v" /><i className="skel sk-s" /></div>)}</div>
+        <div className="box flush"><SkeletonRows n={3} /></div>
+      </div>
+    </div>
+  );
 }

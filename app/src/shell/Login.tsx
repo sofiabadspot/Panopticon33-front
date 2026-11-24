@@ -4,10 +4,10 @@
    2. Mundo: el globo con El Salvador encendido, la ficha del centro de mando y el botón para entrar.
    3. Entrada: el globo se acerca a El Salvador y se abre la consola.
    El rol no se elige aquí: llega de la cuenta (Keycloak) y, en la demo, se cambia dentro de la consola. */
-import { useRef, useState, type FormEvent, type RefObject } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
 import { useApi } from '../api';
 import { Icon } from '../ui/kit';
-import { P33Logo } from '../ui/Logo';
+import { BrandLockup, P33Logo } from '../ui/Logo';
 import { useSession } from './session';
 import { WorldGlobe } from './WorldGlobe';
 
@@ -17,6 +17,8 @@ export function Login() {
   const { role, signIn } = useSession();
   const cameras = useApi((s) => s.cameras);
   const maic = useApi((s) => s.maic);
+  const units = useApi((s) => s.units);
+  const zones = useApi((s) => s.zones);
   const [phase, setPhase] = useState<Phase>('login');
   const [userName, setUserName] = useState('');
   const [password, setPassword] = useState('');
@@ -77,14 +79,31 @@ export function Login() {
             {real && <WorldCard cameras={cameras.length} anchorRef={cardRef} />}
           </>
         )}
+        {/* Portada del prototipo de Julio: firma, título, cifras, ficha sobre San Salvador, botón y línea de estado. */}
         {(phase === 'world' || phase === 'zoom') && (<>
-          <header className="world-top"><P33Logo size={22} /></header>
+          <header className="world-top">
+            <BrandLockup size={20} />
+            <h1 className="world-title">Presencia continua sobre el territorio.</h1>
+            <p className="world-sub">Panopticon observa cada cámara las 24 horas, detecta lo que importa y lo convierte en acción a través de MAIC.</p>
+          </header>
+          <dl className="world-stats">
+            {[[String(cameras.length), 'Cámaras del sector piloto'], ['24/7', 'Presencia de Panopticon'], ['1.4 s', 'De la detección a la alerta'], ['3', 'Capacidades: multitudes, placas, rostros']].map(([v, l]) => (
+              <div key={l} className="world-stat"><dt>{v}</dt><dd>{l}</dd></div>
+            ))}
+          </dl>
           <div className="world-cta">
             <button type="button" className="btn primary lg world-go" onClick={enter} disabled={phase !== 'world'} autoFocus>
-              Entrar al centro de mando<Icon name="arrow_forward" />
+              <Icon name="radar" />Entrar al centro de mando
             </button>
-            <span className="glass world-maic mono"><i className={`live-dot ${maic.connected ? '' : 'off'}`} aria-hidden="true" />{maic.connected ? 'MAIC conectado' : 'MAIC sin conexión'}</span>
+            <span className="world-note">Activa el audio de la consola</span>
           </div>
+          <Ticker lines={[
+            maic.connected ? `MAIC conectado — ${units.length} unidades PNC visibles` : 'MAIC sin conexión',
+            `Salvador del Mundo — ${cameras.length} cámaras sincronizadas`,
+            `${zones.length} zonas vigiladas — conteo de personas en vivo`,
+            'Lectura de placas activa',
+            'SPOTBOX en sitio — 4 de 4 en línea',
+          ]} live={maic.connected} />
         </>)}
       </div>
 
@@ -92,7 +111,8 @@ export function Login() {
       {(phase === 'login' || phase === 'loading') && (
         <main className="login-main">
           <form className="login-modal glass" onSubmit={submit} noValidate aria-busy={phase === 'loading'} aria-labelledby="lg-title">
-            <div className="login-brand"><P33Logo size={30} /></div>
+            {/* Dentro de la tarjeta, solo el producto; la firma de SPOTVISION va debajo, fuera de la tarjeta. */}
+            <div className="login-brand"><P33Logo size={24} /></div>
             <div className="login-head">
               <span className="login-kicker mono">Acceso restringido</span>
               <h1 id="lg-title">Ingresar al centro de mando</h1>
@@ -126,8 +146,23 @@ export function Login() {
               {phase === 'login' && <Icon name="arrow_forward" />}
             </button>
           </form>
+          <footer className="login-endorse">
+            <span className="mono">Desarrollado por</span>
+            <img src="/assets/logo-spotvision.png" alt="SPOTVISION" />
+          </footer>
         </main>
       )}
+    </div>
+  );
+}
+
+/** Línea de estado de la portada: cambia de mensaje cada 3,2 s. */
+function Ticker({ lines, live }: { lines: string[]; live: boolean }) {
+  const [i, setI] = useState(0);
+  useEffect(() => { const t = window.setInterval(() => setI((n) => n + 1), 3200); return () => window.clearInterval(t); }, []);
+  return (
+    <div className="world-ticker glass" aria-live="polite">
+      <i className={`live-dot ${live ? '' : 'off'}`} aria-hidden="true" /><span>{lines[i % lines.length]}</span>
     </div>
   );
 }

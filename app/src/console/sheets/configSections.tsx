@@ -40,7 +40,7 @@ export function Cameras({ onPick }: { onPick?: (c: Camera) => void }) {
           <button className={filter === 'problemas' ? 'on' : ''} onClick={() => setFilter('problemas')}>Con problemas<b>{cameras.filter((c) => c.status !== 'operativa').length}</b></button>
           <button className={filter === 'todas' ? 'on' : ''} onClick={() => setFilter('todas')}>Todas<b>{cameras.length}</b></button>
         </div>
-        <span className="dim" style={{ fontSize: 12, marginLeft: 'auto' }}>{cameras.filter((c) => c.status === 'operativa').length} operativas de {cameras.length}</span>
+        <span className="dim" style={{ fontSize: 'var(--fs-sm)', marginLeft: 'auto' }}>{cameras.filter((c) => c.status === 'operativa').length} operativas de {cameras.length}</span>
       </div>
       <div className="panel flush tbl-wrap">
         <table className="tbl">
@@ -64,7 +64,7 @@ export function Cameras({ onPick }: { onPick?: (c: Camera) => void }) {
       </div>
       {presetFor && (
         <Dialog title={`Presets de ${presetFor.id}`} onClose={() => setPresetFor(null)}>
-          <p className="muted" style={{ margin: 0, fontSize: 13 }}>En movimiento la cámara solo detecta: no mide la zona ni lee placas. Elige el preset conocido al que debe volver.</p>
+          <p className="muted" style={{ margin: 0, fontSize: 'var(--fs-md)' }}>En movimiento la cámara solo detecta: no mide la zona ni lee placas. Elige el preset conocido al que debe volver.</p>
           {presetFor.presets.map((p) => (
             <button key={p} className="check" onClick={() => { setCameraPreset(presetFor.id, p, user); toast(`${presetFor.id} en ${p}: la zona vuelve a medirse`); setPresetFor(null); }}>
               <Icon name="center_focus_strong" /><span>{p}</span>
@@ -91,7 +91,7 @@ export function Rules() {
           <tbody>
             {rules.map((r) => (
               <tr key={r.id}>
-                <td><b style={{ fontWeight: 500 }}>{r.name}</b><div className="dim mono" style={{ fontSize: 11 }}>{r.id}</div></td>
+                <td><b style={{ fontWeight: 500 }}>{r.name}</b><div className="dim mono" style={{ fontSize: 'var(--fs-xs)' }}>{r.id}</div></td>
                 <td>{KIND_LABEL[r.kind]}</td>
                 <td className="dim">{r.scope}</td>
                 <td className="r mono">{fmt(r.threshold ?? 0)} <span className="dim" style={{ fontFamily: 'var(--font-sans)' }}>{r.unit}</span></td>
@@ -117,7 +117,7 @@ export function Rules() {
             <div className="field"><label htmlFor="rt">Umbral ({edit.unit})</label><input id="rt" inputMode="decimal" className="fld mono" value={v.threshold} onChange={(e) => setV({ ...v, threshold: e.target.value })} /></div>
             <div className="field"><label htmlFor="rp">Persistencia (min)</label><input id="rp" inputMode="numeric" className="fld mono" value={v.persistenceMin} onChange={(e) => setV({ ...v, persistenceMin: e.target.value })} /></div>
           </div>
-          <span className="hint dim" style={{ fontSize: 12 }}>Guardar un umbral nuevo lo marca como fijado por el Ministerio.</span>
+          <span className="hint dim" style={{ fontSize: 'var(--fs-sm)' }}>Guardar un umbral nuevo lo marca como fijado por el Ministerio.</span>
         </Dialog>
       )}
     </div>
@@ -170,13 +170,13 @@ export function PoliceSource() {
           <label className="toggle"><input type="checkbox" checked={on} onChange={(e) => setPoliceSource(e.target.checked, user)} />Usar la fuente de ubicación (demo: simula tener o no acceso)</label>
           <dl className="details" style={{ maxWidth: 480 }}>
             <dt>Unidades reportando</dt><dd className="mono">{units.length - stale.length - unknown.length}</dd>
-            <dt>"En la zona" si está a menos de</dt><dd>200 m durante 5 min <span className="chip media" style={{ height: 18, fontSize: 10 }}>Supuesto</span></dd>
+            <dt>"En la zona" si está a menos de</dt><dd>200 m durante 5 min <span className="chip media" style={{ height: 18, fontSize: 'var(--fs-2xs)' }}>Supuesto</span></dd>
           </dl>
         </div>
       </section>
       {unknown.map((u) => <div key={u.id} className="callout warn"><Icon name="warning" /><span className="grow"><b>Unidad sin identificar.</b> Una posición llega sin identificador oficial; se muestra como desconocida hasta que se asocie.</span></div>)}
       {stale.map((u) => <div key={u.id} className="callout"><Icon name="schedule" /><span className="grow"><b className="mono">{u.id}</b> sin reportar {ago(u.lastReportAt, now)}: se muestra atenuada y no cuenta en el índice.</span></div>)}
-      <p className="dim" style={{ fontSize: 12, margin: 0 }}>Las posiciones de las unidades solo se usan para el despliegue, no para evaluar al personal.</p>
+      <p className="dim" style={{ fontSize: 'var(--fs-sm)', margin: 0 }}>Las posiciones de las unidades solo se usan para el despliegue, no para evaluar al personal.</p>
     </div>
   );
 }
@@ -192,8 +192,8 @@ export function Users() {
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
-                <td>{u.name}<div className="dim mono" style={{ fontSize: 11 }}>{u.id}</div></td>
-                <td>{ROLE_LABEL[u.role]} <span className="dim mono" style={{ fontSize: 11 }}>{u.role}</span></td>
+                <td>{u.name}<div className="dim mono" style={{ fontSize: 'var(--fs-xs)' }}>{u.id}</div></td>
+                <td>{ROLE_LABEL[u.role]} <span className="dim mono" style={{ fontSize: 'var(--fs-xs)' }}>{u.role}</span></td>
                 <td>{u.territory}</td>
                 <td><label className="toggle"><input type="checkbox" checked={u.active} disabled={u.id === user.id} onChange={(e) => setUserActive(u.id, e.target.checked, user)} /><span className="sr">Activo</span></label></td>
               </tr>
