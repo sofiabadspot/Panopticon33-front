@@ -12,7 +12,8 @@ import { cameraClip } from '../../api/video';
 import { ago, dateTime, hhmm, pct } from '../../api/format';
 import { FACIAL_DISCARD, FACIAL_LISTS, bestDetection, confirmFacial, discardFacial, lastDetection, requestFieldCheck, scoreMeaning, useFacial, type FacialDetection, type FacialList, type FacialMatch } from '../../api/facial';
 import { useSession } from '../../shell/session';
-import { FacialDossier, Proofs, Shot, Viewer, proofItem, type ViewItem } from './FacialDossier';
+import { FacialDossier, Proofs, Shot, proofItem, type ViewItem } from './FacialDossier';
+import { ImageViewer } from '../../ui/ImageInspect';
 import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
 import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
@@ -106,15 +107,15 @@ export function FacialSheet({ id }: { id: string }) {
   const [dossier, setDossier] = useState(false);
   /** El recuadro de video muestra la grabación de la captura o la cámara en vivo, sin salir de la ficha. */
   const [live, setLive] = useState(false);
-  /** Visor grande abierto: índice de la imagen (o del respaldo) que se ve. */
-  const [view, setView] = useState<number | null>(null);
-  const [docView, setDocView] = useState<number | null>(null);
+  /** Visor de imagen (el mismo de toda la consola, sobre el mapa) con varias para navegar. */
+  const [view, setView] = useState<{ items: ViewItem[]; i: number } | null>(null);
+  const [rot, setRot] = useState(0);
 
   /* Recorrido de la persona: cada detección en el mapa, en orden, con su captura. Queda en la bitácora. */
   const [trace, setTrace] = useState(false);
   // Al abrir la coincidencia, el recorrido (o el punto, si hay una sola detección) arranca solo. Queda en la bitácora.
   useEffect(() => {
-    setDiscarding(false); setTrace(!!m); setDossier(false); setLive(false); setView(null); setDocView(null);
+    setDiscarding(false); setTrace(!!m); setDossier(false); setLive(false); setView(null);
     // Una sola vez por coincidencia en la sesión (volver desde la cámara no repite el registro).
     if (m && !traced.has(m.id)) { traced.add(m.id); audit(user, 'Ver recorrido de persona', m.listRef, 'Al abrir la coincidencia'); }
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -152,6 +153,11 @@ export function FacialSheet({ id }: { id: string }) {
     <>
       <SheetHead kicker={<><span className="mono">{m.id}</span>·<span>{ago(d.at, now)}</span></>} title={<>Coincidencia {pct(best.score)} <span className={`chip ${meaning.band === 'Alta' ? 'ok' : meaning.band === 'Baja' ? 'media' : ''}`}>{meaning.band}</span></>} sub={`${m.name} · ${m.reason}`}
         aside={statusChip(m)} />
+      {view && view.items[view.i] && (
+        <ImageViewer key={view.i} ev={{ type: 'pendiente', caption: view.items[view.i].title }} title={`${view.items[view.i].tag} · ${view.items[view.i].title}`} sub={view.items[view.i].sub}
+          rotation={rot} onRotate={setRot} onClose={() => { setView(null); setRot(0); }}
+          nav={{ index: view.i, count: view.items.length, onGo: (i) => { setView({ ...view, i }); setRot(0); } }} />
+      )}
       <div className="pb">
         {/* Video primero: el andar y los gestos son lo que más ayuda a decidir. */}
         {/* Grabación de la mejor captura o la cámara en vivo donde la vieron por última vez, ahí mismo. */}
@@ -170,14 +176,12 @@ export function FacialSheet({ id }: { id: string }) {
         {/* Todas las imágenes juntas: las capturas de hoy y las fotos de la lista. */}
         <div className="fc-gallery">
           {imgs.map((x, i) => (
-            <button key={i} className={`fc-tile ${x.tag === 'Lista' ? 'lista' : ''}`} onClick={() => setView(i)} aria-label={`Ver en grande: ${x.tag} · ${x.title}`}>
+            <button key={i} className={`fc-tile ${x.tag === 'Lista' ? 'lista' : ''}`} onClick={() => setView({ items: imgs, i })} aria-label={`Ver en grande: ${x.tag} · ${x.title}`}>
               <span className="fc-ph"><Shot /></span>
-              <span className={`chip ${x.tag === 'Lista' ? 'ok' : ''}`}>{x.title}</span>
+              <span className="fc-cap"><b>{x.tag}</b>{x.title}</span>
             </button>
           ))}
         </div>
-        {view != null && <Viewer standalone items={imgs} index={view} onIndex={setView} onClose={() => setView(null)} compare={imgs.find((x) => x.tag === 'Lista') ?? null} />}
-        {docView != null && <Viewer standalone items={m.docs.map(proofItem)} index={docView} onIndex={setDocView} onClose={() => setDocView(null)} />}
 
         <ul className="fc-facts">
           <li className={trip.ok ? '' : 'warn'}><Icon name="route" /><span>{m.detections.length} {m.detections.length === 1 ? 'detección' : 'detecciones'} hoy en {cams} {cams === 1 ? 'cámara' : 'cámaras'}{trip.ok ? '' : ' · el recorrido no cierra'}</span>
@@ -205,7 +209,7 @@ export function FacialSheet({ id }: { id: string }) {
               <dt>Agente cerca</dt><dd>{m.agent}</dd>
               <dt>Procesado en</dt><dd className="mono">{m.spotbox}</dd>
             </dl>
-            {m.docs.length > 0 && <div style={{ marginTop: 12 }}><Proofs items={m.docs} onOpen={setDocView} /></div>}
+            {m.docs.length > 0 && <div style={{ marginTop: 12 }}><Proofs items={m.docs} onOpen={(i) => setView({ items: m.docs.map(proofItem), i })} /></div>}
           </div>
         </div>
 

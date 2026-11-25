@@ -1942,7 +1942,11 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .fc-gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
 .fc-tile { position: relative; display: block; padding: 0; border: 0; background: none; cursor: zoom-in; }
 .fc-tile .fc-ph { width: 100%; aspect-ratio: 3 / 4; }
-.fc-tile .chip { position: absolute; left: 4px; top: 4px; max-width: calc(100% - 8px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-tile { display: grid; gap: 4px; min-width: 0; text-align: left; }
+.fc-cap { display: grid; min-width: 0; font-size: var(--fs-2xs); color: var(--ink-muted); }
+.fc-cap b { font-weight: 500; color: var(--ink); }
+.fc-cap, .fc-cap b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fc-tile.lista .fc-cap b { color: var(--status-positive); }
 .fc-tile:hover .fc-ph, .fc-tile:focus-visible .fc-ph { border-color: var(--border-control); }
 .fc-tile:focus-visible { outline: none; }
 .fc-facts { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
@@ -1975,3 +1979,5 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .pv-t small { font-size: var(--fs-2xs); color: var(--ink-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cn-row.on { border-radius: var(--radius-xs); background: color-mix(in srgb, var(--fc-accent) 6%, transparent); }
 .cn-open { display: grid; gap: 8px; padding: 4px 8px 8px 21px; }
+.iv-nav { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: var(--fs-xs); color: var(--ink-muted); }
+.pv { min-width: 0; } .pv-t { min-width: 0; }

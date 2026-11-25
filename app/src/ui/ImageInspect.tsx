@@ -66,8 +66,10 @@ export function Inspectable({ ev, tag, title, rotation, onRotate, onExpand, clas
 }
 
 const MIN = 1, MAX = 6;
-export function ImageViewer({ ev, title, sub, rotation, onRotate, onClose }: {
+/** `nav` (opcional): varias imágenes en el mismo visor; se pasa de una a otra con ‹ › o las flechas. */
+export function ImageViewer({ ev, title, sub, rotation, onRotate, onClose, nav }: {
   ev: Ev; title: string; sub?: string; rotation: number; onRotate: (deg: number) => void; onClose: () => void;
+  nav?: { index: number; count: number; onGo: (i: number) => void };
 }) {
   const host = typeof document !== 'undefined' ? document.querySelector('.mapwrap') : null;
   const [z, setZ] = useState(1);
@@ -116,6 +118,7 @@ export function ImageViewer({ ev, title, sub, rotation, onRotate, onClose }: {
       else if (e.key === '-') { e.preventDefault(); zoomTo(z / 1.4); }
       else if (e.key === 'r' || e.key === 'R') { e.preventDefault(); e.stopPropagation(); turn(e.shiftKey ? -90 : 90); }
       else if (e.key === '0') { e.preventDefault(); reset(); }
+      else if (nav && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); e.stopPropagation(); nav.onGo((nav.index + (e.key === 'ArrowRight' ? 1 : nav.count - 1)) % nav.count); }
     };
     window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true);
   });
@@ -136,6 +139,13 @@ export function ImageViewer({ ev, title, sub, rotation, onRotate, onClose }: {
     <section className="iv" role="dialog" aria-label={`Imagen ampliada: ${title}`}>
       <header className="iv-hd">
         <div className="iv-title"><span className="iv-live" aria-hidden /><b>{title}</b>{sub && <span>{sub}</span>}</div>
+        {nav && nav.count > 1 && (
+          <div className="iv-nav" role="group" aria-label="Otras imágenes">
+            <button type="button" className="iv-dbtn" onClick={() => nav.onGo((nav.index + nav.count - 1) % nav.count)} aria-label="Imagen anterior" title="Anterior (←)"><Icon name="chevron_left" /></button>
+            <span className="mono" aria-live="polite">{nav.index + 1} / {nav.count}</span>
+            <button type="button" className="iv-dbtn" onClick={() => nav.onGo((nav.index + 1) % nav.count)} aria-label="Imagen siguiente" title="Siguiente (→)"><Icon name="chevron_right" /></button>
+          </div>
+        )}
         <button type="button" className="iv-close" onClick={onClose} aria-label="Cerrar imagen ampliada" title="Cerrar (Esc)"><Icon name="close" /><span className="kbd">Esc</span></button>
       </header>
 
