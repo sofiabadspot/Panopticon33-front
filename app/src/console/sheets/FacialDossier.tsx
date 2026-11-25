@@ -105,10 +105,11 @@ function Connections({ m, now }: { m: FacialMatch; now: number }) {
           {lay.pairs.map(({ a, b }) => {
             const p = lay.leaves[a], q = lay.leaves[b];
             const on = focus === p.l.id || focus === q.l.id;
+            if (!on) return null;
             const mx = (p.x + q.x) / 2 + (cy - (p.y + q.y) / 2) * 0.25, my = (p.y + q.y) / 2 + ((p.x + q.x) / 2 - cx) * -0.08;
-            return <path key={`x${a}-${b}`} d={`M${p.x} ${p.y} Q${mx} ${my} ${q.x} ${q.y}`} className={`cx-co ${on ? 'on' : ''} ${shown(p.l.kind) && shown(q.l.kind) ? '' : 'dim'}`} />;
+            return <path key={`x${a}-${b}`} d={`M${p.x} ${p.y} Q${mx} ${my} ${q.x} ${q.y}`} className={`cx-co ${shown(p.l.kind) && shown(q.l.kind) ? '' : 'dim'}`} />;
           })}
-          {lay.hubs.map((h) => <line key={'h' + h.k} x1={cx} y1={cy} x2={h.x} y2={h.y} className={`cx-trunk ${shown(h.k) ? '' : 'dim'}`} />)}
+          {lay.hubs.map((h) => <line key={'h' + h.k} x1={cx} y1={cy} x2={h.x} y2={h.y} className={`cx-trunk ${l?.kind === h.k ? 'on' : ''} ${shown(h.k) ? '' : 'dim'}`} />)}
           {lay.leaves.map((n) => (
             <line key={'e' + n.l.id} x1={n.hx} y1={n.hy} x2={n.x} y2={n.y} style={{ strokeWidth: 0.8 + n.l.weight * 2.6 }}
               className={`cx-edge ${focus === n.l.id ? 'on' : ''} ${shown(n.l.kind) ? '' : 'dim'}`} />
@@ -136,13 +137,13 @@ function Connections({ m, now }: { m: FacialMatch; now: number }) {
                   <circle r={10 + n.l.weight * 6} className="cx-dotc" />
                   <foreignObject x="-8" y="-8" width="16" height="16"><Icon name={KIND[n.l.kind].icon} /></foreignObject>
                   <text className="cx-lbl" textAnchor={n.left ? 'end' : 'start'} x={n.left ? -24 : 24} dy="-1">{short(n.l.label)}</text>
-                  <text className="cx-lbl2" textAnchor={n.left ? 'end' : 'start'} x={n.left ? -24 : 24} dy="12">{n.l.events.length} {n.l.events.length === 1 ? 'fecha' : 'fechas'}</text>
+                  <text className="cx-lbl2" textAnchor={n.left ? 'end' : 'start'} x={n.left ? -24 : 24} dy="12">{n.l.sub.length > 34 ? n.l.sub.slice(0, 33) + '…' : n.l.sub}</text>
                 </g>
               </g>
             );
           })}</g>
         </svg>
-        <p className="ds-hint">Tocá una conexión para ver su ficha. Las líneas punteadas unen conexiones que aparecen el mismo día.</p>
+        <p className="ds-hint">Tocá una conexión para ver su ficha a la derecha. La línea punteada marca con qué otras estuvo el mismo día.</p>
       </div>
 
       {l && (

@@ -1866,16 +1866,16 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .cx { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; }
 .cx-main { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; }
 .cx-graph { width: 100%; height: 100%; min-height: 0; overflow: visible; }
-.cx-trunk { stroke: color-mix(in srgb, var(--fc-accent) 45%, transparent); stroke-width: 1.5; }
-.cx-edge { stroke: color-mix(in srgb, var(--ink) 26%, transparent); stroke-dasharray: 5 5; animation: cxflow 1.8s linear infinite; transition: stroke .2s, opacity .2s; }
-.cx-edge.on { stroke: var(--fc-accent); }
-.cx-co { fill: none; stroke: color-mix(in srgb, var(--fc-accent) 30%, transparent); stroke-width: 1; stroke-dasharray: 2 4; transition: stroke .2s, opacity .2s; }
-.cx-co.on { stroke: var(--fc-accent); stroke-width: 1.5; }
+.cx-trunk { stroke: color-mix(in srgb, var(--ink) 22%, transparent); stroke-width: 1.5; }
+.cx-trunk.on { stroke: var(--fc-accent); }
+.cx-edge { stroke: color-mix(in srgb, var(--ink) 20%, transparent); transition: stroke .2s, opacity .2s; }
+.cx-edge.on { stroke: var(--fc-accent); stroke-dasharray: 5 5; animation: cxflow 1.8s linear infinite; }
+.cx-co { fill: none; stroke: color-mix(in srgb, var(--fc-accent) 70%, transparent); stroke-width: 1.2; stroke-dasharray: 3 4; }
 .cx-graph .dim { opacity: .18; }
 .cx-ring { fill: var(--surface); stroke: var(--fc-accent); stroke-width: 1.5; }
 .cx-pulse { fill: none; stroke: var(--fc-accent); stroke-width: 1; transform-box: fill-box; transform-origin: center; animation: cxpulse 2.4s ease-out infinite; }
-.cx-hub circle { fill: color-mix(in srgb, var(--fc-accent) 14%, var(--surface)); stroke: var(--fc-accent); stroke-width: 1; }
-.cx-hub foreignObject { color: var(--fc-accent); pointer-events: none; }
+.cx-hub circle { fill: var(--surface); stroke: var(--border-control); stroke-width: 1; }
+.cx-hub foreignObject { color: var(--ink-muted); pointer-events: none; }
 .cx-hub text { fill: var(--ink-subtle); font: 600 9px var(--font-mono); letter-spacing: .08em; }
 .cx-node > g { cursor: pointer; outline: none; }
 .cx-hit { fill: transparent; }
