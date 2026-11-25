@@ -1,12 +1,11 @@
 /* Expediente de una persona a pantalla completa (verificación facial), para mando y para mostrar la
-   plataforma. Arriba: quién es, la decisión y la franja de la cámara al agente (tiempos, fuentes cruzadas
-   y garantías). Abajo: el mapa de la persona (ver PersonMap): la cara al centro y lo que se juntó saliendo de ella
+   plataforma. Arriba: quién es y la decisión. Abajo: el mapa de la persona (ver PersonMap): la cara al centro y lo que se juntó saliendo de ella
    por categoría y por fecha, con buscador y el detalle al costado. Todo se abre en grande
    y se recorre con las flechas. Esc cierra el expediente (no la ficha). Todo es de ejemplo. */
-import { Fragment, type ReactNode, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { type ReactNode, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { dateShort, hhmm, pct } from '../../api/format';
-import { FACIAL_LISTS, FACIAL_SOURCES, TRAIT_GROUPS, lastDetection, type FacialMatch, type Proof, type ProofKind, type TraitGroup } from '../../api/facial';
+import { FACIAL_LISTS, TRAIT_GROUPS, lastDetection, type FacialMatch, type Proof, type ProofKind, type TraitGroup } from '../../api/facial';
 import { Artifact, type Card } from './EvidenceWall';
 import { PersonMap } from './PersonMap';
 import { Icon, useNow } from '../../ui/kit';
@@ -115,11 +114,8 @@ function ZoomReal({ src, alt }: { src: string; alt: string }) {
 }
 
 
-/** De qué institución sale un respaldo (las cámaras y el SpotBox cuentan como "Cámaras"). */
-const institution = (src: string) => (/^(CAM-|SM-|SPOTBOX|SpotBox)/.test(src) ? 'Cámaras' : src.startsWith('Juzgado') ? 'Juzgado' : src);
-
-/** Franja para mostrar la plataforma: cuánto tardó de la cámara al agente, de qué instituciones salen
-    los datos y las garantías. */
+/** Para mostrar la plataforma, en el panel de la persona: la línea de tiempo de la cámara al agente y las
+    garantías. */
 function Showcase({ m, now }: { m: FacialMatch; now: number }) {
   const d = lastDetection(m);
   const confirmed = m.timeline.find((x) => x.label.startsWith('Identidad confirmada'));
@@ -133,27 +129,20 @@ function Showcase({ m, now }: { m: FacialMatch; now: number }) {
   ];
   const secs = (ms: number) => (ms < 60000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s`);
   const total = confirmed ? confirmed.at + 3000 - d.at : null;
-  const counts = new Map<string, number>();
-  [...m.docs, ...m.links.flatMap((l) => l.proofs)].forEach((p) => counts.set(institution(p.src), (counts.get(institution(p.src)) ?? 0) + 1));
-  counts.set('Cámaras', (counts.get('Cámaras') ?? 0) + m.detections.length);
-  const pending = FACIAL_SOURCES.filter((s) => s.state === 'por_conectar' && !counts.has(s.name)).map((s) => s.name);
   return (
     <div className="sc">
-      <div className="sc-flow" aria-label="De la cámara al agente">
+      <span className="pm-k mono">De la cámara al agente</span>
+      <ol className="sc-tl">
         {steps.map((s, i) => (
-          <Fragment key={s.label}>
-            {i > 0 && <span className="sc-gap mono">{s.at != null && steps[i - 1].at != null ? `+${secs(s.at - (steps[i - 1].at as number))}` : '…'}</span>}
-            <span className={`sc-step ${s.at != null ? 'done' : ''}`}><i />{s.label}{s.at != null && <small className="mono">{hhmm(s.at)}</small>}</span>
-          </Fragment>
+          <li key={s.label} className={s.at != null ? 'done' : ''}>
+            <i aria-hidden />
+            <span>{s.label}</span>
+            <small className="mono">{s.at != null ? `${hhmm(s.at)}${i > 0 && steps[i - 1].at != null ? ` · +${secs(s.at - (steps[i - 1].at as number))}` : ''}` : 'pendiente'}</small>
+          </li>
         ))}
-        <b className="sc-total">{total != null ? <>De la cámara al agente en <span className="mono">{secs(total)}</span></> : <>Esperando al 911 · <span className="mono">{secs(now - d.at - 3000)}</span></>}</b>
-      </div>
-      <div className="sc-src">
-        <span className="sc-k">Fuentes cruzadas</span>
-        {[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => <span key={k} className="sc-chip"><i />{k} <b className="mono">{n}</b></span>)}
-        {pending.length > 0 && <span className="sc-pend">Por conectar: {pending.join(' · ')}</span>}
-        <span className="sc-guard"><Icon name="verified_user" />Decide una persona · todo queda en la bitácora · los rostros descartados no se guardan</span>
-      </div>
+      </ol>
+      <p className="sc-total">{total != null ? <>De la cámara al agente en <b className="mono">{secs(total)}</b></> : <>Esperando al 911 · <b className="mono">{secs(now - d.at - 3000)}</b></>}</p>
+      <p className="sc-guard"><Icon name="verified_user" />Decide una persona · todo queda en la bitácora · los rostros descartados no se guardan.</p>
     </div>
   );
 }
@@ -228,7 +217,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
         <div className="ds-id">
           <span className="ds-eyebrow mono">Expediente · {m.listRef} · {L.name}</span>
           <h1>{m.name}</h1>
-          <span className="ds-reason">{m.reason}{m.orderUntil ? ` · vigente hasta el ${m.orderUntil}` : ''} · <span className="mono">{m.docId}</span></span>
+          <span className="ds-reason">{m.reason}{m.orderUntil ? ` · vigente hasta el ${m.orderUntil}` : ''}</span>
         </div>
         <div className="ds-score" style={{ '--p': `${Math.round(best * 100)}` } as CSSProperties} aria-label={`Mejor coincidencia de hoy ${pct(best)}`}>
           <b className="mono">{Math.round(best * 100)}<small>%</small></b><span>mejor de hoy</span>
@@ -242,9 +231,8 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
         </div>
       </header>
 
-      <Showcase m={m} now={now} />
 
-      <PersonMap m={m} onOpen={openCards} />
+      <PersonMap m={m} onOpen={openCards} about={<Showcase m={m} now={now} />} />
 
       {view && <Viewer items={view.items} index={view.index} compare={view.compare} render={view.cards ? (i) => <Artifact c={view.cards![i]} /> : undefined} onIndex={(i) => setView({ ...view, index: i })} onClose={() => setView(null)} />}
     </div>,

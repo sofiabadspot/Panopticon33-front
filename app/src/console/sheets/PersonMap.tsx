@@ -4,11 +4,11 @@
    (del más viejo al más nuevo, en el sentido del reloj). Cada evidencia muestra su material (captura,
    video, documento, registro). Los nodos se acomodan para no pisarse y se mueven al abrir o cerrar. Se navega como un panel: arrastrar mueve,
    la rueda acerca. El buscador encuentra cualquier dato, abre las ramas donde está y lo resalta.
-   Al costado, siempre la persona (foto de la lista y reconstrucción 3D) y debajo el detalle de lo
+   A la izquierda, siempre la persona (foto de la lista y reconstrucción 3D) y debajo el detalle de lo
    elegido. Sin imágenes ficticias. */
-import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from 'react';
 import { dateShort, hhmm, pct } from '../../api/format';
-import { FACIAL_LISTS, type FacialMatch, type LinkKind } from '../../api/facial';
+import { type FacialMatch, type LinkKind } from '../../api/facial';
 import { FaceCloud } from '../../ui/FaceCloud';
 import { Icon } from '../../ui/kit';
 import { Shot } from './FacialDossier';
@@ -35,7 +35,7 @@ const R = [0, 250, 520, 860];
 const box = (n: Node): [number, number] => (n.level === 0 ? [180, 200] : n.card ? [196, 168] : n.level === 1 ? [70 + n.label.length * 8, 48] : [Math.min(276, 64 + Math.max(n.label.length * 7.5, (n.sub.length + 14) * 5.6)), 54]);
 const rad = (d: number) => (d * Math.PI) / 180;
 
-export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[], i: number) => void }) {
+export function PersonMap({ m, onOpen, about }: { m: FacialMatch; onOpen: (cards: Card[], i: number) => void; about?: ReactNode }) {
   const cards = useMemo(() => cardsOf(m), [m]);
   // Todo abierto de entrada: categorías y vínculos.
   const [open, setOpen] = useState<Set<string>>(() => new Set([...CATS.map((c) => `cat:${c.id}`), ...m.links.map((l) => `link:${l.id}`)]));
@@ -153,66 +153,15 @@ export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[
   };
   const selected = sel ? byId.get(sel) : undefined;
   const lit = (n: Node) => !query || hits.has(n.id) || n.level <= 1;
-  const L = FACIAL_LISTS[m.list];
   const seed = [...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7);
 
   return (
     <div className="pm">
-      <div className="pm-stage" ref={stage} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
-        <div className="pm-search">
-          <Icon name="search" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar en todo lo de la persona (placa, lugar, caso, cámara…)" aria-label="Buscar en el mapa de la persona" />
-          {query && <span className="mono">{[...hits].filter((h) => h.startsWith('card:') || h.startsWith('link:')).length} resultados</span>}
-          {q && <button className="iconbtn" aria-label="Borrar búsqueda" onClick={() => setQ('')}><Icon name="close" /></button>}
-        </div>
-        <div className="pm-zoom" role="group" aria-label="Acercar o alejar">
-          <button className="iconbtn" aria-label="Acercar" onClick={() => setView((v) => ({ ...v, k: Math.min(2.2, v.k * 1.25) }))}><Icon name="add" /></button>
-          <button className="iconbtn" aria-label="Alejar" onClick={() => setView((v) => ({ ...v, k: Math.max(0.25, v.k / 1.25) }))}><Icon name="remove" /></button>
-          <button className="iconbtn" aria-label="Centrar en la persona" onClick={() => setView({ x: 0, y: 0, k: 0.5 })}><Icon name="center_focus_strong" /></button>
-        </div>
-        <div className="pm-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
-          <svg className="pm-lines" aria-hidden>
-            {nodes.filter((n) => n.parent).map((n) => {
-              if (!byId.get(n.parent!)) return null;
-              const [px, py] = at(n.parent!), [nx, ny] = at(n.id);
-              const mx = (px + nx) / 2, my = (py + ny) / 2;
-              const on = sel === n.id || sel === n.parent || (selected && selected.parent === n.id);
-              return <path key={n.id} d={`M${px} ${py} Q${mx * 0.92} ${my * 0.92} ${nx} ${ny}`} className={`l${n.level} ${on ? 'on' : ''} ${lit(n) ? '' : 'dim'}`} />;
-            })}
-          </svg>
-          {nodes.map((n) => (
-            n.level === 0 ? (
-              <button key={n.id} className={`pm-me ${sel === null ? 'on' : ''}`} style={{ left: 0, top: 0 }} onClick={() => { setSel(null); setView({ x: 0, y: 0, k: view.k }); }} aria-label={`${m.name}, ${m.listRef}`}>
-                <span className="pm-face"><Icon name="person" /></span>
-                <b>{m.name}</b><small className="mono">{m.listRef} · {L.name}</small>
-              </button>
-            ) : (
-              n.card ? (
-                <button key={n.id} className={`pm-n pm-card ${sel === n.id ? 'sel' : ''} ${lit(n) ? '' : 'dim'} ${query && hits.has(n.id) ? 'hit' : ''}`}
-                  style={{ left: at(n.id)[0], top: at(n.id)[1] }} onClick={() => toggle(n)} aria-label={`${ART_LABEL[n.card.art]}: ${n.label}, ${dateShort(n.at ?? 0)}`}>
-                  <span className="pm-ct"><Icon name={n.icon} /><span><b>{n.label}</b><small>{n.sub}</small></span></span>
-                  <span className="pm-thumb"><Artifact c={n.card} /></span>
-                </button>
-              ) :
-              <button key={n.id} className={`pm-n l${n.level} ${sel === n.id ? 'sel' : ''} ${isOpen(n.id) ? 'open' : ''} ${lit(n) ? '' : 'dim'} ${query && hits.has(n.id) && n.level >= 2 ? 'hit' : ''}`}
-                style={{ left: at(n.id)[0], top: at(n.id)[1] }} onClick={() => toggle(n)} aria-expanded={n.level === 1 || n.link ? isOpen(n.id) : undefined}
-                aria-label={`${n.label}${n.at && n.level >= 2 ? `, ${dateShort(n.at)}` : ''}${n.count != null ? `, ${n.count}` : ''}`}>
-                <Icon name={n.icon} />
-                <span><b>{n.label}</b>{n.level >= 2 && <small>{n.level === 2 && n.at && n.at < Infinity ? `${dateShort(n.at)} · ` : ''}{n.sub}</small>}</span>
-                {n.count != null && <i className="mono">{n.count}</i>}
-              </button>
-            )
-          ))}
-        </div>
-        <p className="pm-hint">Toca una categoría para abrirla · arrastra para moverte · rueda para acercar</p>
-      </div>
-
       <aside className="pm-side">
         {/* La persona siempre a la vista: foto de la lista y reconstrucción 3D que se gira. */}
         <div className="pm-who">
           <span className="pm-photo"><Shot label={m.listPhotos[0] ? `${m.listPhotos[0].caption} · ${m.listPhotos[0].year}` : 'Sin foto'} /></span>
           <span className="pm-3d"><FaceCloud seed={seed} label={`Reconstrucción 3D del perfil ${m.listRef}`} interactive auto landmarks /></span>
-          <div className="pm-whoid"><b>{m.name}</b><small className="mono">{m.listRef} · {L.name}</small><small>{m.reason}</small></div>
         </div>
         <div className="pm-detail" aria-live="polite">
         {!selected ? (
@@ -220,11 +169,11 @@ export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[
             <span className="pm-k mono">Datos de la persona</span>
             <dl className="pm-dl">
               <dt>Documento</dt><dd className="mono">{m.docId}</dd>
-              <dt>Lista</dt><dd>{L.name} · <span className="mono">{m.listRef}</span></dd>
               {m.traits.filter((x) => x.list).map((x, i) => <Fragment key={i}><dt>{x.label}</dt><dd>{x.list}</dd></Fragment>)}
               <dt>Riesgo</dt><dd>{m.risk.level} · {m.risk.notes[0]}</dd>
               <dt>Agente cerca</dt><dd>{m.agent}</dd>
             </dl>
+            {about}
           </>
         ) : selected.card ? (() => {
           const c = selected.card!;
@@ -271,6 +220,54 @@ export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[
         )}
         </div>
       </aside>
+      <div className="pm-stage" ref={stage} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+        <div className="pm-search">
+          <Icon name="search" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar en todo lo de la persona (placa, lugar, caso, cámara…)" aria-label="Buscar en el mapa de la persona" />
+          {query && <span className="mono">{[...hits].filter((h) => h.startsWith('card:') || h.startsWith('link:')).length} resultados</span>}
+          {q && <button className="iconbtn" aria-label="Borrar búsqueda" onClick={() => setQ('')}><Icon name="close" /></button>}
+        </div>
+        <div className="pm-zoom" role="group" aria-label="Acercar o alejar">
+          <button className="iconbtn" aria-label="Acercar" onClick={() => setView((v) => ({ ...v, k: Math.min(2.2, v.k * 1.25) }))}><Icon name="add" /></button>
+          <button className="iconbtn" aria-label="Alejar" onClick={() => setView((v) => ({ ...v, k: Math.max(0.25, v.k / 1.25) }))}><Icon name="remove" /></button>
+          <button className="iconbtn" aria-label="Centrar en la persona" onClick={() => setView({ x: 0, y: 0, k: 0.5 })}><Icon name="center_focus_strong" /></button>
+        </div>
+        <div className="pm-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
+          <svg className="pm-lines" aria-hidden>
+            {nodes.filter((n) => n.parent).map((n) => {
+              if (!byId.get(n.parent!)) return null;
+              const [px, py] = at(n.parent!), [nx, ny] = at(n.id);
+              const mx = (px + nx) / 2, my = (py + ny) / 2;
+              const on = sel === n.id || sel === n.parent || (selected && selected.parent === n.id);
+              return <path key={n.id} d={`M${px} ${py} Q${mx * 0.92} ${my * 0.92} ${nx} ${ny}`} className={`l${n.level} ${on ? 'on' : ''} ${lit(n) ? '' : 'dim'}`} />;
+            })}
+          </svg>
+          {nodes.map((n) => (
+            n.level === 0 ? (
+              <button key={n.id} className={`pm-me ${sel === null ? 'on' : ''}`} style={{ left: 0, top: 0 }} onClick={() => { setSel(null); setView({ x: 0, y: 0, k: view.k }); }} aria-label={`${m.name}, ${m.listRef}`}>
+                <span className="pm-face"><Icon name="person" /></span>
+              </button>
+            ) : (
+              n.card ? (
+                <button key={n.id} className={`pm-n pm-card ${sel === n.id ? 'sel' : ''} ${lit(n) ? '' : 'dim'} ${query && hits.has(n.id) ? 'hit' : ''}`}
+                  style={{ left: at(n.id)[0], top: at(n.id)[1] }} onClick={() => toggle(n)} aria-label={`${ART_LABEL[n.card.art]}: ${n.label}, ${dateShort(n.at ?? 0)}`}>
+                  <span className="pm-ct"><Icon name={n.icon} /><span><b>{n.label}</b><small>{n.sub}</small></span></span>
+                  <span className="pm-thumb"><Artifact c={n.card} /></span>
+                </button>
+              ) :
+              <button key={n.id} className={`pm-n l${n.level} ${sel === n.id ? 'sel' : ''} ${isOpen(n.id) ? 'open' : ''} ${lit(n) ? '' : 'dim'} ${query && hits.has(n.id) && n.level >= 2 ? 'hit' : ''}`}
+                style={{ left: at(n.id)[0], top: at(n.id)[1] }} onClick={() => toggle(n)} aria-expanded={n.level === 1 || n.link ? isOpen(n.id) : undefined}
+                aria-label={`${n.label}${n.at && n.level >= 2 ? `, ${dateShort(n.at)}` : ''}${n.count != null ? `, ${n.count}` : ''}`}>
+                <Icon name={n.icon} />
+                <span><b>{n.label}</b>{n.level >= 2 && <small>{n.level === 2 && n.at && n.at < Infinity ? `${dateShort(n.at)} · ` : ''}{n.sub}</small>}</span>
+                {n.count != null && <i className="mono">{n.count}</i>}
+              </button>
+            )
+          ))}
+        </div>
+        <p className="pm-hint">Toca una categoría para abrirla · arrastra para moverte · rueda para acercar</p>
+      </div>
+
     </div>
   );
 }

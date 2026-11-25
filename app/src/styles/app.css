@@ -375,7 +375,6 @@ textarea.fld { height: auto; padding: 10px 12px; resize: vertical; }
 .legend .sw { width: 12px; height: 12px; border-radius: var(--radius-xs); background: var(--nodata); border: 1px dashed var(--border-control); }
 
 /* ---------- Diálogo ---------- */
-.scrim { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; z-index: 50; padding: 16px; }
 .dialog { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--surface-panel); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
 .dialog .hd { display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--border); }
 .dialog .hd h2 { font-size: var(--fs-xl); }
@@ -1748,7 +1747,7 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 /* ---------- Expediente de una persona (verificación facial, pantalla completa) ----------
    Lenguaje de sala de control: fondo oscuro con un halo, paneles con esquinas de mira, tipografía HUD.
    El acento (escaneo, puntos de referencia, conexiones activas) es el verde del tema. */
-.ds { --fc-accent: var(--primary); position: fixed; inset: 0; z-index: 70; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 14px; padding: 18px 22px 22px;
+.ds { --fc-accent: var(--primary); position: fixed; inset: 0; z-index: 70; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 14px; padding: 18px 22px 22px;
   background: color-mix(in srgb, var(--surface) 97%, transparent);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: var(--ink); animation: dsin .35s cubic-bezier(.2,.8,.2,1); outline: none; }
 @keyframes dsin { from { opacity: 0; transform: scale(.985); } }
@@ -1959,25 +1958,24 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .iv-nav { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: var(--fs-xs); color: var(--ink-muted); }
 .pv { min-width: 0; } .pv-t { min-width: 0; }
 
-/* Expediente: de la cámara al agente, fuentes cruzadas y garantías. */
-.sc { display: grid; gap: 8px; margin-top: -4px; }
-.sc-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: var(--fs-xs); color: var(--ink-subtle); }
-.sc-step { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-full); }
-.sc-step i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--ink-subtle); }
-.sc-step small { color: var(--ink-subtle); }
-.sc-step.done { color: var(--ink); border-color: color-mix(in srgb, var(--fc-accent) 40%, var(--border)); }
-.sc-step.done i { background: var(--fc-accent); border-color: var(--fc-accent); }
-.sc-gap { color: var(--fc-accent); }
-.sc-total { margin-left: auto; font-size: var(--fs-sm); font-weight: 500; color: var(--ink); }
-.sc-total .mono { color: var(--fc-accent); }
-.sc-src { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: var(--fs-xs); color: var(--ink-muted); }
-.sc-k { font: var(--type-hud-label); letter-spacing: var(--type-hud-tracking); text-transform: uppercase; color: var(--ink-subtle); }
-.sc-chip { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
-.sc-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-muted); }
-.sc-chip b { font-weight: 500; color: var(--ink-muted); }
-.sc-pend { color: var(--ink-subtle); }
-.sc-guard { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--ink-muted); }
-.sc-guard .ms { width: 16px; height: 16px; font-size: 16px; color: var(--fc-accent); }
+/* Expediente: de la cámara al agente (línea de tiempo), fuentes cruzadas y garantías, en el panel de la persona. */
+.sc { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
+.sc-tl { list-style: none; margin: 0; padding: 0; display: grid; }
+.sc-tl li { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: baseline; gap: 10px; padding: 0 0 12px; font-size: var(--fs-md); color: var(--ink-subtle); }
+.sc-tl li::after { content: ''; position: absolute; left: 4px; top: 14px; bottom: 0; width: 1px; background: var(--border-strong); }
+.sc-tl li:last-child::after { display: none; }
+.sc-tl li i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--ink-subtle); transform: translateY(1px); }
+.sc-tl li.done { color: var(--ink); }
+.sc-tl li.done i { background: var(--ink); border-color: var(--ink); }
+.sc-tl small { font-size: var(--fs-xs); color: var(--ink-muted); }
+.sc-total { margin: 0; font-size: var(--fs-md); color: var(--ink-muted); }
+.sc-total b { font-weight: 500; color: var(--ink); }
+.sc-src { list-style: none; margin: 0; padding: 0; display: grid; }
+.sc-src li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent); font-size: var(--fs-md); color: var(--ink); }
+.sc-src li b { font-weight: 500; color: var(--ink-muted); }
+.sc-src li.off { color: var(--ink-subtle); } .sc-src li.off small { font-size: var(--fs-xs); }
+.sc-guard { margin: 0; display: flex; gap: 8px; font-size: var(--fs-sm); color: var(--ink-muted); }
+.sc-guard .ms { width: 16px; height: 16px; font-size: 16px; flex: none; margin-top: 2px; }
 
 /* Evidencias: material dibujado según su tipo. */
 .art { position: relative; display: block; overflow: hidden; border-radius: var(--radius-xs); aspect-ratio: 16 / 10; }
@@ -2028,7 +2026,7 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .fc-mscore b { font-size: 22px; font-weight: 500; color: var(--ink); }
 
 /* Mapa de la persona: la cara al centro y lo que se juntó saliendo de ella; panel de detalle al costado. */
-.pm { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; }
+.pm { min-height: 0; display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; }
 .pm-stage { position: relative; min-height: 0; overflow: hidden; border: 1px solid var(--hud-line); border-radius: var(--radius-sm); cursor: grab; touch-action: none;
   background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--fc-accent) 7%, transparent), transparent 55%), repeating-linear-gradient(0deg, color-mix(in srgb, var(--ink) 4%, transparent) 0 1px, transparent 1px 48px), repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 4%, transparent) 0 1px, transparent 1px 48px), var(--hud-bg); }
 .pm-stage:active { cursor: grabbing; }
