@@ -7,7 +7,7 @@
    Una sola capa, con tres lecturas a elegir: personas, cobertura o alertas.
 
    En producción esto lo calcula el backend (mismas celdas H3). Hoy usa los datos simulados. */
-import { cellToBoundary, cellToLatLng, cellsToMultiPolygon, gridDisk, latLngToCell, polygonToCells } from 'h3-js';
+import { cellToBoundary, cellToChildren, cellToLatLng, cellToParent, cellsToMultiPolygon, getResolution, gridDisk, latLngToCell, polygonToCells } from 'h3-js';
 import type { Alert, Camera, LngLat, Unit, Zone, ZoneStatus } from './types';
 
 /** Qué muestran los hexágonos del mapa. */
@@ -156,6 +156,14 @@ export function zoneHexes(zones: Zone[]): string[] {
     for (const c of inside.length ? inside : [latLngToCell(z.lat, z.lon, HEX_RES)]) for (const n of gridDisk(c, 1)) cells.add(n);
   }
   return [...cells];
+}
+/** Las mismas celdas al tamaño de otra grilla, para dibujarlas sobre la que se ve (H3 es jerárquico):
+    al acercarse, cada celda pasa a sus 7 hijas; al alejarse, a su madre. Así el área calza con los
+    hexágonos del mapa a cualquier zoom. */
+export function cellsAtRes(cells: string[], res: number): string[] {
+  if (!cells.length || getResolution(cells[0]) === res) return cells;
+  if (res > getResolution(cells[0])) return cells.flatMap((c) => cellToChildren(c, res));
+  return [...new Set(cells.map((c) => cellToParent(c, res)))];
 }
 /** Contorno de un conjunto de celdas, unidas en una sola figura. Coordenadas GeoJSON (MultiPolygon). */
 export const hexesOutline = (cells: string[]): LngLat[][][] => (cells.length ? (cellsToMultiPolygon(cells, true) as LngLat[][][]) : []);

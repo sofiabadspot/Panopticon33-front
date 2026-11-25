@@ -13,7 +13,7 @@ import type { Alert, Camera, Evidence as Ev, LngLat, Unit, Zone, ZoneStatus } fr
 import { fmtCrowd, hhmm } from '../api/format';
 import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
-import { HEX_TIERS, hexesOutline, zoneHexes, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
+import { cellsAtRes, HEX_TIERS, hexesOutline, zoneHexes, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
 import { drawHexLayer, makeHexLayer, type HexColors, type HexLayer } from './hexCanvas';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
@@ -129,6 +129,8 @@ function baseStyle(): StyleSpecification {
 }
 
 const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features });
+/** Áreas de eventos ya calculadas, por tamaño de grilla y celdas (se piden en cada sincronización del mapa). */
+const areaCache = new Map<string, { cells: string[]; shape: LngLat[][][] }>();
 /** Corre `f` cuando el navegador está libre (o enseguida, si no tiene cómo avisar). */
 const idle = (f: () => void) => { const w = window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }; if (w.requestIdleCallback) w.requestIdleCallback(f, { timeout: 3000 }); else setTimeout(f, 200); };
 /** Cada cuánto, como mucho, se repintan los hexágonos por cambios en los datos (ms). */
@@ -427,8 +429,13 @@ export function MapView(p: Props) {
     // Áreas delimitadas: cada evento en curso (sus zonas juntas) y la zona elegida
     const area: GeoJSON.Feature[] = [], areaCells: GeoJSON.Feature[] = [];
     const eventAreas: { name: string; end: number; top: LngLat; dim: boolean }[] = [];
-    const addArea = (cells: string[], k: 'evento' | 'sel', dim: boolean) => {
-      const shape = hexesOutline(cells); if (!shape.length) return null;
+    // Las celdas se dibujan al tamaño de la grilla que se ve a este zoom, para que el área calce con los hexágonos.
+    const zNow = map.getZoom(), gridRes = (HEX_TIERS.find((tr) => zNow >= tr.minzoom && zNow < tr.maxzoom) ?? HEX_TIERS[0]).res;
+    const addArea = (data: string[], k: 'evento' | 'sel', dim: boolean) => {
+      const key = gridRes + ':' + data.join(',');
+      let hit = areaCache.get(key);
+      if (!hit) { const cells = cellsAtRes(data, gridRes); hit = { cells, shape: hexesOutline(cells) }; if (areaCache.size > 40) areaCache.clear(); areaCache.set(key, hit); }
+      const { cells, shape } = hit; if (!shape.length) return null;
       area.push({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: shape }, properties: { k, dim } });
       for (const c of cells) areaCells.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(c)] }, properties: { dim } });
       return shape.flat(2).reduce((a, q) => (q[1] > a[1] ? q : a)); // el punto más al norte, para el rótulo
