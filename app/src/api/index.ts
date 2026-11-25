@@ -578,3 +578,9 @@ export function placePatterns(place: InvPlace) {
 export const readsOf = (plate: string) => seed.reads.filter((x) => x.plate === plate);
 /** Las alertas de cámara caída van al administrador (Configuración), no a la bandeja del 911. */
 export const forOperator = (a: Alert) => a.kind !== 'camara_caida';
+
+/** Coincidencias faciales como alertas "Persona en lista" (las arma api/facial.ts, que es la fuente):
+    reemplaza las que había, así la bandeja y el mapa las muestran junto a las demás. */
+export function syncFaceAlerts(list: Alert[]) {
+  commit({ alerts: [...state.alerts.filter((a) => a.kind !== 'persona_en_lista'), ...list] });
+}

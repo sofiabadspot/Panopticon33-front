@@ -122,7 +122,7 @@ export function MapCard({ h, units, cameras, zones, alerts }: { h: Hover; units:
     } else {
       const list = alerts.filter((a) => h.ids.includes(a.id)); const by = (k: Alert['kind']) => list.filter((a) => a.kind === k).length;
       // Sin niveles: el grupo dice qué tipo de alertas junta
-      body = (<><div className="mc-hd"><span className="mc-eyebrow">Grupo · {n} alertas</span></div><div className="mc-grid"><Row k="Placas" v={by('placa_en_lista')} /><Row k="Aglomeración" v={by('aglomeracion')} /><Row k="Falta de policías" v={by('brecha_presencia')} /><Row k="Cámaras sin video" v={by('camara_caida')} /></div><div className="mc-foot">Clic para acercar</div></>);
+      body = (<><div className="mc-hd"><span className="mc-eyebrow">Grupo · {n} alertas</span></div><div className="mc-grid"><Row k="Placas" v={by('placa_en_lista')} /><Row k="Personas" v={by('persona_en_lista')} /><Row k="Aglomeración" v={by('aglomeracion')} /><Row k="Falta de policías" v={by('brecha_presencia')} /><Row k="Cámaras sin video" v={by('camara_caida')} /></div><div className="mc-foot">Clic para acercar</div></>);
     }
   }
   const w = h.kind === 'camera' ? 320 : 280;

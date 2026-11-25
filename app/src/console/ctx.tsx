@@ -49,7 +49,8 @@ export function canOpenSheet(role: Role, s: Sheet): boolean {
     case 'bitacora': return role === 'auditor';
     case 'evento-form': return role === 'admin';
     case 'alerta': return role !== 'admin';
-    case 'facial': return role === 'operator_911';
+    // Facial: decide el operador 911; el mando la ve (solo lectura), porque también es una alerta.
+    case 'facial': return role === 'operator_911' || role === 'command';
     case 'vehiculo': return role === 'analyst';
     case 'jules': return role !== 'auditor';
     default: return true;
@@ -130,7 +131,8 @@ export function ConsoleProvider({ role, children }: { role: Role; children: Reac
   const [sound, setSoundState] = useState(() => { try { return localStorage.getItem('p33.sound') !== 'off'; } catch { return true; } });
   const setSound = useCallback((on: boolean) => { setSoundState(on); try { localStorage.setItem('p33.sound', on ? 'on' : 'off'); } catch { /* sin almacenamiento */ } }, []);
   useEffect(() => {
-    const seen = (a: (typeof allAlerts)[number]) => a.sightings?.length ?? 1;
+    // Lecturas de una placa, detecciones de una persona: cada una nueva avisa.
+    const seen = (a: (typeof allAlerts)[number]) => (a.kind === 'persona_en_lista' ? a.observations : a.sightings?.length ?? 1);
     if (!known.current) { known.current = new Map(allAlerts.map((a) => [a.id, seen(a)])); return; }
     const nuevas = allAlerts.filter((a) => (!known.current!.has(a.id) || seen(a) > known.current!.get(a.id)!) && a.review === 'por_revisar' && forOperator(a));
     allAlerts.forEach((a) => known.current!.set(a.id, seen(a)));
@@ -159,7 +161,8 @@ export function ConsoleProvider({ role, children }: { role: Role; children: Reac
   const value = useMemo<Ctx>(() => ({
     panel, sheet,
     setPanel: (p) => write(p, undefined),
-    open: (s) => { if (canOpenSheet(role, s)) { write(undefined, s); if (s.k === 'alerta') { setFresh((f) => f.filter((x) => x !== s.id)); setArrival((a) => (a === s.id ? null : a)); } } },
+    // Una alerta "Persona en lista" abre la ficha facial (ahí está la decisión del 911).
+    open: (s0) => { const s: Sheet = s0.k === 'alerta' && s0.id.startsWith('FC-') ? { k: 'facial', id: s0.id } : s0; if (canOpenSheet(role, s)) { write(undefined, s); if (s0.k === 'alerta' || s.k === 'facial') { const id = s.k === 'facial' ? s.id : s0.k === 'alerta' ? s0.id : ''; setFresh((f) => f.filter((x) => x !== id)); setArrival((a) => (a === id ? null : a)); } } },
     close: () => write(undefined, null),
     overlay, setOverlay, pin, setPin, signal, setSignal, hoverAlert, setHoverAlert,
     fresh, arrival, dismissArrival: () => setArrival(null), sound, setSound,

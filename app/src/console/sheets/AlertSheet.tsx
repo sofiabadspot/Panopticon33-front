@@ -48,7 +48,11 @@ export function AlertSheet({ id }: { id: string }) {
   const [trace, setTrace] = useState(false);
   const [sent, setSent] = useState(false);
   const [txSolo, setTxSolo] = useState(false); // la transmisión a Maic ocupa sola la ficha
-  useEffect(() => { setTrace(false); setSent(false); }, [id]);
+  // Al abrir una alerta de placa, el recorrido arranca solo (no hace falta pedirlo). Queda en la bitácora.
+  useEffect(() => {
+    setSent(false); const on = !!a?.plate; setTrace(on);
+    if (on) audit(user, 'Ver recorrido de placa', a!.plate!.listed, 'Al abrir la alerta');
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const traceReads = useMemo(() => [...prev].sort((x, y) => x.at - y.at), [prev]);
   useEffect(() => {
     if (!trace || !a) return;

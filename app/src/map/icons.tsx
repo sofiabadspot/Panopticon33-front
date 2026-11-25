@@ -30,6 +30,14 @@ export function AlertGlyph({ kind }: { kind: AlertKind }) {
       <path d="M9.9 13.9h4.2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
     </svg>
   );
+  if (kind === 'persona_en_lista') return (
+    // Reconocimiento facial: una persona (cabeza y hombros) dentro del marco de detección.
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M3 8V4.6C3 3.7 3.7 3 4.6 3H8M16 3h3.4c.9 0 1.6.7 1.6 1.6V8M21 16v3.4c0 .9-.7 1.6-1.6 1.6H16M8 21H4.6C3.7 21 3 20.3 3 19.4V16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="12" cy="9.8" r="3.3" fill="currentColor" />
+      <path d="M6.6 18.6c.6-2.9 2.8-4.6 5.4-4.6s4.8 1.7 5.4 4.6z" fill="currentColor" />
+    </svg>
+  );
   if (kind === 'aglomeracion') return (
     // Multitud: cinco personas apretadas.
     <svg viewBox="0 0 24 24" aria-hidden>

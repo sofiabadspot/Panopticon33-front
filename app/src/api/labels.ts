@@ -14,6 +14,7 @@ export const KIND_LABEL: Record<AlertKind, string> = {
   aglomeracion: 'Aglomeración',
   brecha_presencia: 'Brecha de presencia',
   placa_en_lista: 'Placa en lista',
+  persona_en_lista: 'Persona en lista',
   camara_caida: 'Cámara caída',
 };
 
@@ -22,6 +23,7 @@ export const KIND_PHRASE: Record<AlertKind, string> = {
   aglomeracion: 'Hay más gente de la que la zona soporta',
   brecha_presencia: 'Faltan policías para la gente que hay',
   placa_en_lista: 'Pasó un vehículo con reporte',
+  persona_en_lista: 'Pasó una persona de una lista',
   camara_caida: 'Una cámara dejó de transmitir',
 };
 
@@ -29,6 +31,7 @@ export const KIND_ICON: Record<AlertKind, string> = {
   aglomeracion: 'groups',
   brecha_presencia: 'local_police',
   placa_en_lista: 'directions_car',
+  persona_en_lista: 'face',
   camara_caida: 'videocam_off',
 };
 

@@ -74,7 +74,7 @@ export function FacialPanel() {
 }
 
 export function FacialSheet({ id }: { id: string }) {
-  const { user } = useSession();
+  const { user, role } = useSession();
   const c = useConsole();
   const toast = useToast();
   const now = useNow(5000);
@@ -83,7 +83,11 @@ export function FacialSheet({ id }: { id: string }) {
 
   /* Recorrido de la persona: cada detección en el mapa, en orden, con su captura. Queda en la bitácora. */
   const [trace, setTrace] = useState(false);
-  useEffect(() => { setTrace(false); setDiscarding(false); }, [id]);
+  // Al abrir la coincidencia, el recorrido (o el punto, si hay una sola detección) arranca solo. Queda en la bitácora.
+  useEffect(() => {
+    setDiscarding(false); setTrace(!!m);
+    if (m) audit(user, 'Ver recorrido de persona', m.listRef, 'Al abrir la coincidencia');
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!trace || !m) return;
     const stops: RouteStop[] = m.detections.map((d, i) => ({ lat: d.lat, lon: d.lon, label: String(i + 1), time: hhmm(d.at), title: `${dateTime(d.at)} · ${d.cameraId} · ${d.place}`,
@@ -149,12 +153,13 @@ export function FacialSheet({ id }: { id: string }) {
           {m.timeline.map((t, i) => <li key={i} className={i === m.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
         </ol></div></div>
       </div>
+      {role !== 'operator_911' && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: confirma o descarta el operador 911.</span></div>}
       <div className="pf">
-        {m.status === 'por_revisar' && !discarding && <>
+        {role === 'operator_911' && m.status === 'por_revisar' && !discarding && <>
           <button className="btn positive" style={{ flex: 1 }} onClick={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta enviada a Maic y agente avisado'); }}><Icon name="send" />Es la persona: enviar a Maic</button>
           <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />No coincide</button>
         </>}
-        {m.status === 'por_revisar' && discarding && <>
+        {role === 'operator_911' && m.status === 'por_revisar' && discarding && <>
           <div role="group" aria-labelledby="fc-discard" style={{ display: 'contents' }}>
             <span id="fc-discard" style={{ fontSize: 'var(--fs-sm)', width: '100%', color: 'var(--ink-muted)' }}>Motivo del descarte</span>
             {FACIAL_DISCARD.map((r) => <button key={r} className="btn secondary xs" onClick={() => { discardFacial(m.id, r, user); setDiscarding(false); }}>{r}</button>)}

@@ -44,7 +44,8 @@ export interface Unit { id: string; type: UnitType; status: UnitStatus; lat: num
   /** Despachada por Maic: va hacia un lugar (la alerta que la convocó). Sin esto, está en su puesto. */
   enRoute?: { lat: number; lon: number; label: string; alertId?: string; since: number } | null }
 
-export type AlertKind = 'aglomeracion' | 'brecha_presencia' | 'placa_en_lista' | 'camara_caida';
+/** persona_en_lista: reconocimiento facial en un punto de control (sale de Verificación, api/facial.ts). */
+export type AlertKind = 'aglomeracion' | 'brecha_presencia' | 'placa_en_lista' | 'persona_en_lista' | 'camara_caida';
 export type Severity = 'critica' | 'media' | 'baja';
 export type ReviewStatus = 'por_revisar' | 'confirmada' | 'descartada';
 export type MaicStatus = 'enviada' | 'recibida' | 'despachada' | 'cerrada';

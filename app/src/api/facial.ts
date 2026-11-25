@@ -12,8 +12,9 @@
    Datos de ejemplo ficticios (media/demo, aportados por SPOTVISION).
    Endpoints previstos: GET /v1/checkpoints/matches · POST /v1/checkpoints/matches/{id}/confirm · /discard */
 import { useSyncExternalStore } from 'react';
-import { audit, snapshot } from './index';
-import type { User } from './types';
+import { audit, snapshot, syncFaceAlerts } from './index';
+import { placeAlert } from './place';
+import type { Alert, User } from './types';
 
 export type FacialStatus = 'por_revisar' | 'confirmada' | 'descartada';
 export type FacialList = 'buscadas' | 'investigacion' | 'desaparecidas';
@@ -81,7 +82,20 @@ function forScenario(sc: string | null): FacialMatch[] {
 const readSc = () => { try { return localStorage.getItem('p33.escenario'); } catch { return null; } };
 matches = forScenario(readSc());
 const subs = new Set<() => void>();
-const emit = () => subs.forEach((f) => f());
+queueMicrotask(() => syncFaceAlerts(matches.map(toAlert)));
+/* Cada coincidencia también es una alerta "Persona en lista" (bandeja y mapa). Esta es la fuente: la
+   alerta se rearma desde acá cada vez que cambia algo. Su número es el de la coincidencia (FC-…). */
+const SEV: Record<FacialList, Alert['severity']> = { buscadas: 'critica', investigacion: 'media', desaparecidas: 'media' };
+function toAlert(m: FacialMatch): Alert {
+  const first = m.detections[0], d = lastDetection(m);
+  return placeAlert({
+    id: m.id, kind: 'persona_en_lista', severity: SEV[m.list], createdAt: first.at, updatedAt: d.at, zoneId: null, cameraId: d.cameraId, lat: d.lat, lon: d.lon,
+    rule: { id: 'R-FACIAL', name: `Persona en lista · ${FACIAL_LISTS[m.list].name}`, threshold: 'Puntaje ≥ 85 %', measured: `Puntaje ${Math.round(d.score * 100)} %`, persistence: 'Inmediata' },
+    observations: m.detections.length, evidence: { type: 'imagen', src: d.capture, caption: 'Captura del punto de control' },
+    review: m.status, reviewedBy: m.reviewedBy, discardReason: m.discardReason, maic: m.maic, maicId: m.maicId, timeline: m.timeline,
+  }, snapshot().zones);
+}
+const emit = () => { syncFaceAlerts(matches.map(toAlert)); subs.forEach((f) => f()); };
 if (typeof window !== 'undefined') window.addEventListener('p33:escenario', (e) => { matches = forScenario((e as CustomEvent<string>).detail); emit(); });
 const set = (fn: (m: FacialMatch) => FacialMatch, id: string) => { matches = matches.map((m) => (m.id === id ? fn(m) : m)); emit(); };
 export const useFacial = () => useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => matches);

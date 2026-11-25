@@ -7,6 +7,7 @@ import type { AlertKind, CameraStatus, UnitType } from '../api/types';
 
 const KINDS: [AlertKind, string, string][] = [
   ['placa_en_lista', 'Placa en lista', 'Una cámara leyó una placa con reporte (robo, orden de captura).'],
+  ['persona_en_lista', 'Persona en lista', 'Un punto de control vio a una persona de una lista (buscadas, en investigación, desaparecidas).'],
   ['aglomeracion', 'Aglomeración', 'Una zona supera su capacidad o la densidad permitida.'],
   ['brecha_presencia', 'Brecha de presencia', 'Hay demasiadas personas por cada policía en una zona.'],
   ['camara_caida', 'Cámara sin video', 'Una cámara dejó de enviar imagen y deja un punto ciego.'],
