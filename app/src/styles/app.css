@@ -1940,7 +1940,11 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .fc-video .fc-ph { aspect-ratio: 16 / 9; width: 100%; }
 .fc-video .btn { justify-self: start; }
 .fc-gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
-.fc-gallery .evidence { aspect-ratio: 3 / 4; }
+.fc-tile { position: relative; display: block; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.fc-tile .fc-ph { width: 100%; aspect-ratio: 3 / 4; }
+.fc-tile .chip { position: absolute; left: 4px; top: 4px; max-width: calc(100% - 8px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-tile:hover .fc-ph, .fc-tile:focus-visible .fc-ph { border-color: var(--border-control); }
+.fc-tile:focus-visible { outline: none; }
 .fc-facts { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
 .fc-facts li { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--ink); }
 .fc-facts li > .ms { width: 18px; height: 18px; font-size: 18px; flex: none; color: var(--ink-muted); }
@@ -1954,3 +1958,20 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .fc-check + .box, .fc-asked + .box, .fc-facts + .box { margin-top: 14px; }
 .fc-vseg { justify-self: start; }
 .fc-video .fc-ph video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Visor grande que se navega (expediente y ficha) y respaldos. */
+.lb-hd b { display: inline-flex; align-items: center; gap: 6px; }
+.lb-hd b .ms { width: 18px; height: 18px; font-size: 18px; color: var(--fc-accent, var(--ink-muted)); }
+.lb-scrim { position: fixed; inset: 0; z-index: 80; background: rgba(0, 0, 0, .6); }
+.lb.solo { position: fixed; inset: 40px; }
+.lb-ic { display: grid; place-items: center; width: 100%; height: 100%; color: var(--ink-muted); background: var(--surface); }
+.pv { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+.pv-t { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto auto; column-gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); text-align: left; cursor: zoom-in; }
+.pv-t:hover, .pv-t:focus-visible { border-color: var(--fc-accent, var(--border-control)); outline: none; }
+.pv-ic { grid-row: 1 / 4; display: grid; place-items: center; width: 34px; height: 42px; border-radius: var(--radius-xs); background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink-muted); }
+.pv-ic .ms { width: 18px; height: 18px; font-size: 18px; }
+.pv-k { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: .04em; color: var(--ink-subtle); }
+.pv-t b { font-size: var(--fs-xs); font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv-t small { font-size: var(--fs-2xs); color: var(--ink-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cn-row.on { border-radius: var(--radius-xs); background: color-mix(in srgb, var(--fc-accent) 6%, transparent); }
+.cn-open { display: grid; gap: 8px; padding: 4px 8px 8px 21px; }

@@ -55,8 +55,14 @@ export type LinkKind = 'vehiculo' | 'persona' | 'lugar' | 'caso';
     involucra (por id). La historia es una sola para todas las conexiones, así los hechos quedan en orden
     entre sí (primero el robo, después se reconoce el vehículo, después la imputación…). */
 export interface LinkEvent { at: number; label: string; place?: string; src?: string; links: string[] }
+/** Un respaldo: lo que comprueba un dato (una imagen, un video, un documento o un registro de una fuente).
+    En el prototipo no hay archivos: se muestra el recuadro con su tipo, título, fuente y fecha. */
+export type ProofKind = 'imagen' | 'video' | 'documento' | 'registro';
+export interface Proof { kind: ProofKind; title: string; src: string; at: number }
 export interface PersonLink {
   id: string; kind: LinkKind; label: string; sub: string; weight: number;
+  /** Lo que comprueba este vínculo. */
+  proofs: Proof[];
   /** Datos de lo vinculado (marca y color del vehículo, lista de la persona, estado del caso…). */
   facts: [string, string][];
   /** Los hechos de la historia que la involucran (se arman desde `story`). */
@@ -91,6 +97,8 @@ export interface FacialMatch {
   detections: FacialDetection[];
   /** Riesgo para quien interviene y qué tener en cuenta (de la lista). */
   risk: { level: 'alto' | 'medio' | 'bajo'; notes: string[] };
+  /** Lo que respalda la identidad y el motivo (ficha, documento, orden). */
+  docs: Proof[];
   /** Coincidencias de esta misma persona de la lista que el 911 ya descartó (alguien que se le parece). */
   similarDiscarded: number;
   /** Se le pidió al agente del punto de control que verifique el documento. */
@@ -110,11 +118,39 @@ const det = (k: number, at: number, score: number, quality?: CaptureQuality): Fa
   return { at, cameraId: c.id, place: c.street, lat: c.lat, lon: c.lon, capture: '', score, quality: q };
 };
 
-const lk = (id: string, kind: LinkKind, label: string, sub: string, weight: number, facts: [string, string][]): PersonLink => ({ id, kind, label, sub, weight, facts, events: [] });
+const lk = (id: string, kind: LinkKind, label: string, sub: string, weight: number, facts: [string, string][]): PersonLink => ({ id, kind, label, sub, weight, facts, events: [], proofs: [] });
+const pf = (kind: ProofKind, title: string, src: string, daysAgo: number): Proof => ({ kind, title, src, at: NOW - daysAgo * DAY });
+/** Respaldos de cada vínculo, por persona de la lista y vínculo. */
+const PROOFS: Record<string, Record<string, Proof[]>> = {
+  'LB-0291': {
+    v1: [pf('documento', 'Denuncia de robo del vehículo', 'Fiscalía', 40), pf('registro', 'Registro del vehículo', 'Viceministerio de Transporte', 40), pf('video', 'Lectura de la placa robada', 'CAM-014', 33), pf('imagen', 'La persona al volante', 'CAM-015', 28), pf('video', 'Llega en el pickup con LB-0377', 'CAM-031', 21)],
+    p1: [pf('imagen', 'Ficha de LB-0377', 'PNC', 60), pf('video', 'Juntos en el Mercado Central', 'CAM-031', 21), pf('documento', 'Acta de imputación', 'Fiscalía', 14)],
+    p2: [pf('imagen', 'Captura junto a la persona', 'CAM-014', 6), pf('imagen', 'Captura junto a la persona', 'CAM-014', 2)],
+    l1: [pf('video', 'Detección', 'CAM-015', 28), pf('video', 'Detección', 'CAM-014', 6), pf('video', 'Detección', 'CAM-014', 2), pf('registro', 'Detecciones en la zona', 'SpotBox', 0)],
+    l2: [pf('video', 'Detección con LB-0377', 'CAM-031', 21), pf('imagen', 'Detección', 'CAM-031', 3)],
+    c1: [pf('documento', 'Denuncia DEN-2026-114827', 'Fiscalía', 40), pf('documento', 'Acta de imputación', 'Fiscalía', 14)],
+    c2: [pf('documento', 'Orden de captura', 'Juzgado 4.º de Instrucción', 10), pf('registro', 'Alta en la lista de buscadas', 'PNC', 10)],
+  },
+  'LI-1187': {
+    p1: [pf('imagen', 'Ficha de LI-1102', 'PNC', 15), pf('imagen', 'Captura junto a LI-1102', 'CAM-022', 4)],
+    l1: [pf('video', 'Detección', 'CAM-022', 6), pf('video', 'Detección', 'CAM-022', 4), pf('video', 'Detección', 'CAM-023', 1)],
+    c1: [pf('documento', 'Denuncia de extorsión', 'Fiscalía', 20), pf('registro', 'Alta en la lista en investigación', 'PNC', 15)],
+  },
+  'LD-0044': {
+    l1: [pf('documento', 'Denuncia: último lugar donde se la vio', 'PNC', 3)],
+    c1: [pf('documento', 'Denuncia de desaparición', 'PNC', 3), pf('imagen', 'Foto aportada por la familia', 'Familia', 3)],
+  },
+};
+/** Respaldos de la identidad y el motivo, por persona de la lista. */
+const DOCS: Record<string, Proof[]> = {
+  'LB-0291': [pf('imagen', 'Ficha policial', 'PNC', 300), pf('registro', 'Consulta del DUI', 'RNPN', 0), pf('documento', 'Orden de captura CAP-2026-0291', 'Juzgado 4.º de Instrucción', 10)],
+  'LI-1187': [pf('registro', 'Consulta del DUI', 'RNPN', 0), pf('documento', 'Expediente EXT-2026-0412', 'Fiscalía', 15)],
+  'LD-0044': [pf('imagen', 'Foto aportada por la familia', 'Familia', 3), pf('documento', 'Denuncia de desaparición', 'PNC', 3)],
+};
 /** Cada conexión toma de la historia los hechos que la involucran (una sola fuente, siempre en orden). */
 const tell = (m: FacialMatch): FacialMatch => {
   const story = [...m.story].sort((a, b) => a.at - b.at);
-  return { ...m, story, links: m.links.map((l) => ({ ...l, events: story.filter((e) => e.links.includes(l.id)) })) };
+  return { ...m, story, docs: DOCS[m.listRef] ?? [], links: m.links.map((l) => ({ ...l, events: story.filter((e) => e.links.includes(l.id)), proofs: PROOFS[m.listRef]?.[l.id] ?? [] })) };
 };
 const rawMatches = (): FacialMatch[] => [
   { id: 'FC-7301', spotbox: 'SPOTBOX-PC-03', list: 'buscadas', listRef: 'LB-0291', reason: 'Orden de captura vigente', orderUntil: '15 ene 2027',
@@ -158,7 +194,7 @@ const rawMatches = (): FacialMatch[] => [
       det(5, NOW - 11 * MIN, 0.91, { pose: 'frontal', sharp: 'aceptable', covered: [] }),
       det(0, NOW - 3 * MIN, 0.96, { pose: 'frontal', sharp: 'nitida', covered: [] }),
     ],
-    risk: { level: 'alto', notes: ['Puede estar armado (robo con arma, 2026)', 'Se movía en un pickup robado: P 512-884'] }, similarDiscarded: 0,
+    risk: { level: 'alto', notes: ['Puede estar armado (robo con arma, 2026)', 'Se movía en un pickup robado: P 512-884'] }, similarDiscarded: 0, docs: [],
     status: 'por_revisar', agent: 'Agente PNC-224 (punto de control)',
     timeline: [{ at: NOW - 190 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 79 %)' }, { at: NOW - 105 * MIN, label: 'Nueva detección (84 %)' }, { at: NOW - 19 * MIN, label: 'Nueva detección (88 %)' }, { at: NOW - 11 * MIN, label: 'Nueva detección (91 %)' }, { at: NOW - 3 * MIN, label: 'Nueva detección (96 %)' }] },
   { id: 'FC-7302', spotbox: 'SPOTBOX-PC-05', list: 'investigacion', listRef: 'LI-1187', reason: 'Seguimiento por investigación de extorsión', orderUntil: null,
@@ -184,7 +220,7 @@ const rawMatches = (): FacialMatch[] => [
     listPhotos: [{ src: '', caption: 'Foto del DUI', year: '2023', score: 0.89 }],
     profile3d: { detections: 6, updatedAt: NOW - 9 * 24 * 60 * MIN }, scene: '',
     detections: [det(7, NOW - 9 * MIN, 0.89)],
-    risk: { level: 'medio', notes: ['Investigación por extorsión: no hay orden de captura', 'Solo identificar e informar; no detener'] }, similarDiscarded: 2,
+    risk: { level: 'medio', notes: ['Investigación por extorsión: no hay orden de captura', 'Solo identificar e informar; no detener'] }, similarDiscarded: 2, docs: [],
     status: 'por_revisar', agent: 'Agente PNC-118 (punto de control)',
     timeline: [{ at: NOW - 9 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 89 %)' }] },
   { id: 'FC-7298', spotbox: 'SPOTBOX-PC-03', list: 'desaparecidas', listRef: 'LD-0044', reason: 'Denuncia de desaparición', orderUntil: null,
@@ -203,7 +239,7 @@ const rawMatches = (): FacialMatch[] => [
     listPhotos: [{ src: '', caption: 'Foto aportada por la familia', year: '2026', score: 0.86 }],
     profile3d: { detections: 3, updatedAt: NOW - 30 * 24 * 60 * MIN }, scene: '',
     detections: [det(3, NOW - 52 * MIN, 0.86)],
-    risk: { level: 'bajo', notes: ['Persona desaparecida: acercarse con cuidado, puede estar desorientada'] }, similarDiscarded: 1,
+    risk: { level: 'bajo', notes: ['Persona desaparecida: acercarse con cuidado, puede estar desorientada'] }, similarDiscarded: 1, docs: [],
     status: 'descartada', reviewedBy: 'José Portillo', discardReason: 'No es la misma persona', agent: 'Agente PNC-224 (punto de control)',
     timeline: [{ at: NOW - 52 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 86 %)' }, { at: NOW - 50 * MIN, label: 'Descartada: No es la misma persona', by: 'José Portillo' }] },
 ];

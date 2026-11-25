@@ -12,8 +12,8 @@
    Esc cierra el expediente (no la ficha). Todo es de ejemplo hasta que lleguen los datos reales. */
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { dateTime, hhmm, pct } from '../../api/format';
-import { FACIAL_LISTS, FACIAL_SOURCES, TRAIT_GROUPS, lastDetection, type FacialMatch, type LinkKind, type TraitGroup } from '../../api/facial';
+import { dateShort, dateTime, hhmm, pct } from '../../api/format';
+import { FACIAL_LISTS, FACIAL_SOURCES, TRAIT_GROUPS, lastDetection, type FacialMatch, type LinkKind, type Proof, type ProofKind, type TraitGroup } from '../../api/facial';
 import { FaceCloud } from '../../ui/FaceCloud';
 import { FaceTrail } from './FaceTrail';
 import { Icon } from '../../ui/kit';
@@ -30,6 +30,73 @@ const strength = (w: number) => (w >= 0.75 ? 'Vínculo fuerte' : w >= 0.5 ? 'Ví
 /** Lugar reservado para una imagen que todavía no hay (el prototipo no usa fotos ficticias). */
 export function Shot({ label }: { label?: string }) {
   return <span className="shot"><span className="ph-ev"><img src="/assets/logo-spotvision-bn.png" alt="" />{label && <b>{label}</b>}</span></span>;
+}
+
+/** Algo para ver en grande: una imagen, un video, un documento o un registro. */
+export interface ViewItem { src: string; tag: string; title: string; sub: string; icon: string }
+const PROOF_ICON: Record<ProofKind, string> = { imagen: 'image', video: 'play_circle', documento: 'description', registro: 'dataset' };
+const PROOF_TAG: Record<ProofKind, string> = { imagen: 'Imagen', video: 'Video', documento: 'Documento', registro: 'Registro' };
+export const proofItem = (p: Proof): ViewItem => ({ src: '', tag: PROOF_TAG[p.kind], title: p.title, sub: `${p.src} · ${dateShort(p.at)}`, icon: PROOF_ICON[p.kind] });
+
+/** Visor grande que se navega: anterior / siguiente (también con las flechas), una tira con todas y,
+    si se pasa `compare`, la imagen de referencia al lado para comparar. `standalone`: se abre sobre toda
+    la pantalla y maneja Esc y las flechas (desde la ficha); si no, lo maneja el expediente. */
+export function Viewer({ items, index, onIndex, onClose, compare, standalone }: {
+  items: ViewItem[]; index: number; onIndex: (i: number) => void; onClose: () => void; compare?: ViewItem | null; standalone?: boolean;
+}) {
+  const n = items.length;
+  const x = items[Math.min(index, n - 1)];
+  const cb = useRef({ onIndex, onClose, index, n }); cb.current = { onIndex, onClose, index, n };
+  useEffect(() => {
+    if (!standalone) return;
+    const k = (e: KeyboardEvent) => {
+      const c = cb.current;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); c.onClose(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); c.onIndex((c.index + (e.key === 'ArrowRight' ? 1 : c.n - 1)) % c.n); }
+    };
+    window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true);
+  }, [standalone]);
+  if (!x) return null;
+  const ref = compare && x.tag === 'Hoy' ? compare : null;
+  const body = (
+    <div className={`lb ${standalone ? 'solo' : ''}`} role="dialog" aria-modal={standalone || undefined} aria-label={`${x.tag}: ${x.title}`}>
+      <div className="lb-hd">
+        <span className="mono">{index + 1} / {n}</span>
+        <b><Icon name={x.icon} />{x.tag} · {x.title}</b>
+        <span className="lb-sub">{x.sub}</span>
+        <button className="iconbtn" aria-label="Cerrar (Esc)" onClick={onClose}><Icon name="close" /></button>
+      </div>
+      <div className={`lb-body ${ref ? 'two' : ''}`}>
+        <figure><ZoomImg key={x.title + index} src={x.src} alt={`${x.tag} · ${x.title}`} /><figcaption>{x.tag} · {x.sub}</figcaption></figure>
+        {ref && <figure><ZoomImg src={ref.src} alt={`${ref.tag} · ${ref.title}`} /><figcaption>Para comparar: {ref.title}</figcaption></figure>}
+      </div>
+      {n > 1 && (
+        <div className="lb-nav">
+          <button className="btn secondary sm" onClick={() => onIndex((index + n - 1) % n)}><Icon name="chevron_left" />Anterior</button>
+          <div className="lb-strip">{items.map((y, i) => <button key={i} className={i === index ? 'on' : ''} aria-label={`${y.tag} · ${y.title}`} aria-pressed={i === index} onClick={() => onIndex(i)}>{y.src ? <img src={y.src} alt="" /> : <span className="lb-ic"><Icon name={y.icon} /></span>}</button>)}</div>
+          <button className="btn secondary sm" onClick={() => onIndex((index + 1) % n)}>Siguiente<Icon name="chevron_right" /></button>
+        </div>
+      )}
+    </div>
+  );
+  return standalone ? createPortal(<div className="lb-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>{body}</div>, document.body) : body;
+}
+
+/** Respaldos: un recuadro por cada imagen, video, documento o registro que comprueba un dato. */
+export function Proofs({ items, onOpen }: { items: Proof[]; onOpen: (i: number) => void }) {
+  if (!items.length) return null;
+  return (
+    <div className="pv" role="list" aria-label="Respaldos">
+      {items.map((p, i) => (
+        <button key={i} role="listitem" className={`pv-t k-${p.kind}`} onClick={() => onOpen(i)} aria-label={`Ver ${PROOF_TAG[p.kind].toLowerCase()}: ${p.title}, ${p.src}, ${dateShort(p.at)}`}>
+          <span className="pv-ic"><Icon name={PROOF_ICON[p.kind]} /></span>
+          <span className="pv-k mono">{PROOF_TAG[p.kind]}</span>
+          <b>{p.title}</b>
+          <small>{p.src} · {dateShort(p.at)}</small>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /** Imagen que se amplía ahí mismo: clic acerca (2,5×) hacia donde está el puntero, mover la recorre,
@@ -62,7 +129,7 @@ function ZoomReal({ src, alt }: { src: string; alt: string }) {
 /** Conexiones: la persona al centro y, alrededor, un bloque por grupo (vehículos, personas, lugares,
     casos) con lo que tiene vinculado adentro, del vínculo más fuerte al más débil. Elegir una conexión
     muestra sus datos ahí mismo; otra vez la cierra. */
-function Connections({ m, sel, setSel }: { m: FacialMatch; sel: string | null; setSel: (id: string | null) => void }) {
+function Connections({ m, sel, setSel, onProof }: { m: FacialMatch; sel: string | null; setSel: (id: string | null) => void; onProof: (items: Proof[], i: number) => void }) {
   const order = Object.keys(KIND) as LinkKind[];
   const l = sel ? m.links.find((v) => v.id === sel) : undefined;
   // Ubicación fija: vehículos arriba a la izquierda, personas arriba a la derecha, lugares abajo a la
@@ -84,14 +151,20 @@ function Connections({ m, sel, setSel }: { m: FacialMatch; sel: string | null; s
           <section key={k} className={`cn-g g-${k} ${l?.kind === k ? 'on' : ''}`} aria-label={`${KIND[k].label}: ${list.length}`}>
             <h3><Icon name={KIND[k].icon} />{KIND[k].label}<span className="mono">{list.length}</span></h3>
             {list.length ? list.map((v) => (
-              <button key={v.id} className={`cn-item ${v.id === sel ? 'on' : ''}`} aria-pressed={v.id === sel} onClick={() => setSel(v.id === sel ? null : v.id)}
-                title={`${strength(v.weight)} · ${v.events.length} ${v.events.length === 1 ? 'hecho' : 'hechos'}`}>
-                <span className="cn-w" aria-hidden><i style={{ height: `${v.weight * 100}%` }} /></span>
-                <span><b>{v.label}</b><small>{v.sub}</small>
-                  {v.id === sel && <dl className="cn-facts">{v.facts.map(([k, val]) => <Fragment key={k}><dt>{k}</dt><dd>{val}</dd></Fragment>)}</dl>}
-                </span>
-              </button>
-            )) : <p className="cn-none">Sin vínculos</p>}
+              <div key={v.id} className={`cn-row ${v.id === sel ? 'on' : ''}`}>
+                <button className={`cn-item ${v.id === sel ? 'on' : ''}`} aria-expanded={v.id === sel} onClick={() => setSel(v.id === sel ? null : v.id)}
+                  title={`${strength(v.weight)} · ${v.proofs.length} ${v.proofs.length === 1 ? 'respaldo' : 'respaldos'}`}>
+                  <span className="cn-w" aria-hidden><i style={{ height: `${v.weight * 100}%` }} /></span>
+                  <span><b>{v.label}</b><small>{v.sub} · {v.proofs.length} {v.proofs.length === 1 ? 'respaldo' : 'respaldos'}</small></span>
+                </button>
+                {v.id === sel && (
+                  <div className="cn-open">
+                    <dl className="cn-facts">{v.facts.map(([k, val]) => <Fragment key={k}><dt>{k}</dt><dd>{val}</dd></Fragment>)}</dl>
+                    <Proofs items={v.proofs} onOpen={(i) => onProof(v.proofs, i)} />
+                  </div>
+                )}
+              </div>
+)) : <p className="cn-none">Sin vínculos</p>}
           </section>
         );
       })}
@@ -101,7 +174,7 @@ function Connections({ m, sel, setSel }: { m: FacialMatch; sel: string | null; s
 
 /** Metadatos de la persona en un solo lugar y con un solo formato: identidad, señas (lo que dice la
     lista y lo que se ve en la captura) y fuentes. */
-function Meta({ m }: { m: FacialMatch }) {
+function Meta({ m, onProof }: { m: FacialMatch; onProof: (items: Proof[], i: number) => void }) {
   const L = FACIAL_LISTS[m.list];
   const groups = (Object.keys(TRAIT_GROUPS) as TraitGroup[]).filter((g) => m.traits.some((x) => x.group === g));
   return (
@@ -131,6 +204,7 @@ function Meta({ m }: { m: FacialMatch }) {
           </dl>
         </Fragment>
       ))}
+      {m.docs.length > 0 && <><h3>Respaldos</h3><Proofs items={m.docs} onOpen={(i) => onProof(m.docs, i)} /></>}
       <h3>Fuentes</h3>
       <dl>{FACIAL_SOURCES.map((s) => <Fragment key={s.name}><dt>{s.name}</dt><dd className={s.state === 'conectada' ? 'ok' : 'muted'}>{s.state === 'conectada' ? 'Conectada' : 'Por conectar'}</dd></Fragment>)}</dl>
     </div>
@@ -176,18 +250,20 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
   const [sel, setSel] = useState<string | null>(null);
   // Todas las imágenes juntas: primero las fotos de la lista, después las capturas de hoy en orden.
   const imgs = useMemo(() => [
-    ...photos.map((x) => ({ src: x.src, kind: 'lista' as const, title: x.caption, sub: `${x.year} · ${pct(x.score)}` })),
-    ...m.detections.map((x) => ({ src: x.capture, kind: 'captura' as const, title: `${hhmm(x.at)} · ${x.cameraId}`, sub: `${x.place} · ${pct(x.score)}` })),
+    ...photos.map((x): ViewItem & { kind: 'lista' } => ({ src: x.src, kind: 'lista', tag: 'Lista', icon: 'badge', title: x.caption, sub: `${x.year} · ${pct(x.score)}` })),
+    ...m.detections.map((x): ViewItem & { kind: 'captura' } => ({ src: x.capture, kind: 'captura', tag: 'Hoy', icon: 'videocam', title: `${hhmm(x.at)} · ${x.cameraId}`, sub: `${x.place} · ${pct(x.score)}` })),
   ], [photos, m.detections]);
-  const [big, setBig] = useState<number | null>(null);
-  const bigRef = useRef(big); bigRef.current = big;
+  // Lo que está abierto en grande: las imágenes de la persona o los respaldos de algo.
+  const [view, setView] = useState<{ items: ViewItem[]; index: number; compare?: ViewItem | null } | null>(null);
+  const viewRef = useRef(view); viewRef.current = view;
+  const openImgs = (i: number) => setView({ items: imgs, index: i, compare: imgs.find((x) => x.kind === 'lista') ?? null });
+  const openProofs = (items: Proof[], i: number) => setView({ items: items.map(proofItem), index: i });
   const best = m.detections.length ? Math.max(...m.detections.map((x) => x.score)) : lastDetection(m).score;
   const [auto, setAuto] = useState(true);
   const [marks3d, setMarks3d] = useState(true);
   const [scan, setScan] = useState(true);
   const [reset, setReset] = useState(0);
   const seed = [...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7);
-  const imgsRef = useRef(imgs.length); imgsRef.current = imgs.length;
   const box = useRef<HTMLDivElement>(null);
   const close = useRef(onClose); close.current = onClose;
   // Al abrir toma el foco (una sola vez); Esc lo cierra sin cerrar nada más; Tab queda adentro; al
@@ -196,8 +272,9 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
     const back = document.activeElement as HTMLElement | null;
     box.current?.focus();
     const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (bigRef.current != null) setBig(null); else close.current(); return; }
-      if (bigRef.current != null && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); const n = imgsRef.current; setBig((b) => (b == null ? b : (b + (e.key === 'ArrowRight' ? 1 : n - 1)) % n)); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (viewRef.current) setView(null); else close.current(); return; }
+      const v = viewRef.current;
+      if (v && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); const n = v.items.length; setView({ ...v, index: (v.index + (e.key === 'ArrowRight' ? 1 : n - 1)) % n }); return; }
       if (e.key !== 'Tab' || !box.current) return;
       const f = [...box.current.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex="0"], canvas[tabindex]')].filter((x) => x.offsetParent !== null || x instanceof SVGElement);
       if (!f.length) return;
@@ -234,7 +311,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
           <h2>Imágenes <span className="ds-sub">{photos.length} de la lista · {m.detections.length} de hoy · toca una para verla grande</span></h2>
           <div className="gl">
             {imgs.map((x, i) => (
-              <button key={x.src + i} className={`gl-t ${x.kind}`} onClick={() => setBig(i)} aria-label={`Ver grande: ${x.kind === 'lista' ? 'foto de la lista' : 'captura'} ${x.title}`}>
+              <button key={x.src + i} className={`gl-t ${x.kind}`} onClick={() => openImgs(i)} aria-label={`Ver grande: ${x.kind === 'lista' ? 'foto de la lista' : 'captura'} ${x.title}`}>
                 {x.src ? <img src={x.src} alt="" /> : <Shot />}
                 <span className="gl-tag mono">{x.kind === 'lista' ? 'Lista' : 'Hoy'}</span>
                 <span className="gl-cap"><b>{x.title}</b><small>{x.sub}</small></span>
@@ -260,43 +337,21 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
 
         <section className="ds-panel ds-side" aria-label="Metadatos">
           <h2>Metadatos</h2>
-          <Meta m={m} />
+          <Meta m={m} onProof={openProofs} />
         </section>
 
         <section className="ds-panel ds-links" aria-label="Conexiones">
           <h2>Conexiones <span className="ds-sub">{m.links.length} vínculos</span></h2>
-          <Connections m={m} sel={sel} setSel={setSel} />
+          <Connections m={m} sel={sel} setSel={setSel} onProof={openProofs} />
         </section>
 
         <section className="ds-panel ds-hist" aria-label="Recorrido de hoy">
           <h2>Recorrido de hoy <span className="ds-sub">{m.detections.length} capturas en el mapa, en orden de hora · toca una para verla grande</span></h2>
-          <FaceTrail dets={m.detections} onOpen={(i) => setBig(photos.length + i)} />
+          <FaceTrail dets={m.detections} onOpen={(i) => openImgs(photos.length + i)} />
         </section>
       </div>
 
-      {big != null && imgs[big] && (() => {
-        const x = imgs[big];
-        const ref = x.kind === 'captura' ? imgs[0] : null;
-        return (
-          <div className="lb" role="group" aria-label="Imagen ampliada">
-            <div className="lb-hd">
-              <span className="mono">{big + 1} / {imgs.length}</span>
-              <b>{x.kind === 'lista' ? 'Foto de la lista' : 'Captura de hoy'} · {x.title}</b>
-              <span className="lb-sub">{x.sub}</span>
-              <button className="iconbtn" aria-label="Cerrar la imagen (Esc)" onClick={() => setBig(null)}><Icon name="close" /></button>
-            </div>
-            <div className={`lb-body ${ref ? 'two' : ''}`}>
-              <figure><ZoomImg key={x.src + big} src={x.src} alt={x.title} /><figcaption>{x.kind === 'lista' ? 'Lista' : 'Captura'}</figcaption></figure>
-              {ref && <figure><ZoomImg src={ref.src} alt={ref.title} /><figcaption>Para comparar: {ref.title} (lista)</figcaption></figure>}
-            </div>
-            <div className="lb-nav">
-              <button className="btn secondary sm" onClick={() => setBig((big + imgs.length - 1) % imgs.length)}><Icon name="chevron_left" />Anterior</button>
-              <div className="lb-strip">{imgs.map((y, i) => <button key={y.src + i} className={i === big ? 'on' : ''} aria-label={y.title} aria-pressed={i === big} onClick={() => setBig(i)}>{y.src ? <img src={y.src} alt="" /> : <Shot />}</button>)}</div>
-              <button className="btn secondary sm" onClick={() => setBig((big + 1) % imgs.length)}>Siguiente<Icon name="chevron_right" /></button>
-            </div>
-          </div>
-        );
-      })()}
+      {view && <Viewer items={view.items} index={view.index} compare={view.compare} onIndex={(i) => setView({ ...view, index: i })} onClose={() => setView(null)} />}
     </div>,
     document.body,
   );
