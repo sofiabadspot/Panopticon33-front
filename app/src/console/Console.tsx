@@ -76,7 +76,7 @@ function Layout() {
   const facial = useFacial();
   const sevOf = useZoneSeverity(alerts);
 
-  const [layers, setLayers] = useState<MapLayers>({ zones: true, alerts: true, units: false, cameras: role === 'admin' || role === 'analyst', fov: false, hex: 'personas' });
+  const [layers, setLayers] = useState<MapLayers>({ zones: true, events: true, alerts: true, units: false, cameras: role === 'admin' || role === 'analyst', fov: false, hex: 'personas' });
   /** Última lectura elegida para los hexágonos: al volver a prenderlos, vuelven con esa. */
   const [hexPick, setHexPick] = useState<HexMetric>('personas');
   /* Medir cobertura alrededor de un punto: se activa, se hace clic en el mapa y se ve el radio,
@@ -165,6 +165,8 @@ function Layout() {
      el filtro y la referencia (no hay leyenda aparte). */
   const LAYER_ICON: Record<string, ReactNode> = {
     zones: <svg className="li-zone" viewBox="0 0 20 20" aria-hidden><path d="M3 7l6-4 8 3-1 9-9 2z" /></svg>,
+    // Eventos: la misma bandera que lleva el rótulo del evento en el mapa
+    events: <Icon name="flag" className="li-event" />,
     alerts: <AlertMark kind="placa_en_lista" size={18} still />,
     units: <UnitHex type="Patrulla" size={18} />,
   };
@@ -183,9 +185,10 @@ function Layout() {
   /* En histórico solo hay alertas de la ventana del hecho; personas y cobertura son en vivo. */
   const hexOff = (m: HexMetric) => (!!inv && m !== 'alertas') || (m === 'cobertura' && !policeSource);
   const hexTitle = (m: HexMetric) => (inv && m !== 'alertas' ? 'En vivo: no se muestra en modo histórico' : 'Sin acceso a la ubicación policial');
-  type ChipKey = 'zones' | 'alerts' | 'units';
+  type ChipKey = 'zones' | 'events' | 'alerts' | 'units';
   const chips: [ChipKey, string, string, boolean?][] = [
-    ['zones', 'Zonas', 'Nombre y conteo de los lugares vigilados. El borde punteado marca el evento en curso'],
+    ['zones', 'Zonas', 'Nombre y conteo de los lugares vigilados'],
+    ['events', 'Eventos', 'Eventos en curso: el área que abarcan y su nombre'],
     ['alerts', 'Alertas', inv ? 'Alertas de la ventana del hecho' : 'Alertas que esperan una decisión'],
     ['units', 'Unidades', inv ? 'En vivo: no se muestra en modo histórico' : 'Unidades policiales (MAIC)', !policeSource || !!inv],
     // Cámaras y su campo de visión van juntos: ver el grupo más abajo
@@ -343,7 +346,7 @@ function Layout() {
               title={disabled && !inv ? 'Sin acceso a la ubicación policial' : icon} onClick={() => toggleChip(k)}>
               {LAYER_ICON[k]}{label}
             </button>
-          )).flatMap((el, i) => (i === 2 ? [el, (
+          )).flatMap((el, i) => (i === 3 ? [el, (
             // Cámaras + Visión: un solo control. Visión es un filtro de Cámaras y aparece pegado cuando están prendidas.
             <div key="cams" className={`lchip-group ${layers.cameras ? 'on' : ''}`} role="group" aria-label="Cámaras">
               <button className={`lchip ${layers.cameras ? 'on' : ''}`} aria-pressed={layers.cameras} onClick={() => setLayers((l) => ({ ...l, cameras: !l.cameras, fov: l.cameras ? false : l.fov }))}>

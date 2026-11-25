@@ -810,7 +810,20 @@ body:has(.isheet) { overflow: auto; }
 .ev-when small { color: var(--ink-subtle); }
 .ev-when.en_curso { border-color: color-mix(in srgb, var(--status-positive) 45%, transparent); }
 /* Zona dentro de un evento en curso: una banderita chica dentro del rótulo, antes del nombre (el horario va en la ficha). */
-.mk-zone .zev { align-self: center; font-size: 11px; margin-right: -3px; color: var(--status-positive); }
+/* Rótulo de un evento en curso, sobre su área: como el de una zona (fondo HUD, esquinas) pero con la
+   bandera, el nombre y hasta qué hora dura. Es el que nombra el área delimitada. */
+.mk-event { --c: var(--ink-muted); display: grid; justify-items: center; pointer-events: none; }
+.mk-event .el { position: relative; display: grid; grid-template-columns: auto auto; column-gap: 6px; align-items: center; padding: 4px 9px 5px 7px; background: var(--hud-bg); border: 1px solid var(--hud-line); white-space: nowrap; }
+.mk-event .el::before, .mk-event .el::after { content: ''; position: absolute; width: 7px; height: 7px; border: 0 solid var(--c); pointer-events: none; }
+.mk-event .el::before { left: -1px; top: -1px; border-left-width: 1.5px; border-top-width: 1.5px; }
+.mk-event .el::after { right: -1px; bottom: -1px; border-right-width: 1.5px; border-bottom-width: 1.5px; }
+.mk-event .eflag { grid-row: span 2; font-size: 15px; color: var(--status-positive); }
+.mk-event .en { font: 500 var(--fs-sm) var(--font-sans); color: var(--ink); }
+.mk-event em { font: var(--type-hud-label); letter-spacing: var(--type-hud-tracking); text-transform: uppercase; font-style: normal; color: var(--ink-subtle); }
+.mk-event .estem { display: block; width: 1px; height: 14px; background: linear-gradient(var(--c), transparent 130%); }
+.mk-event.dimz { opacity: .45; }
+.lchip .li-event { font-size: 16px; color: var(--status-positive); }
+.lchip:not(.on) .li-event { opacity: .45; filter: grayscale(.6); }
 .mk-zone.critica { --c: var(--status-negative); }
 .mk-zone.critica b { color: var(--status-negative-text); }
 .mk-zone.nodata .zl { border-style: dashed; }

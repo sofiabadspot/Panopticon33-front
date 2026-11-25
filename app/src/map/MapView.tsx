@@ -13,7 +13,7 @@ import type { Alert, Camera, Evidence as Ev, LngLat, Unit, Zone, ZoneStatus } fr
 import { fmtCrowd, hhmm } from '../api/format';
 import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
-import { areaOutline, HEX_TIERS, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
+import { HEX_TIERS, smoothArea, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
 import { drawHexLayer, makeHexLayer, type HexColors, type HexLayer } from './hexCanvas';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
@@ -28,6 +28,8 @@ maplibregl.setWorkerUrl(workerUrl);
 export const COUNTRY_BOUNDS: LngLatBoundsLike = [[-90.15, 13.13], [-87.68, 14.46]];
 
 export interface MapLayers { zones: boolean; cameras: boolean; units: boolean; alerts: boolean;
+  /** Eventos en curso: su área y su rótulo. Aparte de las zonas: un evento puede abarcar varias. */
+  events?: boolean;
   /** Campo de visión de las cámaras (ángulo y alcance). Apagado por defecto: carga mucho el mapa. */
   fov?: boolean;
   /** Hexágonos: qué muestran (personas, cobertura o alertas). null = apagados. */
@@ -201,13 +203,15 @@ export function MapView(p: Props) {
       /* Zonas: ya no se dibujan. La capa queda invisible solo para poder tocarlas y abrir su ficha;
          el nombre y el conteo van en su rótulo. */
       map.addLayer({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': muted, 'fill-opacity': 0 } });
-      /* Lo que se delimita es el evento en curso (y la zona elegida en el lateral): un borde armado con
-         sus hexágonos, sobre la misma grilla que el resto del mapa. */
+      /* Lo que se delimita es el evento en curso (y la zona elegida en el lateral): un área suave que
+         envuelve sus zonas, con un velo apenas más claro y una línea fina. El nombre del evento va en su
+         propio rótulo, arriba del área (ver los marcadores). */
       map.addSource('area', { type: 'geojson', data: fc([]) });
-      map.addLayer({ id: 'area-line', type: 'line', source: 'area', paint: {
-        'line-color': ink, 'line-width': ['match', ['get', 'k'], 'sel', 2.5, 1.6],
-        'line-opacity': ['case', ['get', 'dim'], 0.35, 1],
-        'line-dasharray': ['match', ['get', 'k'], 'evento', ['literal', [3, 2]], ['literal', [1, 0]]] } });
+      map.addLayer({ id: 'area-fill', type: 'fill', source: 'area', paint: {
+        'fill-color': ink, 'fill-opacity': ['case', ['get', 'dim'], 0.015, ['match', ['get', 'k'], 'sel', 0.06, 0.04]] } });
+      map.addLayer({ id: 'area-line', type: 'line', source: 'area', layout: { 'line-join': 'round' }, paint: {
+        'line-color': ink, 'line-width': ['match', ['get', 'k'], 'sel', 2, 1.25],
+        'line-opacity': ['case', ['get', 'dim'], 0.3, ['match', ['get', 'k'], 'sel', 0.9, 0.6]] } });
       // Campo de visión de cada cámara: hacia dónde mira, con qué ángulo y hasta dónde llega.
       map.addLayer({ id: 'cones-fill', type: 'fill', source: 'cones', minzoom: 15, paint: { 'fill-color': ink, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.04, 17, 0.09] } });
       map.addLayer({ id: 'cones-line', type: 'line', source: 'cones', minzoom: 15, paint: { 'line-color': ink, 'line-opacity': 0.28, 'line-width': 1 } });
@@ -377,7 +381,7 @@ export function MapView(p: Props) {
     // Selección del lateral: la alerta abierta (y su zona), la zona o la cámara.
     const selAlert = P.focusSel?.k === 'alerta' ? P.alerts?.find((x) => x.id === P.focusSel!.id) ?? null : null;
     const selZone = P.focusSel?.k === 'zona' ? P.focusSel.id : selAlert?.zoneId ?? null;
-    const L: MapLayers = { zones: true, cameras: false, units: false, alerts: true, fov: false, hex: null, ...P.layers };
+    const L: MapLayers = { zones: true, events: true, cameras: false, units: false, alerts: true, fov: false, hex: null, ...P.layers };
     // Hexágonos: la grilla del zoom actual se carga al momento; las otras, cuando el navegador está libre.
     // Los valores se recalculan solo si cambian los datos que usa la lectura, y como mucho cada FIELD_EVERY.
     const F = field.current;
@@ -413,12 +417,18 @@ export function MapView(p: Props) {
     })) : []));
     // Áreas delimitadas: cada evento en curso (sus zonas juntas) y la zona elegida
     const area: GeoJSON.Feature[] = [];
+    const eventAreas: { name: string; end: number; ring: LngLat[]; dim: boolean }[] = [];
+    if (L.events) {
+      const events = new Map<string, { end: number; zones: Zone[] }>();
+      for (const z of P.zones) { const ev = P.eventOf?.(z.id); if (ev) events.set(ev.name, { end: ev.end, zones: [...(events.get(ev.name)?.zones ?? []), z] }); }
+      for (const [name, e] of events) {
+        const ring = smoothArea(e.zones), dim = !!selZone && !e.zones.some((z) => z.id === selZone);
+        if (ring.length) { area.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: { k: 'evento', dim } }); eventAreas.push({ name, end: e.end, ring, dim }); }
+      }
+    }
     if (L.zones) {
-      const events = new Map<string, Zone[]>();
-      for (const z of P.zones) { const ev = P.eventOf?.(z.id); if (ev) events.set(ev.name, [...(events.get(ev.name) ?? []), z]); }
-      for (const zs of events.values()) area.push({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: areaOutline(zs) }, properties: { k: 'evento', dim: !!selZone && !zs.some((z) => z.id === selZone) } });
       const sel = P.zones.filter((z) => z.id === selZone || z.id === P.selectedZone || P.highlightZones?.includes(z.id));
-      if (sel.length) area.push({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: areaOutline(sel) }, properties: { k: 'sel', dim: false } });
+      if (sel.length) area.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [smoothArea(sel, 30)] }, properties: { k: 'sel', dim: false } });
     }
     (map.getSource('area') as GeoJSONSource).setData(fc(area));
     // Agrupación al alejar el zoom (cámaras, unidades y alertas por separado). Se calcula en pantalla:
@@ -514,11 +524,23 @@ export function MapView(p: Props) {
       const ev = P.eventOf?.(z.id);
       add('z' + z.id, [z.lon, z.lat], (
         // Rótulo "parado" sobre la zona, como las alertas: chico, con un asta y un anillo en el piso.
-        <span className={`mk-zone ${nodata ? 'nodata' : ''} ${ev ? 'ev' : ''} ${P.selectedZone === z.id || P.highlightZones?.includes(z.id) ? 'sel' : ''} ${dimZ ? 'dimz' : ''}`}>
-          <span className="zl" title={ev ? `Evento en curso: ${ev.name}` : undefined}>{ev && <Icon name="flag" className="zev" />}<span className="zn">{z.name}</span><b>{nodata ? (s?.coverage === 'sin_cobertura' ? 'Sin medición' : 'Sin datos') : fmtCrowd(s.count!)}</b></span>
+        // El evento no se repite en cada zona: tiene su propio rótulo sobre su área.
+        <span className={`mk-zone ${nodata ? 'nodata' : ''} ${P.selectedZone === z.id || P.highlightZones?.includes(z.id) ? 'sel' : ''} ${dimZ ? 'dimz' : ''}`}>
+          <span className="zl"><span className="zn">{z.name}</span><b>{nodata ? (s?.coverage === 'sin_cobertura' ? 'Sin medición' : 'Sin datos') : fmtCrowd(s.count!)}</b></span>
           <u className="zstem" aria-hidden />
         </span>
       ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'bottom', `Zona ${z.name}${ev ? ` · evento en curso hasta ${hhmm(ev.end)}` : ''}`);
+    }
+    // Rótulo del evento: arriba de su área (en el punto más al norte), con su nombre y hasta qué hora dura.
+    // Se ve a cualquier zoom, para que el evento se ubique aun con el mapa alejado.
+    if (!focus && !P.compact) for (const e of eventAreas) {
+      const top = e.ring.reduce((a, q) => (q[1] > a[1] ? q : a));
+      add('ev' + e.name, top, (
+        <span className={`mk-event ${e.dim ? 'dimz' : ''}`}>
+          <span className="el"><Icon name="flag" className="eflag" /><span className="en">{e.name}</span><em>Evento en curso · hasta {hhmm(e.end)}</em></span>
+          <u className="estem" aria-hidden />
+        </span>
+      ), undefined, 'bottom', `Evento en curso: ${e.name}, hasta ${hhmm(e.end)}`);
     }
     const zoomTo = (c: LngLat) => () => map.easeTo({ center: c, zoom: Math.min(17.2, zoom + 1.8), duration: 700 });
     const groupMk = (cat: GroupCat, g: { key: string; items: { id: string }[]; c: LngLat }) =>

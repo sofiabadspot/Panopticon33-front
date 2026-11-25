@@ -7,7 +7,7 @@
    Una sola capa, con tres lecturas a elegir: personas, cobertura o alertas.
 
    En producción esto lo calcula el backend (mismas celdas H3). Hoy usa los datos simulados. */
-import { cellToBoundary, cellToLatLng, cellsToMultiPolygon, gridDisk, latLngToCell, polygonToCells } from 'h3-js';
+import { cellToBoundary, cellToLatLng, gridDisk, latLngToCell, polygonToCells } from 'h3-js';
 import type { Alert, Camera, LngLat, Unit, Zone, ZoneStatus } from './types';
 
 /** Qué muestran los hexágonos del mapa. */
@@ -31,14 +31,6 @@ function meters(a: LngLat, b: LngLat) {
   return Math.hypot((a[0] - b[0]) * k, (a[1] - b[1]) * 111320);
 }
 export const etaMin = (u: Unit, p: LngLat) => (meters([u.lon, u.lat], p) * STREET) / ((SPEED[u.type] * 1000) / 60);
-
-/** Celdas de una zona a la resolución pedida (al menos la de su centro). */
-const zoneCells = new Map<string, string[]>();
-function cellsOf(z: Zone, res: number) {
-  const k = z.id + ':' + res; let c = zoneCells.get(k);
-  if (!c) { c = polygonToCells([z.ring.map(([lon, lat]) => [lat, lon])], res); if (!c.length) c = [latLngToCell(z.lat, z.lon, res)]; zoneCells.set(k, c); }
-  return c;
-}
 
 /* ---------- Lo que se ve: hexágonos chicos en degradé ----------
    Para que el mapa no parpadee al moverlo, la geometría NO cambia nunca: hay tres grillas fijas,
@@ -152,12 +144,27 @@ export function hexValues(metric: HexMetric, g: HexGrid, d: HexData): Float64Arr
   return out;
 }
 
-/** Contorno de un área armada con hexágonos (un evento, una zona elegida): las celdas de sus zonas y un
-    anillo alrededor, unidas en un solo borde. Coordenadas GeoJSON ([lon, lat]). */
-export function areaOutline(zones: Zone[]): LngLat[][][] {
-  const cells = new Set<string>();
-  for (const z of zones) for (const c of cellsOf(z, HEX_RES)) for (const n of gridDisk(c, 1)) cells.add(n);
-  return cells.size ? (cellsToMultiPolygon([...cells], true) as LngLat[][][]) : [];
+/** Área de un evento (o de una zona elegida) para delimitarla en el mapa: una figura suave que envuelve
+    sus zonas con `padM` metros de margen y las esquinas redondeadas. No sigue los escalones de los
+    hexágonos: es para que se lea de un vistazo qué parte del mapa abarca. Anillo GeoJSON cerrado. */
+export function smoothArea(zones: Zone[], padM = 70): LngLat[] {
+  const pts = zones.flatMap((z) => z.ring);
+  if (!pts.length) return [];
+  const lat0 = pts.reduce((a, q) => a + q[1], 0) / pts.length, kx = Math.cos((lat0 * Math.PI) / 180) * 111320;
+  // Cada punto del borde de las zonas, rodeado por un círculo de radio padM: su envolvente es el área con margen.
+  const xy: [number, number][] = [];
+  for (const [lon, lat] of hull(pts)) for (let i = 0; i < 16; i++) { const a = (i / 16) * 2 * Math.PI; xy.push([lon * kx + Math.cos(a) * padM, lat * 111320 + Math.sin(a) * padM]); }
+  const ring = hull(xy).map(([x, y]) => [x / kx, y / 111320] as LngLat);
+  return [...ring, ring[0]];
+}
+/** Envolvente convexa (Andrew): los puntos del borde, en orden. */
+function hull<T extends [number, number] | LngLat>(pts: T[]): T[] {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o: T, a: T, b: T) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo: T[] = [], up: T[] = [];
+  for (const q of p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (const q of p.reverse()) { while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  return [...lo.slice(0, -1), ...up.slice(0, -1)];
 }
 
 /** Contorno de un hexágono para el mapa ([lon, lat], cerrado). */
