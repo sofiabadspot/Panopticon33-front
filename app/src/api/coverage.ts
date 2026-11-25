@@ -72,17 +72,40 @@ const camSeed = (id: string) => { let h = 7; for (const ch of id) h = (h * 31 + 
     comerciales, mercados, avenidas) hasta que el backend mande personas por celda de toda la ciudad. */
 const CITY: Source[] = (() => {
   let s = 20261125; const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-  return Array.from({ length: 110 }, () => ({ lon: -89.31 + r() * 0.22, lat: 13.62 + r() * 0.16, a: 0.08 + 0.42 * r() ** 1.6, sigma: 400 + 900 * r() }));
+  return Array.from({ length: 90 }, () => ({ lon: -89.31 + r() * 0.22, lat: 13.62 + r() * 0.16, a: 0.04 + 0.26 * r() ** 2, sigma: 300 + 800 * r() }));
 })();
 /** Cámara peatonal o mixta que funciona: la gente que ve en la calle. SIMULADO: las cámaras todavía
     no informan conteo. */
 const camSources = (cameras: Camera[]): Source[] => cameras
   .filter((c) => c.kind !== 'vehicular' && c.status !== 'caida' && c.status !== 'fuera_de_preset')
-  .map((c) => ({ lat: c.lat, lon: c.lon, a: 0.05 + 0.15 * camSeed(c.id), sigma: 340 }));
-/** Zona medida: su ocupación (o densidad/5), en un radio que crece con su superficie. */
+  // Aporte chico y corto: son 26 juntas en el sector y, más grandes, formaban una meseta ocre en todo el sector.
+  .map((c) => ({ lat: c.lat, lon: c.lon, a: 0.03 + 0.08 * camSeed(c.id), sigma: 200 }));
+/* Zona medida: su gente no está pareja. Se reparte en varios focos dentro de su perímetro, cada uno con su
+   peso (fijos por zona: la demo se ve igual cada vez), más una aureola suave alrededor. De lejos los focos
+   se suman en una mancha; de cerca se ve dónde se junta más gente y la graduación hacia los bordes, en vez
+   de un rojo parejo. La intensidad sigue a la ocupación de la zona. */
+const zoneSpots = new Map<string, { lat: number; lon: number; w: number }[]>();
+function spotsOf(z: Zone) {
+  let sp = zoneSpots.get(z.id); if (sp) return sp;
+  let seed = [...z.id].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7) || 1;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const xs = z.ring.map((q) => q[0]), ys = z.ring.map((q) => q[1]);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const inside = (x: number, y: number) => { let c = false; for (let i = 0, j = z.ring.length - 1; i < z.ring.length; j = i++) { const [xi, yi] = z.ring[i], [xj, yj] = z.ring[j]; if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
+  const n = Math.max(5, Math.min(18, Math.round(z.areaM2 / 2500)));
+  sp = [];
+  for (let k = 0; k < n * 30 && sp.length < n; k++) { const x = x0 + rnd() * (x1 - x0), y = y0 + rnd() * (y1 - y0); if (inside(x, y)) sp.push({ lon: x, lat: y, w: 0.45 + rnd() * 0.9 }); }
+  if (!sp.length) sp.push({ lon: z.lon, lat: z.lat, w: 1 });
+  zoneSpots.set(z.id, sp);
+  return sp;
+}
 const zoneSources = (zones: Zone[], status: Record<string, ZoneStatus>): Source[] => zones.flatMap((z) => {
   const s = status[z.id]; if (!s || s.count == null) return [];
-  return [{ lat: z.lat, lon: z.lon, a: Math.max(0.05, Math.min(0.97, s.occupancy ?? (s.densityPerM2 ?? 0) / 5)), sigma: Math.max(220, Math.sqrt(z.areaM2) * 1.4) }];
+  const occ = Math.max(0.05, Math.min(1.4, s.occupancy ?? (s.densityPerM2 ?? 0) / 5));
+  const r = Math.sqrt(z.areaM2 / Math.PI);
+  const spots = spotsOf(z).map((p) => ({ lat: p.lat, lon: p.lon, a: Math.min(0.85, occ * 0.3 * p.w), sigma: Math.max(40, r * 0.4) }));
+  // Aureola: la gente que se acerca o sale, alrededor de la zona.
+  return [...spots, { lat: z.lat, lon: z.lon, a: Math.min(0.4, occ * 0.22), sigma: Math.max(200, r * 1.8) }];
 });
 /** Alertas abiertas (sin descartar ni cerradas en Maic), pesadas por criticidad. */
 const SEV_W = { critica: 0.9, media: 0.6, baja: 0.35 } as const;

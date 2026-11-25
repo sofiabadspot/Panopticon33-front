@@ -62,14 +62,18 @@ export const unmeasured = (d: Pick<HexData, 'zones' | 'status'>) => d.zones.filt
 export interface HexColors { positive: string; alert: string; negative: string }
 const rgb = (hex: string) => { const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map((x) => x + x).join('') : h.slice(0, 6), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 /** Opacidad de personas y alertas según el valor: casi nada en el borde de la mancha, más al centro. */
-/* Sube rápido al principio: con poca opacidad el amarillo se mezcla con el mapa oscuro y se ve gris. */
-const fade = (w: number) => { const P: [number, number][] = [[0, 0], [0.04, 0.16], [0.15, 0.34], [0.4, 0.46], [0.7, 0.56], [1, 0.66]]; for (let i = 1; i < P.length; i++) if (w <= P[i][0]) { const [a, oa] = P[i - 1], [b, ob] = P[i]; return oa + ((w - a) / (b - a)) * (ob - oa); } return 0.66; };
+/* El fondo de la ciudad (valores muy bajos, la mitad de las celdas) va casi transparente: amarillo tenue
+   sobre el mapa oscuro se ve oliva, gris. La opacidad sube donde hay gente de verdad, para que la
+   graduación (amarillo → naranja → rojo) se lea donde importa. */
+const fade = (w: number) => { const P: [number, number][] = [[0, 0], [0.06, 0.03], [0.12, 0.1], [0.25, 0.28], [0.5, 0.45], [0.75, 0.56], [1, 0.66]]; for (let i = 1; i < P.length; i++) if (w <= P[i][0]) { const [a, oa] = P[i - 1], [b, ob] = P[i]; return oa + ((w - a) / (b - a)) * (ob - oa); } return 0.66; };
 /** Color de una celda según la lectura y su valor (ver hexValues).
     · Personas y alertas: amarillo (poco) → rojo (mucho), desvaneciéndose hacia el borde.
     · Cobertura: verde (llega en FAST_MIN o menos), amarillo (hasta NEAR_MIN), rojo (más), parejo. */
 function fill(m: HexMetric, v: number, c: HexColors) {
   if (m === 'cobertura') { const [r, g, b] = rgb(v === 0 ? c.positive : v === 1 ? c.alert : c.negative); return `rgba(${r},${g},${b},0.26)`; }
-  const t = Math.min(1, v / 0.6), a = rgb(c.alert), z = rgb(c.negative);
+  // Escala larga: amarillo hasta valores medios, naranja en el medio y rojo pleno solo donde está
+  // realmente saturado (≥ 0,9). Así, de cerca, se ve la graduación dentro de una zona llena.
+  const t = Math.max(0, Math.min(1, (v - 0.2) / 0.7)), a = rgb(c.alert), z = rgb(c.negative);
   return `rgba(${Math.round(a[0] + (z[0] - a[0]) * t)},${Math.round(a[1] + (z[1] - a[1]) * t)},${Math.round(a[2] + (z[2] - a[2]) * t)},${fade(v).toFixed(3)})`;
 }
 
