@@ -1912,11 +1912,6 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .md dd em { color: var(--ink-subtle); }
 .md dd.ok { color: var(--status-positive); } .md dd.muted { color: var(--ink-subtle); }
 
-.ft { position: relative; flex: 1; min-height: 0; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border); }
-.ft-mk { display: grid; justify-items: center; gap: 3px; padding: 0; border: 0; background: none; cursor: zoom-in; }
-.ft-mk span { padding: 1px 6px; border-radius: var(--radius-full); background: var(--hud-bg); border: 1px solid var(--border); font: var(--fs-2xs) var(--font-mono); color: var(--ink); white-space: nowrap; }
-.ft-mk span b { color: var(--fc-accent); }
-.ft-mk:focus-visible { outline: none; }
 .cn-facts { margin: 6px 0 2px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; font-size: var(--fs-xs); }
 .cn-facts dt { color: var(--ink-subtle); } .cn-facts dd { margin: 0; color: var(--ink); }
 
@@ -1925,8 +1920,6 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .ds-empty { display: block; cursor: default; }
 .fc-ph { position: relative; display: block; flex: none; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .fc-ph .ph-ev img { width: 60% !important; }
-.ft-ph { display: block; width: 40px; height: 48px; border-radius: var(--radius-xs); border: 2px solid var(--border-control); background: var(--surface) url('/assets/logo-spotvision-bn.png') center / 60% no-repeat; box-shadow: 0 4px 12px rgba(0, 0, 0, .5); filter: grayscale(1); }
-.ft-mk.last .ft-ph, .ft-mk:hover .ft-ph { border-color: var(--fc-accent); }
 .cn-face .ms { width: 36px; height: 36px; font-size: 36px; color: var(--fc-accent); }
 
 .fc-check { width: 100%; margin-top: 10px; }
@@ -1997,10 +1990,6 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .sc-pend { color: var(--ink-subtle); }
 .sc-guard { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--ink-muted); }
 .sc-guard .ms { width: 16px; height: 16px; font-size: 16px; color: var(--fc-accent); }
-.ft-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
-.ft-play { position: absolute; left: 10px; top: 10px; z-index: 2; }
-.ft-mk.off { opacity: 0; pointer-events: none; }
-.ft-mk { transition: opacity .3s ease; }
 
 /* Evidencias: material dibujado según su tipo. */
 .art { position: relative; display: block; overflow: hidden; border-radius: var(--radius-xs); aspect-ratio: 16 / 10; }
