@@ -5,7 +5,7 @@
    Las capas operativas (calor, zonas, cámaras, unidades, alertas, recorridos) son propias.
    No se usan capas de texto (no hay servidor de glifos): los rótulos son marcadores HTML. */
 import * as maplibregl from 'maplibre-gl';
-import type { GeoJSONSource, LngLatBoundsLike, Map as MLMap, MapLayerMouseEvent, StyleSpecification } from 'maplibre-gl';
+import type { CanvasSource, GeoJSONSource, LngLatBoundsLike, Map as MLMap, MapLayerMouseEvent, StyleSpecification } from 'maplibre-gl';
 import { useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import geo from '../data/generated/geo.json';
@@ -13,7 +13,8 @@ import type { Alert, Camera, Evidence as Ev, LngLat, Unit, Zone, ZoneStatus } fr
 import { fmtCrowd, hhmm } from '../api/format';
 import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
-import { areaOutline, CITY_BOUNDS, HEX_TIERS, hexGrid, hexRing, hexSignature, hexValues, sectorBounds, type HexData, type HexGrid, type HexMetric } from '../api/coverage';
+import { areaOutline, HEX_TIERS, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
+import { drawHexLayer, makeHexLayer, type HexColors, type HexLayer } from './hexCanvas';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
 
@@ -127,20 +128,6 @@ const idle = (f: () => void) => { const w = window as unknown as { requestIdleCa
 const FIELD_EVERY = 4000;
 /** Capa de cada grilla de hexágonos (una por franja de zoom). */
 const HEX_LAYERS = HEX_TIERS.map((t) => `hex${t.res}`);
-/** Valor de la celda, guardado como feature-state; -1 = no se dibuja. */
-const HW: maplibregl.ExpressionSpecification = ['coalesce', ['feature-state', 'w'], -1];
-/** Pintura de los hexágonos según la lectura.
-    · Personas y alertas: amarillo (poco) → rojo (mucho), desvaneciéndose hacia el borde de la mancha.
-    · Cobertura: tres estados, sin degradé: verde (la unidad llega en FAST_MIN o menos), amarillo
-      (hasta NEAR_MIN) y rojo (más), parejo en todo el mapa. */
-function hexPaint(m: HexMetric, c: { positive: string; alert: string; negative: string }) {
-  if (m === 'cobertura') return {
-    color: ['match', HW, 0, c.positive, 1, c.alert, c.negative] as maplibregl.ExpressionSpecification,
-    op: ['case', ['<', HW, 0], 0, 0.26] as maplibregl.ExpressionSpecification };
-  return {
-    color: ['interpolate', ['linear'], ['max', HW, 0], 0, c.alert, 0.6, c.negative] as maplibregl.ExpressionSpecification,
-    op: ['case', ['<', HW, 0], 0, ['interpolate', ['linear'], HW, 0, 0, 0.12, 0.12, 0.3, 0.3, 0.7, 0.5, 1, 0.62]] as maplibregl.ExpressionSpecification };
-}
 
 /** Nodo de cámara como imagen para la capa del mapa. Misma geometría que CameraNode (src/map/icons.tsx). */
 function cameraSvg(st: Camera['status'], c: { ink: string; muted: string; subtle: string }) {
@@ -166,9 +153,9 @@ export function MapView(p: Props) {
   const hoverCam = useRef<string | null>(null);
   /** Hexágonos: cada grilla cargada (y el último valor pintado en cada celda), con qué lectura y datos
       se pintó y cuándo. */
-  const field = useRef<{ grids: (HexGrid & { painted: Float64Array; metric: HexMetric | null })[]; building: Set<number>;
-    metric: HexMetric | null; sig: string; at: number; timer: ReturnType<typeof setTimeout> | null; op: maplibregl.ExpressionSpecification | null; colors: { positive: string; alert: string; negative: string } | null }>(
-    { grids: [], building: new Set(), metric: null, sig: '', at: 0, timer: null, op: null, colors: null });
+  const field = useRef<{ grids: HexLayer[]; building: Set<number>;
+    metric: HexMetric | null; sig: string; at: number; timer: ReturnType<typeof setTimeout> | null; colors: HexColors | null }>(
+    { grids: [], building: new Set(), metric: null, sig: '', at: 0, timer: null, colors: null });
   /* Recorrido animado: se dibuja de punta a punta con una estela; cada parada se enciende al pasar. */
   const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[] }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
   const [hud, setHud] = useState<{ reached: number; n: number; done: boolean } | null>(null);
@@ -209,14 +196,8 @@ export function MapView(p: Props) {
       map.addSource('sketch', { type: 'geojson', data: fc([]) });
       map.addSource('cones', { type: 'geojson', data: fc([]) });
       map.addSource('coneHi', { type: 'geojson', data: fc([]) });
-      /* Hexágonos sin borde, tan chicos que se leen como un degradé: una capa por grilla (franja de
-         zoom). La geometría se carga una vez; el color sale del valor de cada celda (feature-state). */
+      // Hexágonos: colores del tema para pintar los lienzos (ver hexCanvas.ts y loadHexGrid).
       field.current.colors = { positive: token('--status-positive'), alert: alertC, negative };
-      for (const tier of HEX_TIERS) {
-        map.addSource(`hex${tier.res}`, { type: 'geojson', data: fc([]) });
-        map.addLayer({ id: `hex${tier.res}`, type: 'fill', source: `hex${tier.res}`, minzoom: tier.minzoom, maxzoom: tier.maxzoom,
-          layout: { visibility: 'none' }, paint: { 'fill-antialias': false, 'fill-opacity': 0 } });
-      }
       /* Zonas: ya no se dibujan. La capa queda invisible solo para poder tocarlas y abrir su ficha;
          el nombre y el conteo van en su rótulo. */
       map.addLayer({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': muted, 'fill-opacity': 0 } });
@@ -364,20 +345,29 @@ export function MapView(p: Props) {
   function hexDataNow(): HexData {
     const P = cb.current; return { zones: P.zones, status: P.zoneStatus ?? {}, cameras: P.cameras ?? [], units: P.units ?? null, alerts: P.alerts ?? [] };
   }
-  /** Carga la geometría de una grilla en el mapa. Una sola vez: después solo cambia el color. */
-  function loadHexGrid(i: number, d: HexData) {
-    const map = mapRef.current; if (!map) return;
-    const tier = HEX_TIERS[i];
-    const g = hexGrid(tier.area === 'sector' ? sectorBounds(d.zones) : CITY_BOUNDS, tier.res);
-    (map.getSource(`hex${tier.res}`) as GeoJSONSource).setData(fc(g.cells.map((cell, k) => ({ type: 'Feature', id: k, geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: {} }))));
-    field.current.grids[i] = { ...g, painted: new Float64Array(g.cells.length).fill(-1), metric: null };
+  /** Arma el lienzo de una franja de zoom y lo apoya en el mapa como imagen. Una sola vez; se arma en
+      tandas sin congelar la pantalla y, cuando está, el mapa se vuelve a sincronizar para pintarlo. */
+  async function loadHexGrid(i: number, d: HexData) {
+    const F = field.current; if (F.grids[i] || F.building.has(i)) return; F.building.add(i);
+    const L = await makeHexLayer(i, d.zones), id = HEX_LAYERS[i], tier = HEX_TIERS[i];
+    const map = mapRef.current; if (!map || map.getSource(id)) return;
+    map.addSource(id, { type: 'canvas', canvas: L.canvas, coordinates: L.coords, animate: false });
+    map.addLayer({ id, type: 'raster', source: id, minzoom: tier.minzoom, maxzoom: tier.maxzoom, layout: { visibility: 'none' },
+      paint: { 'raster-fade-duration': 0, 'raster-resampling': 'linear' } }, map.getLayer('zones-fill') ? 'zones-fill' : undefined);
+    F.grids[i] = L; sync();
+    paintLater(i);
   }
-  /** Pinta una grilla con la lectura actual: solo las celdas cuyo valor cambió. */
+  /** Pinta una franja que no se ve cuando el navegador está libre y el mapa quieto, para que tenga
+      imagen al cruzar hacia ella con el zoom. Solo al cargarla o al cambiar de lectura. */
+  function paintLater(i: number) {
+    idle(() => { const map = mapRef.current, L = field.current.grids[i]; if (!map || !L?.dirty) return; if (map.isMoving()) { paintLater(i); return; } paintHex(i, hexDataNow()); });
+  }
+  /** Vuelve a pintar el lienzo de una franja y le avisa al mapa que la imagen cambió. */
   function paintHex(i: number, d: HexData) {
-    const map = mapRef.current, F = field.current, g = F.grids[i]; if (!map || !g || !F.metric) return;
-    const v = hexValues(F.metric, g, d), src = `hex${HEX_TIERS[i].res}`;
-    for (let k = 0; k < v.length; k++) if (v[k] !== g.painted[k] || g.metric !== F.metric) { map.setFeatureState({ source: src, id: k }, { w: v[k] }); g.painted[k] = v[k]; }
-    g.metric = F.metric;
+    const map = mapRef.current, F = field.current, L = F.grids[i]; if (!map || !L || !F.metric || !F.colors) return;
+    drawHexLayer(L, F.metric, d, F.colors);
+    const src = map.getSource(HEX_LAYERS[i]) as CanvasSource | undefined;
+    if (src) { src.play(); requestAnimationFrame(() => src.pause()); }
   }
 
   // Datos → fuentes y marcadores
@@ -394,18 +384,20 @@ export function MapView(p: Props) {
     if (L.hex) {
       const data: HexData = { zones: P.zones, status: st, cameras: P.cameras ?? [], units: P.units ?? null, alerts: P.alerts ?? [] };
       const z = map.getZoom(); const now = Math.max(0, HEX_TIERS.findIndex((tr) => z >= tr.minzoom && z < tr.maxzoom));
-      if (!F.grids[now]) loadHexGrid(now, data);
-      HEX_TIERS.forEach((_, i) => { if (!F.grids[i] && !F.building.has(i)) { F.building.add(i); idle(() => { if (mapRef.current && !F.grids[i]) { loadHexGrid(i, hexDataNow()); paintHex(i, hexDataNow()); } }); } });
-      if (F.metric !== L.hex) {
-        const pt = hexPaint(L.hex, F.colors!); F.op = pt.op;
-        for (const id of HEX_LAYERS) map.setPaintProperty(id, 'fill-color', pt.color);
-      }
+      void loadHexGrid(now, data);
+      HEX_TIERS.forEach((_, i) => { if (i !== now && !F.grids[i] && !F.building.has(i)) idle(() => void loadHexGrid(i, hexDataNow())); });
       const sig = hexSignature(L.hex, data);
       const wait = FIELD_EVERY - (Date.now() - F.at);
-      if (F.metric !== L.hex || (sig !== F.sig && wait <= 0) || F.grids.some((g) => g && g.metric !== L.hex)) {
+      if (F.metric !== L.hex || (sig !== F.sig && wait <= 0)) {
+        const newMetric = F.metric !== L.hex;
         F.metric = L.hex; F.sig = sig; F.at = Date.now();
-        F.grids.forEach((g, i) => g && paintHex(i, data));
+        F.grids.forEach((g, i) => { if (!g) return; g.dirty = true; if (newMetric && i !== now) paintLater(i); });
       } else if (sig !== F.sig && !F.timer) F.timer = setTimeout(() => { F.timer = null; sync(); }, wait);
+      // Se repinta solo la franja que se ve, y nunca con el mapa en movimiento: repintar sube el lienzo
+      // entero a la placa de video y, en pleno movimiento, se notaría. Al terminar el movimiento el mapa
+      // vuelve a sincronizar (moveend) y ahí se pinta. Las otras franjas guardan su última imagen hasta
+      // que el zoom las vuelve visibles.
+      if (F.grids[now]?.dirty && !map.isMoving()) paintHex(now, data);
     } else F.metric = null;
     // Medición de cobertura alrededor de un punto
     const M = P.measure;
@@ -587,7 +579,7 @@ export function MapView(p: Props) {
     // Atenuar todo lo que no es lo seleccionado en el lateral
     // Hexágonos atenuados mientras hay algo seleccionado en el lateral
     const dim = P.focusSel && !focus ? 0.4 : 1;
-    if (F.op) for (const id of HEX_LAYERS) if (map.getLayer(id)) map.setPaintProperty(id, 'fill-opacity', ['*', dim, F.op]);
+    for (const id of HEX_LAYERS) if (map.getLayer(id)) map.setPaintProperty(id, 'raster-opacity', dim);
     for (const [key, h] of markers.current) {
       const keep = !P.focusSel || focus || key === 'a' + (selAlert?.id ?? '') || (selZone && key === 'z' + selZone) || key === 'pin' || key.startsWith('sig') || key.startsWith('csel') || /^r[as]?\d/.test(key);
       h.el.classList.toggle('is-dim', !keep && key !== 'a' + P.hoverAlert);
