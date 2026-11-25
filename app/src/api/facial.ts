@@ -143,7 +143,7 @@ const PROOFS: Record<string, Record<string, Proof[]>> = {
 };
 /** Respaldos de la identidad y el motivo, por persona de la lista. */
 const DOCS: Record<string, Proof[]> = {
-  'LB-0291': [pf('imagen', 'Ficha policial', 'PNC', 300), pf('registro', 'Consulta del DUI', 'RNPN', 0), pf('documento', 'Orden de captura CAP-2026-0291', 'Juzgado 4.º de Instrucción', 10)],
+  'LB-0291': [pf('imagen', 'Ficha policial', 'PNC', 300), pf('registro', 'Consulta del DUI', 'RNPN', 0), pf('documento', 'Orden de captura', 'Juzgado 4.º de Instrucción', 10)],
   'LI-1187': [pf('registro', 'Consulta del DUI', 'RNPN', 0), pf('documento', 'Expediente EXT-2026-0412', 'Fiscalía', 15)],
   'LD-0044': [pf('imagen', 'Foto aportada por la familia', 'Familia', 3), pf('documento', 'Denuncia de desaparición', 'PNC', 3)],
 };
