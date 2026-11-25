@@ -13,7 +13,7 @@ import type { Alert, Camera, Evidence as Ev, LngLat, Unit, Zone, ZoneStatus } fr
 import { fmtCrowd, hhmm } from '../api/format';
 import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
-import { areaOutline, displayRes, FAST_MIN, hexField, hexRing, NEAR_MIN, type HexMetric } from '../api/coverage';
+import { areaOutline, displayRes, FAST_MIN, hexGrid, hexRing, hexSignature, hexValues, inside, NEAR_MIN, padBounds, ringOf, type HexGrid, type HexMetric } from '../api/coverage';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
 
@@ -122,6 +122,8 @@ function baseStyle(): StyleSpecification {
 
 const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features });
 /** Hexágonos: personas y alertas se desvanecen hacia el borde de la mancha; cobertura, pareja en todo el mapa. */
+/** Cada cuánto, como mucho, se repintan los hexágonos por cambios en los datos (ms). */
+const FIELD_EVERY = 4000;
 const FIELD_OP: maplibregl.ExpressionSpecification = ['match', ['get', 'm'], 'cobertura', 0.26, ['interpolate', ['linear'], ['get', 'w'], 0, 0, 0.12, 0.12, 0.3, 0.3, 0.7, 0.5, 1, 0.62]];
 
 /** Nodo de cámara como imagen para la capa del mapa. Misma geometría que CameraNode (src/map/icons.tsx). */
@@ -146,8 +148,8 @@ export function MapView(p: Props) {
   const [hover, setHover] = useState<Hover | null>(null);
   const [view, setView] = useState({ bearing: p.compact ? 0 : -18, pitch: p.compact ? 0 : 45 });
   const hoverCam = useRef<string | null>(null);
-  /** Últimos hexágonos dibujados: qué se veía y con qué datos. */
-  const fieldCache = useRef<{ key: string; data: { status?: unknown; cameras?: unknown; units?: unknown; alerts?: unknown } }>({ key: '', data: {} });
+  /** Hexágonos dibujados: la grilla (con margen) y con qué lectura y datos se pintó, y cuándo. */
+  const field = useRef<{ grid: HexGrid | null; metric: HexMetric | null; sig: string; at: number; timer: ReturnType<typeof setTimeout> | null }>({ grid: null, metric: null, sig: '', at: 0, timer: null });
   /* Recorrido animado: se dibuja de punta a punta con una estela; cada parada se enciende al pasar. */
   const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[] }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
   const [hud, setHud] = useState<{ reached: number; n: number; done: boolean } | null>(null);
@@ -333,21 +335,25 @@ export function MapView(p: Props) {
     const selAlert = P.focusSel?.k === 'alerta' ? P.alerts?.find((x) => x.id === P.focusSel!.id) ?? null : null;
     const selZone = P.focusSel?.k === 'zona' ? P.focusSel.id : selAlert?.zoneId ?? null;
     const L: MapLayers = { zones: true, cameras: false, units: false, alerts: true, fov: false, hex: null, ...P.layers };
-    // Hexágonos: solo las celdas de lo que se ve, del tamaño que da el zoom. Se recalcula si cambia lo
-    // que se ve o los datos; si no, se reusa.
+    // Hexágonos: la grilla se rearma solo si lo que se ve sale de su margen o cambia el tamaño de
+    // celda; los valores, solo si cambian los datos que usa la lectura, y como mucho cada FIELD_EVERY.
+    const F = field.current;
     if (L.hex) {
-      const bb = map.getBounds(); const b = { w: bb.getWest(), s: bb.getSouth(), e: bb.getEast(), n: bb.getNorth() };
-      const res = displayRes(map.getZoom(), b);
+      const bb = map.getBounds(); const view = { w: bb.getWest(), s: bb.getSouth(), e: bb.getEast(), n: bb.getNorth() };
+      const res = displayRes(map.getZoom(), padBounds(view));
+      const regrid = !F.grid || F.grid.res !== res || !inside(view, F.grid.b);
+      if (regrid) F.grid = hexGrid(padBounds(view), res);
       const data = { zones: P.zones, status: st, cameras: P.cameras ?? [], units: P.units ?? null, alerts: P.alerts ?? [] };
-      const key = [L.hex, res, b.w.toFixed(3), b.s.toFixed(3), b.e.toFixed(3), b.n.toFixed(3)].join('|');
-      const f = fieldCache.current;
-      if (f.key !== key || f.data.status !== data.status || f.data.cameras !== data.cameras || f.data.units !== data.units || f.data.alerts !== data.alerts) {
-        const m = L.hex;
-        (map.getSource('field') as GeoJSONSource).setData(fc(hexField(m, b, res, data)
-          .map(({ cell, w }) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: { w, m } }))));
-        fieldCache.current = { key, data };
-      }
-    } else if (fieldCache.current.key) { (map.getSource('field') as GeoJSONSource).setData(fc([])); fieldCache.current = { key: '', data: {} }; }
+      const sig = hexSignature(L.hex, data);
+      const wait = FIELD_EVERY - (Date.now() - F.at);
+      if (regrid || F.metric !== L.hex || (sig !== F.sig && wait <= 0)) {
+        const g = F.grid!, m = L.hex;
+        const v = hexValues(m, g, data); const feats: GeoJSON.Feature[] = [];
+        for (let i = 0; i < v.length; i++) if (!Number.isNaN(v[i])) feats.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ringOf(g, i)] }, properties: { w: v[i], m } });
+        (map.getSource('field') as GeoJSONSource).setData(fc(feats));
+        Object.assign(F, { metric: m, sig, at: Date.now() });
+      } else if (sig !== F.sig && !F.timer) F.timer = setTimeout(() => { F.timer = null; sync(); }, wait);
+    } else if (F.metric) { (map.getSource('field') as GeoJSONSource).setData(fc([])); Object.assign(F, { metric: null, sig: '' }); }
     // Medición de cobertura alrededor de un punto
     const M = P.measure;
     (map.getSource('measure') as GeoJSONSource).setData(fc(M ? [
@@ -575,7 +581,7 @@ export function MapView(p: Props) {
   }
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setHover(null); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, []);
   const replay = () => { const R = cb.current.route; if (R && R.length > 1) playRoute(R); };
-  useEffect(() => () => cancelAnimationFrame(anim.current.raf), []);
+  useEffect(() => () => { cancelAnimationFrame(anim.current.raf); if (field.current.timer) clearTimeout(field.current.timer); }, []);
   useEffect(sync);
   useEffect(() => {
     const map = mapRef.current; if (!map) return;
