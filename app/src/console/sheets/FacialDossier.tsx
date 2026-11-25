@@ -138,10 +138,11 @@ function Meta({ m }: { m: FacialMatch }) {
 }
 
 /** Señas por grupo: lo registrado en la lista frente a lo que se ve en la captura. */
-export function Traits({ m }: { m: FacialMatch }) {
-  const both = m.traits.filter((x) => x.list && x.seen).length;
-  const hidden = m.traits.filter((x) => x.list && !x.seen).length;
-  const groups = (Object.keys(TRAIT_GROUPS) as TraitGroup[]).filter((g) => m.traits.some((x) => x.group === g));
+export function Traits({ m, only }: { m: FacialMatch; only?: TraitGroup[] }) {
+  const traits = only ? m.traits.filter((x) => only.includes(x.group)) : m.traits;
+  const both = traits.filter((x) => x.list && x.seen).length;
+  const hidden = traits.filter((x) => x.list && !x.seen).length;
+  const groups = (Object.keys(TRAIT_GROUPS) as TraitGroup[]).filter((g) => traits.some((x) => x.group === g));
   return (
     <>
       <div className="tr-sum">
@@ -153,7 +154,7 @@ export function Traits({ m }: { m: FacialMatch }) {
         {groups.map((g) => (
           <tbody key={g}>
             <tr className="tr-g"><th colSpan={3} scope="rowgroup">{TRAIT_GROUPS[g]}</th></tr>
-            {m.traits.filter((x) => x.group === g).map((x, i) => (
+            {traits.filter((x) => x.group === g).map((x, i) => (
               <tr key={g + i}>
                 <th scope="row">{x.label}</th>
                 <td>{x.list ?? <span className="tr-na">Sin registro</span>}</td>

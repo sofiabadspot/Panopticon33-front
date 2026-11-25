@@ -25,7 +25,27 @@ export const FACIAL_LISTS: Record<FacialList, { name: string; prefix: string }> 
 };
 
 /** Una vez que un punto de control vio a la persona: dónde, cuándo, con qué puntaje y la captura. */
-export interface FacialDetection { at: number; cameraId: string; place: string; lat: number; lon: number; capture: string; score: number }
+export interface FacialDetection { at: number; cameraId: string; place: string; lat: number; lon: number; capture: string; score: number; quality: CaptureQuality }
+/** Qué tan útil es una captura para comparar: ángulo de la cara, nitidez y qué la tapa. */
+export interface CaptureQuality { pose: 'frontal' | 'tres_cuartos' | 'perfil'; sharp: 'nitida' | 'aceptable' | 'borrosa'; covered: string[] }
+export const POSE_LABEL: Record<CaptureQuality['pose'], string> = { frontal: 'De frente', tres_cuartos: 'Tres cuartos', perfil: 'De perfil' };
+export const SHARP_LABEL: Record<CaptureQuality['sharp'], string> = { nitida: 'Nítida', aceptable: 'Aceptable', borrosa: 'Borrosa' };
+/** Sirve para comparar si se ve de frente o tres cuartos, no está borrosa y no le tapan la cara. */
+export const usable = (q: CaptureQuality) => q.pose !== 'perfil' && q.sharp !== 'borrosa' && !q.covered.some((c) => c !== 'Gorra');
+/** La mejor captura de hoy: la de mayor puntaje entre las que sirven para comparar (si ninguna sirve, la de mayor puntaje). */
+export const bestDetection = (m: FacialMatch) => {
+  const ok = m.detections.filter((d) => usable(d.quality));
+  const pool = ok.length ? ok : m.detections;
+  return pool.reduce((a, b) => (b.score > a.score ? b : a), pool[0]);
+};
+/** Qué tan seguido una coincidencia con este puntaje resultó ser la persona (desempeño del sistema; de ejemplo). */
+export function scoreMeaning(s: number): { band: 'Alta' | 'Media' | 'Baja'; of100: number } {
+  if (s >= 0.95) return { band: 'Alta', of100: 97 };
+  if (s >= 0.9) return { band: 'Alta', of100: 91 };
+  if (s >= 0.85) return { band: 'Media', of100: 78 };
+  if (s >= 0.8) return { band: 'Media', of100: 62 };
+  return { band: 'Baja', of100: 41 };
+}
 /** Una foto de la persona en la lista: de dónde sale, de cuándo y cuánto se parece a la captura (0–1). */
 export interface ListPhoto { src: string; caption: string; year: string; score: number }
 /** Algo vinculado a la persona: un vehículo, otra persona, un lugar donde se la ve seguido o un caso.
@@ -69,6 +89,12 @@ export interface FacialMatch {
   scene: string;
   /** Detecciones de esta coincidencia: la primera la creó; la última es dónde está ahora. */
   detections: FacialDetection[];
+  /** Riesgo para quien interviene y qué tener en cuenta (de la lista). */
+  risk: { level: 'alto' | 'medio' | 'bajo'; notes: string[] };
+  /** Coincidencias de esta misma persona de la lista que el 911 ya descartó (alguien que se le parece). */
+  similarDiscarded: number;
+  /** Se le pidió al agente del punto de control que verifique el documento. */
+  fieldCheck?: { at: number; by: string };
   status: FacialStatus; reviewedBy?: string; discardReason?: string;
   agent: string; timeline: { at: number; label: string; by?: string }[];
 }
@@ -78,9 +104,10 @@ export const scoreOf = (m: FacialMatch) => lastDetection(m).score;
 const NOW = Date.now(), MIN = 60_000, DAY = 24 * 60 * MIN;
 /** Cámaras del sector donde hay puntos de control (las peatonales y mixtas que funcionan). */
 const spots = () => snapshot().cameras.filter((c) => c.kind !== 'vehicular' && c.status === 'operativa');
-const det = (k: number, at: number, score: number, capture = ''): FacialDetection => {
+const det = (k: number, at: number, score: number, quality?: CaptureQuality): FacialDetection => {
   const cams = spots(); const c = cams[k % cams.length];
-  return { at, cameraId: c.id, place: c.street, lat: c.lat, lon: c.lon, capture, score };
+  const q = quality ?? (score >= 0.9 ? { pose: 'frontal', sharp: 'nitida', covered: [] } : score >= 0.85 ? { pose: 'tres_cuartos', sharp: 'aceptable', covered: [] } : { pose: 'perfil', sharp: 'borrosa', covered: [] });
+  return { at, cameraId: c.id, place: c.street, lat: c.lat, lon: c.lon, capture: '', score, quality: q };
 };
 
 const lk = (id: string, kind: LinkKind, label: string, sub: string, weight: number, facts: [string, string][]): PersonLink => ({ id, kind, label, sub, weight, facts, events: [] });
@@ -95,7 +122,7 @@ const rawMatches = (): FacialMatch[] => [
       { group: 'cuerpo', label: 'Estatura', list: '1,74 m', seen: '1,72–1,76 m (estimada)' },
       { group: 'cuerpo', label: 'Contextura', list: 'Media', seen: 'Media' },
       { group: 'rostro', label: 'Vello facial', list: 'Barba (foto 2025)', seen: 'Barba corta' },
-      { group: 'rostro', label: 'Cicatriz', list: 'Sobre la ceja derecha', seen: null, note: 'la tapa la gorra' },
+      { group: 'rostro', label: 'Cicatriz', list: 'Sobre la ceja derecha', seen: null, note: 'no se distingue a esta distancia' },
       { group: 'marcas', label: 'Tatuaje', list: 'Antebrazo izquierdo', seen: null, note: 'manga larga' },
       { group: 'vestimenta', label: 'Cabeza', list: null, seen: 'Gorra oscura' },
       { group: 'vestimenta', label: 'Torso', list: null, seen: 'Chaqueta gris' },
@@ -124,7 +151,14 @@ const rawMatches = (): FacialMatch[] => [
     ],
     listPhotos: [{ src: '', caption: 'Ficha policial', year: '2025', score: 0.96 }, { src: '', caption: 'Foto del DUI', year: '2021', score: 0.91 }],
     profile3d: { detections: 14, updatedAt: NOW - 2 * 24 * 60 * MIN }, scene: '',
-    detections: [det(4, NOW - 190 * MIN, 0.79), det(6, NOW - 105 * MIN, 0.84), det(2, NOW - 19 * MIN, 0.88), det(5, NOW - 11 * MIN, 0.91), det(0, NOW - 3 * MIN, 0.96)],
+    detections: [
+      det(4, NOW - 190 * MIN, 0.79, { pose: 'perfil', sharp: 'borrosa', covered: ['Gorra'] }),
+      det(6, NOW - 105 * MIN, 0.84, { pose: 'tres_cuartos', sharp: 'aceptable', covered: ['Gorra', 'Mano en la cara'] }),
+      det(2, NOW - 19 * MIN, 0.88, { pose: 'tres_cuartos', sharp: 'nitida', covered: ['Gorra'] }),
+      det(5, NOW - 11 * MIN, 0.91, { pose: 'frontal', sharp: 'aceptable', covered: [] }),
+      det(0, NOW - 3 * MIN, 0.96, { pose: 'frontal', sharp: 'nitida', covered: [] }),
+    ],
+    risk: { level: 'alto', notes: ['Puede estar armado (robo con arma, 2026)', 'Se movía en un pickup robado: P 512-884'] }, similarDiscarded: 0,
     status: 'por_revisar', agent: 'Agente PNC-224 (punto de control)',
     timeline: [{ at: NOW - 190 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 79 %)' }, { at: NOW - 105 * MIN, label: 'Nueva detección (84 %)' }, { at: NOW - 19 * MIN, label: 'Nueva detección (88 %)' }, { at: NOW - 11 * MIN, label: 'Nueva detección (91 %)' }, { at: NOW - 3 * MIN, label: 'Nueva detección (96 %)' }] },
   { id: 'FC-7302', spotbox: 'SPOTBOX-PC-05', list: 'investigacion', listRef: 'LI-1187', reason: 'Seguimiento por investigación de extorsión', orderUntil: null,
@@ -150,6 +184,7 @@ const rawMatches = (): FacialMatch[] => [
     listPhotos: [{ src: '', caption: 'Foto del DUI', year: '2023', score: 0.89 }],
     profile3d: { detections: 6, updatedAt: NOW - 9 * 24 * 60 * MIN }, scene: '',
     detections: [det(7, NOW - 9 * MIN, 0.89)],
+    risk: { level: 'medio', notes: ['Investigación por extorsión: no hay orden de captura', 'Solo identificar e informar; no detener'] }, similarDiscarded: 2,
     status: 'por_revisar', agent: 'Agente PNC-118 (punto de control)',
     timeline: [{ at: NOW - 9 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 89 %)' }] },
   { id: 'FC-7298', spotbox: 'SPOTBOX-PC-03', list: 'desaparecidas', listRef: 'LD-0044', reason: 'Denuncia de desaparición', orderUntil: null,
@@ -168,6 +203,7 @@ const rawMatches = (): FacialMatch[] => [
     listPhotos: [{ src: '', caption: 'Foto aportada por la familia', year: '2026', score: 0.86 }],
     profile3d: { detections: 3, updatedAt: NOW - 30 * 24 * 60 * MIN }, scene: '',
     detections: [det(3, NOW - 52 * MIN, 0.86)],
+    risk: { level: 'bajo', notes: ['Persona desaparecida: acercarse con cuidado, puede estar desorientada'] }, similarDiscarded: 1,
     status: 'descartada', reviewedBy: 'José Portillo', discardReason: 'No es la misma persona', agent: 'Agente PNC-224 (punto de control)',
     timeline: [{ at: NOW - 52 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 86 %)' }, { at: NOW - 50 * MIN, label: 'Descartada: No es la misma persona', by: 'José Portillo' }] },
 ];
@@ -226,5 +262,10 @@ export function confirmFacial(id: string, user: User) {
 export function discardFacial(id: string, reason: string, user: User) {
   set((m) => ({ ...m, status: 'descartada', reviewedBy: user.name, discardReason: reason, timeline: [...m.timeline, { at: Date.now(), label: `Descartada: ${reason}`, by: user.name }] }), id);
   audit(user, 'Descartar coincidencia facial', id, 'Verificación facial', reason);
+}
+/** El 911 le pide al agente del punto de control que verifique el documento (la confirmación más fuerte). */
+export function requestFieldCheck(id: string, user: User) {
+  set((m) => ({ ...m, fieldCheck: { at: Date.now(), by: user.name }, timeline: [...m.timeline, { at: Date.now(), label: `Se pide al ${m.agent.split(' (')[0]} verificar el documento`, by: user.name }] }), id);
+  audit(user, 'Pedir verificación en terreno', id, 'Verificación facial · documento');
 }
 export const FACIAL_DISCARD = ['No es la misma persona', 'Imagen insuficiente', 'Duplicada'] as const;
