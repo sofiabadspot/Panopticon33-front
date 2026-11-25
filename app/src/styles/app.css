@@ -167,7 +167,7 @@ h1, h2, h3, h4 { margin: 0; font-family: var(--font-display); font-weight: 400; 
 .chip.ok { background: var(--status-positive-20); color: var(--status-positive); }
 .chip.nodata { background: var(--nodata); color: var(--ink-muted); border: 1px dashed var(--border-control); }
 .chip.outline { background: none; border: 1px solid var(--border-strong); }
-/* Avance de una alerta en Maic: enviada → recibida → despachada → cerrada (ver StatusChip). */
+/* Despacho de una alerta: refuerzos en camino → en el lugar (ver StatusChip). */
 .chip.sending { background: var(--glass-hi); color: var(--ink); }
 .chip.sending .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink); animation: live 1.6s ease-in-out infinite; }
 .chip.received { background: none; color: var(--ink); border: 1px solid var(--border-control); }
@@ -348,7 +348,7 @@ textarea.fld { height: auto; padding: 10px 12px; resize: vertical; }
 .mk-alert.critica s { border-radius: 1px; transform: rotate(45deg); }
 .mk-alert.media { --c: var(--status-alert); }
 .mk-alert.media s { border: 0; border-radius: 0; width: 11px; height: 10px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
-/* Confirmada: ya está en manos de Maic. Gris, con visto verde y el estado escrito */
+/* Confirmada: ya está gestionada. Gris, con visto verde y el estado escrito */
 .mk-alert.confirmada { --c: var(--ink-subtle); }
 .mk-alert.confirmada i { box-shadow: none; }
 .mk-alert.confirmada .ms { color: var(--ink-muted); }
@@ -644,7 +644,7 @@ button:hover > .mk-group, button:focus-visible > .mk-group { border-color: var(-
 .rh-replay:hover { color: var(--ink); border-color: var(--ink-subtle); }
 @keyframes hudin { from { opacity: 0; transform: translate(-50%, -6px); } }
 
-/* ---------- Transmisión a Maic (al confirmar) ---------- */
+/* ---------- Despacho (al confirmar) ---------- */
 .tx { position: relative; display: grid; gap: 12px; padding: 14px 16px 16px; background: var(--surface-panel); border: 1px solid var(--hud-line); border-radius: var(--radius-xs); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 3%, transparent), 0 12px 40px #000a; animation: txin .45s cubic-bezier(.2,.8,.2,1); overflow: hidden; }
 .tx::before, .tx::after { content: ''; position: absolute; width: 12px; height: 12px; border: 0 solid var(--ink); }
 .tx::before { left: -1px; top: -1px; border-left-width: 2px; border-top-width: 2px; }
@@ -683,14 +683,14 @@ button:hover > .mk-group, button:focus-visible > .mk-group { border-color: var(-
 .tx-steps li.now { color: var(--ink); }
 .tx-steps li.now .tx-b { border-color: var(--ink); border-top-color: transparent; animation: txspin .8s linear infinite; }
 @keyframes txspin { to { transform: rotate(360deg); } }
-/* Mientras se envía, la transmisión ocupa sola la ficha y queda centrada; al llegar a Maic sube y el resto aparece debajo. */
+/* Al confirmar, el despacho ocupa sola la ficha y queda centrado; después sube y el resto aparece debajo. */
 .pb.tx-alone { justify-content: center; }
 .pb.tx-alone > :not(.tx) { display: none; }
 .pb.tx-after > :not(.tx) { animation: txrest .5s ease-out .35s backwards; }
 @keyframes txrest { from { opacity: 0; translate: 0 10px; } }
 @media (prefers-reduced-motion: reduce) { .pb.tx-after > :not(.tx) { animation: none; } .tx, .tx-orb i, .tx-beam::after, .tx-steps li.now .tx-b { animation: none; } }
 
-/* ---------- Emisión en el mapa al enviar a Maic ---------- */
+/* ---------- Emisión en el mapa al confirmar ---------- */
 .mk-signal { position: relative; width: 0; height: 0; pointer-events: none; }
 .mk-signal i { position: absolute; left: -60px; top: -60px; width: 120px; height: 120px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--ink) 80%, transparent); opacity: 0; animation: sigring 2.2s ease-out 3; }
 .mk-signal i:nth-child(2) { animation-delay: .5s; }
@@ -1494,7 +1494,7 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .q-glyph svg [style*="fill"] { fill: var(--surface-panel); }
 .q-glyph.muted { color: var(--ink-muted); }
 
-/* ---------- Unidad en camino (despachada por Maic) ----------
+/* ---------- Unidad en camino (mandada como refuerzo) ----------
    Mismo verde que la etiqueta "Despachada": el borde late hacia afuera y dice "En camino".
    A qué alerta responde va en la tarjeta al pasar el mouse. */
 .mk-unit-go { position: relative; display: inline-grid; place-items: center; }
@@ -1579,7 +1579,7 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .q-done.ok, .mk-done.ok { border-color: var(--status-positive); }
 .q-done.ok, .mk-done.ok { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5 10.5l3.2 3.2L15 6.8' fill='none' stroke='%236cd300' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 .mk-alert-scale { position: relative; }
-/* Alerta confirmada, gestionándose en Maic: gris con tick (ya gestionada) y una etiqueta con en qué está, hasta que llega la unidad. */
+/* Alerta confirmada con refuerzos en camino: gris con tick (ya gestionada) y una etiqueta, hasta que llegan. */
 .mk-go-tag { position: absolute; left: calc(100% + 6px); top: 6px; white-space: nowrap; font: 500 var(--fs-xs) var(--font-sans); font-style: normal; color: var(--ink);
   padding: 3px 8px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--surface) 82%, transparent); border: 1px solid color-mix(in srgb, var(--status-positive) 60%, transparent); pointer-events: none; }
 
@@ -1697,3 +1697,27 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 /* Todas las fotos de la persona en la lista, en fila. */
 .fc-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; padding-top: 12px; }
 .fc-photos img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+
+/* ---------- Refuerzos: elegir cuántas unidades y cuáles al confirmar ---------- */
+.rf { width: 100%; display: grid; gap: 10px; }
+.rf-hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rf-hd > b { font-size: var(--fs-md); font-weight: 500; color: var(--ink); }
+.rf-count { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--ink-muted); }
+.rf-count b { min-width: 22px; text-align: center; font-size: var(--fs-md); color: var(--ink); }
+.rf-count small { margin-left: auto; color: var(--ink-subtle); }
+.rf-list { list-style: none; margin: 0; padding: 0; max-height: 228px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.rf-u { display: grid; grid-template-columns: auto auto auto 1fr auto; align-items: center; gap: 8px; padding: 6px 10px; font-size: var(--fs-sm); cursor: pointer; border-top: 1px solid var(--border); }
+.rf-list li:first-child .rf-u { border-top: 0; }
+.rf-u.on { background: var(--surface-raised); }
+.rf-u.off { opacity: .5; cursor: not-allowed; }
+.rf-id { color: var(--ink); }
+.rf-st { color: var(--ink-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rf-eta { color: var(--ink-subtle); white-space: nowrap; }
+.rf-ft { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ¿Quién llega?: atajo para elegir las más cercanas y unidades que no se pueden mandar, apagadas. */
+.wa-quick { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--ink-muted); }
+.mc2-list li.off { opacity: .5; }
+.mc2-list li input[type="checkbox"] { margin: 0; }
+.mc2-list li:has(> input) { grid-template-columns: auto 24px minmax(0, 1fr) auto; }
+.rf-here { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: var(--fs-xs); color: var(--ink-muted); }

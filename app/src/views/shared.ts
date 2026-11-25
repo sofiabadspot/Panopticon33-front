@@ -9,7 +9,7 @@ export function useZoneSeverity(alerts: Alert[]) {
     const m = new Map<string, 'critica' | 'media'>();
     for (const a of alerts) {
       // Solo aglomeración y brecha de presencia colorean una zona; una placa no dice nada de la multitud.
-      if (!a.zoneId || a.review === 'descartada' || a.maic === 'cerrada' || (a.kind !== 'aglomeracion' && a.kind !== 'brecha_presencia')) continue;
+      if (!a.zoneId || !(a.review === 'por_revisar' || a.dispatch === 'en_camino') || (a.kind !== 'aglomeracion' && a.kind !== 'brecha_presencia')) continue;
       if (a.severity === 'baja') continue;
       const cur = m.get(a.zoneId);
       if (!cur || SEVERITY_RANK[a.severity] < SEVERITY_RANK[cur]) m.set(a.zoneId, a.severity);

@@ -24,7 +24,7 @@ export function StatusPanel() {
   const measured = zones.filter((z) => status[z.id]?.count != null);
   const sum = (k: 'count' | 'low' | 'high') => measured.reduce((n, z) => n + (status[z.id][k] ?? 0), 0);
   const noData = zones.length - measured.length;
-  const active = alerts.filter((a) => forOperator(a) && (a.review === 'por_revisar' || (a.review === 'confirmada' && a.maic !== 'cerrada')));
+  const active = alerts.filter((a) => forOperator(a) && (a.review === 'por_revisar' || a.dispatch === 'en_camino'));
   const byKind = (Object.keys(KIND_LABEL) as AlertKind[]).map((k) => [k, active.filter((a) => a.kind === k).length] as const).filter(([, n]) => n);
   const live = events.filter((e) => eventStatus(e, now) === 'en_curso');
   const camsOk = cameras.filter((x) => x.status === 'operativa' || x.status === 'degradada').length;

@@ -47,7 +47,7 @@ export function answerJules(raw: string, role: Role): JulesMsg {
     const worst = measured.filter((z) => s.zoneStatus[z.id].perOfficer != null).sort((a, b) => s.zoneStatus[b.id].perOfficer! - s.zoneStatus[a.id].perOfficer!)[0];
     if (!worst) return { from: 'jules', text: 'No hay zonas con presencia policial medida ahora.' };
     const st = s.zoneStatus[worst.id];
-    return { from: 'jules', text: `La brecha más grande está en ${worst.name}: ${fmt(st.perOfficer!)} personas por policía (${st.officers} policías para unas ${fmtCrowd(st.count!)} personas). Recomiendo evaluar un refuerzo ahí. El despliegue se ordena por Maic o por radio; yo no lo ejecuto.`,
+    return { from: 'jules', text: `La brecha más grande está en ${worst.name}: ${fmt(st.perOfficer!)} personas por policía (${st.officers} policías para unas ${fmtCrowd(st.count!)} personas). Recomiendo evaluar un refuerzo ahí. El refuerzo se manda desde la alerta o con «¿Quién llega?»; yo no lo ejecuto.`,
       datos: [{ valor: fmt(st.perOfficer!), etiqueta: 'Personas por policía' }, { valor: fmt(st.officers ?? 0), etiqueta: 'Policías' }],
       actions: [{ label: `Ver ${worst.name}`, sheet: { k: 'zona', id: worst.id } }] };
   }

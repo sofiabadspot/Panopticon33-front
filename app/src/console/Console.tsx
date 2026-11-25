@@ -40,6 +40,7 @@ import { ConfigSheet } from './sheets/ConfigSheet';
 import { AuditSheet } from './sheets/AuditSheet';
 import { JulesSheet } from './sheets/JulesSheet';
 import { FacialPanel, FacialSheet } from './sheets/FacialSheet';
+import { WhoArrives } from './WhoArrives';
 import { VehicleSheet } from './sheets/VehicleSheet';
 import { InvestigationDock } from './InvestigationDock';
 
@@ -149,9 +150,9 @@ function Layout() {
   const focusLabel = !focusSel ? '' : focusSel.k === 'zona' ? zones.find((z) => z.id === focusSel.id)?.name ?? focusSel.id
     : focusSel.k === 'camara' ? `cámara ${focusSel.id}`
     : (() => { const al = alerts.find((x) => x.id === focusSel.id); return al ? `${KIND_LABEL[al.kind].toLowerCase()}${al.plate ? ` ${al.plate.listed}` : ''}` : focusSel.id; })();
-  const openAlerts = alerts.filter((a) => forOperator(a) && (a.review === 'por_revisar' || (a.review === 'confirmada' && a.maic !== 'cerrada')));
-  // En el mapa, las alertas abiertas: las que esperan decisión y las confirmadas que Maic todavía gestiona
-  // (se ven con "Unidad en camino" hasta que llega). Las descartadas y las cerradas en Maic no se dibujan.
+  const openAlerts = alerts.filter((a) => forOperator(a) && (a.review === 'por_revisar' || a.dispatch === 'en_camino'));
+  // En el mapa, las alertas abiertas: las que esperan decisión y las confirmadas con refuerzos en camino
+  // (se ven con "Refuerzos en camino" hasta que llegan). Las descartadas y las ya resueltas no se dibujan.
   // La alerta abierta en el lateral se ve siempre, aunque ya esté resuelta.
   const openAlertId = c.sheet?.k === 'alerta' ? c.sheet.id : null;
   const mapAlerts = inv
@@ -295,11 +296,7 @@ function Layout() {
               <div className="seg" role="group" aria-label="Radio"><span className="seg-lbl">Radio</span>{[250, 500, 1000].map((r) => <button key={r} className={radius === r ? 'on' : ''} onClick={() => setRadius(r)}>{r < 1000 ? `${r} m` : '1 km'}</button>)}</div>
               {!measure ? <p className="mc2-hint">Hacé clic en el mapa donde querés medir. Te muestro qué unidades policiales están dentro del radio y cuánto tardarían en llegar.</p> : (<>
                 <p className={`mc2-state ${measure.state}`}><i />{measure.state === 'cubierta' ? `Cubierta: ${measure.within.length} ${measure.within.length === 1 ? 'unidad' : 'unidades'} en el radio` : measure.state === 'cerca' ? `Sin unidades en el radio; la más cercana llega en ${Math.round(measure.nearest!.eta)} min` : 'Sin cobertura: ninguna unidad llega en menos de 4 min'}</p>
-                <ol className="mc2-list">
-                  {(measure.within.length ? measure.within : measure.nearest ? [measure.nearest] : []).slice(0, 6).map((x) => (
-                    <li key={x.unit.id}><UnitHex type={x.unit.type} size={20} /><span><b>{x.unit.id}</b><small>{x.unit.type} · {Math.round(x.dist)} m</small></span><span className="mc2-eta">{x.eta < 1 ? '<1' : Math.round(x.eta)} min</span></li>
-                  ))}
-                </ol>
+                {policeSource && <WhoArrives key={measure.p.join(',')} p={measure.p} />}
               </>)}
             </section>
           )}
@@ -321,7 +318,7 @@ function Layout() {
               </>}
             </div>
           )}
-          {/* Estado de los datos: cargando, o Maic sin conexión (las confirmaciones quedan en cola) */}
+          {/* Estado de los datos: cargando, o el enlace con Maic caído (los eventos le llegan cuando vuelve) */}
           {!inv && loading && <div className="map-state" role="status"><i className="spin" aria-hidden /><span><b>Cargando datos</b> · cámaras, zonas y unidades</span></div>}
           {!inv && !loading && !maic.connected && <div className={`map-state warn ${focusSel && !c.overlay.route ? 'below' : ''}`} role="alert"><Icon name="warning" /><span><b>Sin conexión con Maic</b> desde las {hhmm(maic.lastMessageAt)} · las confirmaciones quedan en cola</span></div>}
           {inv && <div className="hist-pill" role="status"><Icon name="history" /><span>Histórico · <b>{dateTime(inv.from)} → {hhmm(inv.to)}</b>{c.invPick ? ' · haz clic en el mapa para mover el lugar' : ' · solo lo que pasó en esa ventana'}</span></div>}

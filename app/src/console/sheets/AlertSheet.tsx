@@ -1,10 +1,11 @@
-/* Ficha de alerta — el operador 911 decide en dos clics sin salir del mapa:
-   confirmar es un clic (va a Maic); descartar pide un motivo de una lista corta.
-   Tras decidir, la ficha pasa sola a la siguiente alerta por revisar. */
+/* Ficha de alerta — el operador 911 decide sin salir del mapa:
+   confirmar abre los refuerzos (cuántas unidades y cuáles: las más cercanas o elegidas a mano) y los
+   manda desde acá, sin Maic; descartar pide un motivo de una lista corta. A Maic le llega el evento
+   por el backend. Tras decidir, la ficha ofrece pasar a la siguiente alerta por revisar. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { audit, confirmAlert, discardAlert, forOperator, openAlert, readsOf, sightingsOf, useApi } from '../../api';
+import { audit, confirmAlert, discardAlert, forOperator, openAlert, readsOf, sightingsOf, suggestedUnits, unitOptions, useApi } from '../../api';
 import { ago, dateTime, dec1, fmt, fmtCrowd, hhmm, pct } from '../../api/format';
-import { DISCARD_REASONS, KIND_LABEL, KIND_PHRASE } from '../../api/labels';
+import { DISCARD_REASONS, DISPATCH_LABEL, KIND_LABEL, KIND_PHRASE, UNIT_LABEL } from '../../api/labels';
 import type { Alert, PlateRead, Zone } from '../../api/types';
 import { useSession } from '../../shell/session';
 import { Unattended } from '../../ui/Unattended';
@@ -15,6 +16,7 @@ import { byUrgency } from '../../views/shared';
 import { useConsole } from '../ctx';
 import { SheetHead, useSheetGo } from './SheetHead';
 import type { RouteStop } from '../../map/MapView';
+import { UnitHex } from '../../map/icons';
 
 export function AlertSheet({ id }: { id: string }) {
   const { user, role } = useSession();
@@ -47,7 +49,8 @@ export function AlertSheet({ id }: { id: string }) {
      numeradas y con hora, terminando en la lectura de esta alerta. Queda en la bitácora. */
   const [trace, setTrace] = useState(false);
   const [sent, setSent] = useState(false);
-  const [txSolo, setTxSolo] = useState(false); // la transmisión a Maic ocupa sola la ficha
+  const [txSolo, setTxSolo] = useState(false); // el avance del despacho ocupa sola la ficha
+  const [composing, setComposing] = useState(false); // eligiendo los refuerzos antes de confirmar
   // Al abrir una alerta de placa, el recorrido arranca solo (no hace falta pedirlo). Queda en la bitácora.
   useEffect(() => {
     setSent(false); const on = !!a?.plate; setTrace(on);
@@ -69,16 +72,19 @@ export function AlertSheet({ id }: { id: string }) {
     setTrace(!trace);
   };
 
-  const canDecide = !!a && role === 'operator_911' && a.review === 'por_revisar';
+  // Una alerta de persona se decide en la ficha facial (ahí está la verificación), no acá.
+  const canDecide = !!a && role === 'operator_911' && a.review === 'por_revisar' && a.kind !== 'persona_en_lista';
   const next = () => alerts.filter((x) => forOperator(x) && x.review === 'por_revisar' && x.id !== id).sort(byUrgency)[0];
   const advance = () => { const n = next(); if (n) go({ k: 'alerta', id: n.id }); };
   const pendingCount = alerts.filter((x) => forOperator(x) && x.review === 'por_revisar' && x.id !== id).length;
-  /* Confirmar: la ficha se queda en la alerta y muestra la transmisión a Maic paso a paso;
-     en el mapa sale una emisión sobre el punto. El operador pasa a la siguiente cuando quiere. */
-  const confirm = () => {
-    if (!a) return; confirmAlert(a.id, user); setSent(true); setTrace(false);
-    c.focus([[a.lon - 0.0025, a.lat - 0.0018], [a.lon + 0.0025, a.lat + 0.0018]], 'maic-' + a.id);
-    const key = a.id + Date.now(); c.setSignal({ lat: a.lat, lon: a.lon, label: 'Enviada a Maic', key });
+  /* Confirmar: primero se eligen los refuerzos (si el tipo de alerta los lleva). Al mandarlos, la ficha
+     se queda en la alerta y muestra el despacho paso a paso; en el mapa sale una emisión sobre el punto.
+     El operador pasa a la siguiente cuando quiere. */
+  const startConfirm = () => { if (!a) return; if (suggestedUnits(a) === 0) confirm([]); else setComposing(true); };
+  const confirm = (unitIds: string[]) => {
+    if (!a) return; confirmAlert(a.id, user, unitIds); setSent(true); setTrace(false); setComposing(false);
+    c.focus([[a.lon - 0.0025, a.lat - 0.0018], [a.lon + 0.0025, a.lat + 0.0018]], 'refuerzo-' + a.id);
+    const key = a.id + Date.now(); c.setSignal({ lat: a.lat, lon: a.lon, label: unitIds.length ? DISPATCH_LABEL.en_camino : 'Confirmada', key });
     setTimeout(() => c.setSignal(null), 6500);
   };
   const discard = (r: string) => { if (!a) return; discardAlert(a.id, r, user); toast(`${a.id} descartada: ${r}`); setDiscarding(false); advance(); };
@@ -86,8 +92,9 @@ export function AlertSheet({ id }: { id: string }) {
   useEffect(() => {
     if (!canDecide) return;
     const k = (e: KeyboardEvent) => {
+      if (composing) { if (e.key === 'Escape') { e.preventDefault(); setComposing(false); } return; }
       if ((e.target as HTMLElement).closest('input, select, textarea') || e.metaKey || e.ctrlKey) return;
-      if (e.key === 'c' || e.key === 'C') confirm();
+      if ((e.key === 'c' || e.key === 'C') && !discarding) startConfirm();
       else if (e.key === 'd' || e.key === 'D') setDiscarding(true);
       else if (discarding && /^[1-5]$/.test(e.key)) discard(DISCARD_REASONS[Number(e.key) - 1]);
       else if (e.key === 'Escape' && discarding) { e.preventDefault(); setDiscarding(false); }
@@ -153,7 +160,7 @@ export function AlertSheet({ id }: { id: string }) {
         )}
 
         <div className="box">
-          <div className="bh"><h3>Línea de tiempo</h3>{a.maicId && <span className="sub mono">{a.maicId}</span>}</div>
+          <div className="bh"><h3>Línea de tiempo</h3></div>
           <div className="bb"><ol className="timeline">
             {a.timeline.map((t, i) => <li key={i} className={i === a.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
             {a.review === 'por_revisar' && <li className="pending"><span className="b" aria-hidden /><div>Revisión del operador 911</div></li>}
@@ -162,8 +169,9 @@ export function AlertSheet({ id }: { id: string }) {
       </div>
 
       <div className="pf">
-        {canDecide && !discarding && <>
-          <button className="btn positive" style={{ flex: 1 }} onClick={confirm}><Icon name="send" />Confirmar y enviar a Maic<span className="kbd" style={{ color: 'inherit', borderColor: 'currentColor' }}>C</span></button>
+        {canDecide && composing && <Reinforcements a={a} onConfirm={confirm} onCancel={() => setComposing(false)} />}
+        {canDecide && !discarding && !composing && <>
+          <button className="btn positive" style={{ flex: 1 }} onClick={startConfirm}><Icon name="check" />Confirmar{suggestedUnits(a) > 0 ? ' y enviar refuerzos' : ''}<span className="kbd" style={{ color: 'inherit', borderColor: 'currentColor' }}>C</span></button>
           <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />Descartar<span className="kbd">D</span></button>
         </>}
         {canDecide && discarding && <>
@@ -175,42 +183,97 @@ export function AlertSheet({ id }: { id: string }) {
         {a.review === 'confirmada' && sent && (pendingCount > 0
           ? <button className="btn primary" style={{ flex: 1 }} onClick={advance} autoFocus><Icon name="arrow_forward" />Siguiente alerta<span className="chip" style={{ marginLeft: 'auto' }}>{pendingCount} por revisar</span><span className="kbd" style={{ color: 'inherit', borderColor: 'currentColor' }}>↵</span></button>
           : <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> No quedan alertas por revisar.</span>)}
-        {a.review === 'confirmada' && !sent && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> Confirmada por {a.reviewedBy}. El incidente sigue en Maic.</span>}
+        {a.review === 'confirmada' && !sent && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> Confirmada por {a.reviewedBy}.</span>}
         {a.review === 'descartada' && <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Descartada por {a.reviewedBy}: {a.discardReason}.</span>}
       </div>
     </>
   );
 }
 
-/* Transmisión a Maic: qué pasó con la alerta confirmada, paso a paso, a medida que Maic responde.
-   Al confirmar ocupa sola la ficha, en el centro (el momento importa). Cuando Maic acusa recibo,
-   sube a su lugar arriba de la ficha y el resto aparece debajo. Con movimiento reducido va directo arriba. */
+/* Refuerzos: al confirmar, el operador elige cuántas unidades manda y cuáles. Por defecto, las más
+   cercanas que se pueden mandar, en la cantidad sugerida para el tipo de alerta. En "Elegir" marca a mano.
+   La lista muestra también las unidades que no se pueden mandar (sin reporte, estado desconocido o ya
+   yendo a otro lugar), apagadas y con el porqué. */
+function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids: string[]) => void; onCancel: () => void }) {
+  const units$ = useApi((s) => s.units);
+  const all = useMemo(() => unitOptions(a).sort((x, y) => x.eta - y.eta), [a, units$]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Las que ya están en el lugar no son refuerzo: van en una línea aparte, no en la lista.
+  const here = all.filter((o) => o.why === 'Ya está en el lugar');
+  const opts = all.filter((o) => o.why !== 'Ya está en el lugar');
+  const free = opts.filter((o) => o.free);
+  const [mode, setMode] = useState<'cercanas' | 'elegir'>('cercanas');
+  const [n, setN] = useState(() => Math.min(suggestedUnits(a), free.length));
+  const [picked, setPicked] = useState<string[]>([]);
+  // Solo las que siguen libres: otra persona puede haber mandado una mientras el panel estaba abierto.
+  const chosen = mode === 'cercanas' ? free.slice(0, n).map((o) => o.unit.id) : picked.filter((id) => free.some((o) => o.unit.id === id));
+  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  // Las 10 que llegan antes, y siempre las elegidas (aunque lleguen después).
+  const shown = opts.filter((o, i) => i < 10 || chosen.includes(o.unit.id));
+  const units = (k: number) => `${k} ${k === 1 ? 'unidad' : 'unidades'}`;
+  return (
+    <section className="rf" aria-label="Refuerzos">
+      <div className="rf-hd">
+        <b>Refuerzos</b>
+        <div className="seg" role="group" aria-label="Qué unidades">
+          <button className={mode === 'cercanas' ? 'on' : ''} aria-pressed={mode === 'cercanas'} onClick={() => setMode('cercanas')}>Las más cercanas</button>
+          <button className={mode === 'elegir' ? 'on' : ''} aria-pressed={mode === 'elegir'} onClick={() => { setMode('elegir'); setPicked(chosen); }}>Elegir</button>
+        </div>
+      </div>
+      {mode === 'cercanas' && (
+        <div className="rf-count">
+          <span>Cuántas</span>
+          <button className="btn secondary xs" aria-label="Una menos" disabled={n <= 1} onClick={() => setN(n - 1)}><Icon name="remove" /></button>
+          <b className="mono" aria-live="polite">{n}</b>
+          <button className="btn secondary xs" aria-label="Una más" disabled={n >= free.length} onClick={() => setN(n + 1)}><Icon name="add" /></button>
+          <small>Sugeridas para {KIND_LABEL[a.kind].toLowerCase()}: {suggestedUnits(a)}</small>
+        </div>
+      )}
+      {here.length > 0 && <p className="rf-here"><Icon name="location_on" />Ya {here.length === 1 ? 'hay 1 unidad' : `hay ${here.length} unidades`} en el lugar: {here.map((o) => o.unit.id).join(', ')}</p>}
+      <ul className="rf-list">
+        {shown.map((o) => {
+          const on = chosen.includes(o.unit.id);
+          return (
+            <li key={o.unit.id}>
+              <label className={`rf-u ${on ? 'on' : ''} ${o.free ? '' : 'off'}`}>
+                <input type="checkbox" checked={on} disabled={!o.free || mode === 'cercanas'} onChange={() => toggle(o.unit.id)} />
+                <UnitHex type={o.unit.type} size={18} />
+                <span className="rf-id mono">{o.unit.id}</span>
+                <span className="rf-st">{o.unit.type} · {o.why ?? UNIT_LABEL[o.unit.status]}</span>
+                <span className="rf-eta mono">{o.dist < 1000 ? `${Math.round(o.dist / 10) * 10} m` : `${(o.dist / 1000).toFixed(1)} km`} · {Math.max(1, Math.round(o.eta))} min</span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="rf-ft">
+        <button className="btn positive" style={{ flex: 1 }} disabled={!chosen.length} onClick={() => onConfirm(chosen)}><Icon name="send" />Confirmar y enviar {units(chosen.length)}</button>
+        <button className="btn secondary" onClick={() => onConfirm([])}>Sin refuerzos</button>
+        <button className="btn ghost" onClick={onCancel}>Cancelar</button>
+      </div>
+    </section>
+  );
+}
+
+/* Despacho: qué pasó con la alerta confirmada, paso a paso, a medida que llegan las unidades.
+   Al confirmar ocupa sola la ficha, en el centro (el momento importa); después sube a su lugar arriba
+   de la ficha y el resto aparece debajo. Con movimiento reducido va directo arriba. */
 const TX_SOLO_MIN_MS = 2400, TX_RISE_MS = 600;
 function Transmission({ a, onSolo }: { a: Alert; onSolo?: (solo: boolean) => void }) {
-  const online = useApi((s) => s.maic.connected);
-  // En cola: Maic sin conexión, la confirmación todavía no salió
-  const queued = !online && a.maic === 'enviada';
-  const lvl = a.maic === 'cerrada' ? 5 : a.maic === 'despachada' ? 4 : a.maic === 'recibida' ? 3 : queued ? 1 : 2;
-  const [boot, setBoot] = useState(1); // el paso "Transmitiendo" se ve un instante antes de marcarse
-  useEffect(() => { const t = setTimeout(() => setBoot(2), 700); return () => clearTimeout(t); }, []);
-  const done = Math.min(lvl, boot === 1 ? 1 : lvl);
-  const at = (label: string) => a.timeline.find((t) => t.label.startsWith(label))?.at;
-  // Maic puede mandar más de una unidad (en aglomeraciones, sobre todo): las que van y las que ya llegaron.
-  const going = useApi((s) => s.units).filter((u) => u.enRoute?.alertId === a.id).length;
-  // "Llegó U-12" / "Llegó U-12 · cerrada en Maic" → "U-12"
+  // Las que van y las que ya llegaron
+  const going = useApi((s) => s.units).filter((u) => u.enRoute?.alertId === a.id);
+  // "Llegó U-12" / "Llegó U-12 · refuerzos en el lugar" → "U-12"
   const landed = a.timeline.filter((x) => x.label.startsWith('Llegó'));
-  const total = going + landed.length;
-  const many = total > 1;
-  const units = (n: number) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`;
-  const arrived = () => landed.length ? `${landed.map((t) => t.label.replace(/^Llegó (\S+).*/, '$1')).join(', ')} · ${hhmm(landed[landed.length - 1].at)}` : 'Llegó la unidad';
-  const placeTitle = many ? 'Unidades en el lugar' : 'Unidad en el lugar';
-  const steps = [
+  const total = going.length + landed.length;
+  const lvl = !a.dispatch ? 1 : a.dispatch === 'en_lugar' ? 3 : 2;
+  const units = (k: number) => `${k} ${k === 1 ? 'unidad' : 'unidades'}`;
+  const at = (label: string) => a.timeline.find((t) => t.label.startsWith(label))?.at;
+  const ids = going.map((u) => u.id).join(', ');
+  const steps = a.dispatch ? [
     { t: 'Confirmada por el operador', s: `${a.reviewedBy ?? ''}${at('Confirmada') ? ' · ' + hhmm(at('Confirmada')!) : ''}` },
-    { t: queued ? 'En cola para Maic' : 'Transmitida a Maic', s: queued ? 'Maic sin conexión: sale cuando vuelva' : 'Canal cifrado' },
-    { t: 'Recibida en Maic', s: lvl >= 3 && a.maicId ? `Caso ${a.maicId}` : 'Esperando acuse de Maic…' },
-    { t: 'Despachada', s: lvl >= 4 ? (total ? `Maic asignó ${units(total)}` : 'Maic asignó unidades') : 'Maic asigna unidades…' },
-    { t: placeTitle, s: lvl >= 5 ? arrived() : lvl >= 4 ? (!many ? 'La unidad va en camino…' : landed.length ? `${landed.length} de ${total} en el lugar · ${going} en camino` : `${units(going)} en camino…`) : 'Cuando Maic despache' },
-  ];
+    { t: 'Refuerzos en camino', s: going.length ? `${units(going.length)}: ${ids}` : landed.length ? 'Todas llegaron' : units(total) },
+    { t: 'En el lugar', s: landed.length ? `${landed.length} de ${total}${landed.length < total ? ` · ${going.length} en camino` : ` · ${hhmm(landed[landed.length - 1].at)}`}` : 'Cuando llegue la primera' },
+  ] : [{ t: 'Confirmada sin refuerzos', s: `${a.reviewedBy ?? ''}${at('Confirmada') ? ' · ' + hhmm(at('Confirmada')!) : ''}` }];
+  const done = Math.min(steps.length, lvl);
 
   // Fase: sola en la ficha → arriba, con el resto debajo
   const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -222,8 +285,8 @@ function Transmission({ a, onSolo }: { a: Alert; onSolo?: (solo: boolean) => voi
   useEffect(() => { onSolo?.(solo); }, [solo]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onSolo?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (solo && minDone && (lvl >= 3 || queued)) { from.current = el.current?.getBoundingClientRect().top ?? null; setSolo(false); }
-  }, [solo, minDone, lvl]);
+    if (solo && minDone) { from.current = el.current?.getBoundingClientRect().top ?? null; setSolo(false); }
+  }, [solo, minDone]);
   // Sube desde donde estaba (FLIP): se mide la nueva posición y se anima la diferencia
   useLayoutEffect(() => {
     const n = el.current; if (solo || !n || from.current == null) return;
@@ -231,17 +294,18 @@ function Transmission({ a, onSolo }: { a: Alert; onSolo?: (solo: boolean) => voi
     n.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], { duration: TX_RISE_MS, easing: 'cubic-bezier(.6,0,.2,1)' });
   }, [solo]);
 
+  const title = !a.dispatch ? 'Confirmada' : a.dispatch === 'en_lugar' ? (total > 1 ? 'Unidades en el lugar' : 'Unidad en el lugar') : DISPATCH_LABEL.en_camino;
   const body = (
     <>
-      <div className="tx-hd"><span className="tx-eyebrow">Transmisión a Maic</span>{a.maicId && <span className="mono tx-id">{a.maicId}</span>}</div>
-      <div className="tx-title"><span className="tx-orb" aria-hidden><i /><i /><b /></span><div><b>{queued ? 'En cola: Maic sin conexión' : lvl >= 5 ? placeTitle : lvl >= 4 ? 'Despachada por Maic' : lvl >= 3 ? 'Maic recibió la alerta' : 'Enviando a Maic'}</b><small>{a.plate ? `Placa ${a.plate.listed}` : KIND_LABEL[a.kind]} · {a.id}</small></div></div>
-      <div className="tx-beam" aria-hidden><i style={{ width: `${(done / 5) * 100}%` }} /></div>
+      <div className="tx-hd"><span className="tx-eyebrow">Despacho</span></div>
+      <div className="tx-title"><span className="tx-orb" aria-hidden><i /><i /><b /></span><div><b>{title}</b><small>{a.plate ? `Placa ${a.plate.listed}` : KIND_LABEL[a.kind]} · {a.id}</small></div></div>
+      <div className="tx-beam" aria-hidden><i style={{ width: `${(done / steps.length) * 100}%` }} /></div>
       <ol className="tx-steps">
         {steps.map((s, i) => <li key={i} className={i < done ? 'done' : i === done ? 'now' : ''}><span className="tx-b" aria-hidden /><div><div>{s.t}</div><small>{s.s}</small></div></li>)}
       </ol>
     </>
   );
-  return <section ref={el} className={`tx ${lvl >= 4 ? 'ok' : ''} ${solo ? 'tx-solo' : ''}`} role="status" aria-live="polite">{body}</section>;
+  return <section ref={el} className={`tx ${lvl >= 2 ? 'ok' : ''} ${solo ? 'tx-solo' : ''}`} role="status" aria-live="polite">{body}</section>;
 }
 
 /* Alerta de placa, con jerarquía:
@@ -462,17 +526,17 @@ function useInspect(sub: string) {
 }
 
 /* Alerta ya gestionada: arriba de todo, un sello de "resuelta" con quién, cuándo y cómo terminó.
-   Confirmada: check verde (y el estado en Maic). Descartada: check gris con el motivo. */
+   Confirmada: check verde (y cómo van los refuerzos). Descartada: check gris con el motivo. */
 function Resolved({ a }: { a: Alert }) {
   const ok = a.review === 'confirmada';
   const at = a.timeline.find((t) => t.label.startsWith(ok ? 'Confirmada' : 'Descartada'))?.at;
-  const maic = a.maic === 'despachada' ? 'despachada por Maic' : a.maic === 'cerrada' ? 'cerrada en Maic' : a.maic === 'recibida' ? 'recibida en Maic' : 'enviada a Maic';
+  const how = a.dispatch ? DISPATCH_LABEL[a.dispatch].toLowerCase() : 'sin refuerzos';
   return (
     <section className={`resolved ${ok ? 'ok' : 'off'}`} role="status">
       <span className="rs-check" aria-hidden><svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 6.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
       <div className="rs-txt">
         <span className="rs-eyebrow">Resuelta</span>
-        <b>{ok ? `Confirmada y ${maic}` : `Descartada: ${a.discardReason ?? 'sin motivo'}`}</b>
+        <b>{ok ? `Confirmada · ${how}` : `Descartada: ${a.discardReason ?? 'sin motivo'}`}</b>
         <small>{a.reviewedBy ? `por ${a.reviewedBy}` : ''}{at ? ` · ${dateTime(at)}` : ''}</small>
       </div>
     </section>

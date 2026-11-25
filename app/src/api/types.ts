@@ -41,14 +41,15 @@ export type UnitStatus = 'disponible' | 'en_servicio' | 'sin_reporte' | 'descono
 export interface Unit { id: string; type: UnitType; status: UnitStatus; lat: number; lon: number; lastReportAt: number; zoneId: string | null;
   /** Placa del vehículo (las unidades a pie no tienen). Simulada hasta conectar MAIC. */
   plate?: string | null;
-  /** Despachada por Maic: va hacia un lugar (la alerta que la convocó). Sin esto, está en su puesto. */
+  /** Mandada como refuerzo: va hacia un lugar (la alerta que la convocó, o un punto). Sin esto, está en su puesto. */
   enRoute?: { lat: number; lon: number; label: string; alertId?: string; since: number } | null }
 
 /** persona_en_lista: reconocimiento facial en un punto de control (sale de Verificación, api/facial.ts). */
 export type AlertKind = 'aglomeracion' | 'brecha_presencia' | 'placa_en_lista' | 'persona_en_lista' | 'camara_caida';
 export type Severity = 'critica' | 'media' | 'baja';
 export type ReviewStatus = 'por_revisar' | 'confirmada' | 'descartada';
-export type MaicStatus = 'enviada' | 'recibida' | 'despachada' | 'cerrada';
+/** Despacho de refuerzos, desde la plataforma (no Maic): unidades en camino, o ya en el lugar. */
+export type DispatchStatus = 'en_camino' | 'en_lugar';
 
 export interface Evidence { type: 'clip' | 'imagen' | 'pendiente'; src?: string; poster?: string; caption: string }
 
@@ -76,7 +77,8 @@ export interface Alert {
   sightings?: Sighting[];
   eventId?: string;
   review: ReviewStatus; reviewedBy?: string; discardReason?: string;
-  maic: MaicStatus | null; maicId?: string;
+  /** Refuerzos mandados al confirmar (null: confirmada sin refuerzos, o sin confirmar). */
+  dispatch: DispatchStatus | null;
   timeline: TimelineEntry[];
 }
 

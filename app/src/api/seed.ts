@@ -200,28 +200,28 @@ export const alerts: Alert[] = [
     rule: { id: 'R-PLACA', name: 'Placa en lista de robados', threshold: 'Confianza ≥ 85 %', measured: `Confianza ${Math.round(lastStolenRead.confidence * 100)} %`, persistence: 'Inmediata' },
     observations: 1, evidence: pending('Recorte de placa y foto del vehículo'),
     plate: { read: stolen[0], listed: stolen[0], confidence: lastStolenRead.confidence, reason: plateWatch[stolen[0]].reason, caseId: plateWatch[stolen[0]].case, since: plateWatch[stolen[0]].since, vehicle: plateWatch[stolen[0]].vehicle, direction: 'Hacia el poniente' },
-    review: 'por_revisar', maic: null, timeline: [{ at: lastStolenRead.at, label: 'Alerta creada por la regla "Placa en lista de robados"' }],
+    review: 'por_revisar', dispatch: null, timeline: [{ at: lastStolenRead.at, label: 'Alerta creada por la regla "Placa en lista de robados"' }],
   },
   {
     id: 'AL-4106', kind: 'aglomeracion', severity: 'critica', createdAt: NOW - 6 * MIN, updatedAt: NOW - 20_000,
     zoneId: 'Z-01', cameraId: z('Z-01').cameras[0], lat: z('Z-01').lat, lon: z('Z-01').lon, eventId: 'EV-1207',
     rule: { id: 'R-AGL-DENS', name: 'Densidad alta', threshold: '> 4 personas/m² durante 3 min', measured: '5.2 personas/m² durante 6 min', persistence: '3 min' },
     observations: 72, evidence: pending('Cuadro de la cámara que respalda la medición'),
-    review: 'por_revisar', maic: null, timeline: [{ at: NOW - 6 * MIN, label: 'Alerta creada por la regla "Densidad alta"' }, { at: NOW - 20_000, label: '71 mediciones más de la misma zona y regla, sumadas a esta alerta' }],
+    review: 'por_revisar', dispatch: null, timeline: [{ at: NOW - 6 * MIN, label: 'Alerta creada por la regla "Densidad alta"' }, { at: NOW - 20_000, label: '71 mediciones más de la misma zona y regla, sumadas a esta alerta' }],
   },
   {
     id: 'AL-4105', kind: 'brecha_presencia', severity: 'critica', createdAt: NOW - 9 * MIN, updatedAt: NOW - 60_000,
     zoneId: 'Z-01', cameraId: z('Z-01').cameras[0], lat: z('Z-01').lat + 0.0006, lon: z('Z-01').lon - 0.0006, eventId: 'EV-1207',
     rule: { id: 'R-BRECHA', name: 'Personas por policía', threshold: '> 2,000 personas por policía durante 3 min (umbral del evento)', measured: `${plazaPerOfficer} personas por policía durante 9 min`, persistence: '3 min' },
     observations: 18, evidence: pending('Cuadro de la cámara y unidades presentes'),
-    review: 'por_revisar', maic: null, timeline: [{ at: NOW - 9 * MIN, label: 'Alerta creada por la regla "Personas por policía"' }],
+    review: 'por_revisar', dispatch: null, timeline: [{ at: NOW - 9 * MIN, label: 'Alerta creada por la regla "Personas por policía"' }],
   },
   {
     id: 'AL-4104', kind: 'aglomeracion', severity: 'media', createdAt: NOW - 14 * MIN, updatedAt: NOW - 2 * MIN,
     zoneId: 'Z-04', cameraId: z('Z-04').cameras[0], lat: z('Z-04').lat, lon: z('Z-04').lon, eventId: 'EV-1207',
     rule: { id: 'R-AGL-OCUP', name: 'Ocupación sobre capacidad', threshold: '> 75 % de capacidad durante 3 min', measured: '77 % de capacidad durante 14 min', persistence: '3 min' },
     observations: 41, evidence: pending('Cuadro de la cámara que respalda la medición'),
-    review: 'por_revisar', maic: null, timeline: [{ at: NOW - 14 * MIN, label: 'Alerta creada por la regla "Ocupación sobre capacidad"' }],
+    review: 'por_revisar', dispatch: null, timeline: [{ at: NOW - 14 * MIN, label: 'Alerta creada por la regla "Ocupación sobre capacidad"' }],
   },
   {
     id: 'AL-4103', kind: 'placa_en_lista', severity: 'media', createdAt: secondStolenRead.at, updatedAt: secondStolenRead.at,
@@ -229,26 +229,24 @@ export const alerts: Alert[] = [
     rule: { id: 'R-PLACA', name: 'Placa en lista de robados', threshold: 'Confianza ≥ 85 %', measured: 'Confianza 88 %', persistence: 'Inmediata' },
     observations: 1, evidence: pending('Recorte de placa y foto del vehículo'),
     plate: { read: 'P 377-0I9', listed: stolen[1], confidence: 0.88, reason: plateWatch[stolen[1]].reason, caseId: plateWatch[stolen[1]].case, since: plateWatch[stolen[1]].since, vehicle: plateWatch[stolen[1]].vehicle, direction: 'Hacia el norte' },
-    review: 'por_revisar', maic: null, timeline: [{ at: secondStolenRead.at, label: 'Alerta creada por la regla "Placa en lista de robados"' }],
+    review: 'por_revisar', dispatch: null, timeline: [{ at: secondStolenRead.at, label: 'Alerta creada por la regla "Placa en lista de robados"' }],
   },
   {
     id: 'AL-4102', kind: 'camara_caida', severity: 'baja', createdAt: NOW - 23 * MIN, updatedAt: NOW - 23 * MIN,
     zoneId: offline.zoneId, cameraId: offline.id, lat: offline.lat, lon: offline.lon,
     rule: { id: 'R-CAM', name: 'Cámara sin cuadros', threshold: 'Sin video durante 2 min', measured: 'Sin video desde hace 23 min', persistence: 'Inmediata' },
     observations: 1, evidence: pending('Último cuadro recibido'),
-    review: 'por_revisar', maic: null, timeline: [{ at: NOW - 23 * MIN, label: 'Alerta creada por la regla "Cámara sin cuadros"' }],
+    review: 'por_revisar', dispatch: null, timeline: [{ at: NOW - 23 * MIN, label: 'Alerta creada por la regla "Cámara sin cuadros"' }],
   },
   {
     id: 'AL-4098', kind: 'aglomeracion', severity: 'media', createdAt: NOW - 58 * MIN, updatedAt: NOW - 31 * MIN,
     zoneId: 'Z-02', cameraId: z('Z-02').cameras[0], lat: z('Z-02').lat, lon: z('Z-02').lon, eventId: 'EV-1207',
     rule: { id: 'R-AGL-OCUP', name: 'Ocupación sobre capacidad', threshold: '> 110 % de capacidad durante 3 min (umbral del evento)', measured: '112 % de capacidad durante 4 min', persistence: '3 min' },
     observations: 9, evidence: pending('Cuadro de la cámara que respalda la medición'),
-    review: 'confirmada', reviewedBy: 'Karla Méndez', maic: 'despachada', maicId: 'MAIC-77120',
+    review: 'confirmada', reviewedBy: 'Karla Méndez', dispatch: 'en_camino',
     timeline: [
       { at: NOW - 58 * MIN, label: 'Alerta creada por la regla "Ocupación sobre capacidad"' },
-      { at: NOW - 56 * MIN, label: 'Confirmada y enviada a Maic', by: 'Karla Méndez' },
-      { at: NOW - 55 * MIN, label: 'Recibida en Maic (MAIC-77120)' },
-      { at: NOW - 49 * MIN, label: 'Despachada por Maic' },
+      { at: NOW - 56 * MIN, label: 'Confirmada: se envían 2 unidades', by: 'Karla Méndez' },
     ],
   },
   {
@@ -257,7 +255,7 @@ export const alerts: Alert[] = [
     rule: { id: 'R-PLACA', name: 'Placa en lista de robados', threshold: 'Confianza ≥ 85 %', measured: 'Confianza 86 %', persistence: 'Inmediata' },
     observations: 1, evidence: pending('Recorte de placa y foto del vehículo'),
     plate: { read: 'M 204-55I', listed: stolen[2], confidence: 0.86, reason: plateWatch[stolen[2]].reason, caseId: plateWatch[stolen[2]].case, since: plateWatch[stolen[2]].since, vehicle: plateWatch[stolen[2]].vehicle, direction: 'Hacia el sur' },
-    review: 'descartada', reviewedBy: 'José Portillo', discardReason: 'Lectura de placa errónea', maic: null,
+    review: 'descartada', reviewedBy: 'José Portillo', discardReason: 'Lectura de placa errónea', dispatch: null,
     timeline: [{ at: NOW - 97 * MIN, label: 'Alerta creada por la regla "Placa en lista de robados"' }, { at: NOW - 95 * MIN, label: 'Descartada: Lectura de placa errónea', by: 'José Portillo' }],
   },
 ];
@@ -276,7 +274,7 @@ addAudit(NOW - 3 * 60 * MIN, 'Raúl Campos', 'auditor', 'Consultar bitácora', '
 addAudit(NOW - 97 * MIN + 30_000, 'José Portillo', 'operator_911', 'Abrir alerta', 'AL-4095', 'Placa en lista');
 addAudit(NOW - 95 * MIN, 'José Portillo', 'operator_911', 'Descartar alerta', 'AL-4095', 'Placa en lista', 'Lectura de placa errónea');
 addAudit(NOW - 57 * MIN, 'Karla Méndez', 'operator_911', 'Abrir alerta', 'AL-4098', 'Aglomeración · Alameda Roosevelt');
-addAudit(NOW - 56 * MIN, 'Karla Méndez', 'operator_911', 'Confirmar alerta', 'AL-4098', 'Enviada a Maic');
+addAudit(NOW - 56 * MIN, 'Karla Méndez', 'operator_911', 'Confirmar alerta', 'AL-4098', 'Refuerzos: 2 unidades');
 addAudit(NOW - 40 * MIN, 'Cmdte. Ernesto Alfaro', 'command', 'Abrir zona', 'Z-01', 'Plaza Salvador del Mundo');
 addAudit(NOW - 12 * MIN, 'Roberto Martínez', 'command', 'Abrir evento', 'EV-1207', 'Festividades de diciembre');
 audit.sort((a, b) => b.at - a.at);

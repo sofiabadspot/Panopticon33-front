@@ -54,14 +54,14 @@ Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
 24. [ ] Mover "Buscar identidad" a la vista del Analista (4.7)
 25. [ ] Simplificar el flujo de búsqueda de identidad de Julio (4.8)
 26. [ ] Enrolamiento: cómo se agrega una persona a cada lista (4.9)
-27. [ ] Escalar a un operador o supervisor, sin asignar unidades (6.2)
-28. [ ] Escalamiento automático a MAIC por condiciones, vía Jules (6.3)
+27. [ ] Escalar a un operador o supervisor, sin asignar unidades (6.2). **Ya no aplica**: no hay envío a Maic (reunión con el Gobierno); ver 31
+28. [ ] Escalamiento automático a MAIC por condiciones, vía Jules (6.3). **Ya no aplica**: no hay envío a Maic (reunión con el Gobierno); ver 31
 
 **Después de la reunión con el Gobierno (25/11 tarde)**
 
-31. [ ] Despacho desde la plataforma, sin Maic: confirmar y enviar refuerzos (cuántos y cuáles) desde la alerta (reemplaza 6.1, 6.2 y 6.3)
-32. [ ] "¿Quién llega?": elegir qué patrullas mandar (las más cercanas o elegirlas) y ver las no activas
-33. [ ] Reconocimiento facial: confirmar sin "enviar a Maic"; sumar integraciones de Aduanas, Interpol, PDI y Fiscalía
+31. [x] Despacho desde la plataforma, sin Maic: al confirmar se eligen los refuerzos (cuántos; las más cercanas o elegidas a mano) y se mandan desde acá. Las que ya están en el lugar o no están activas se ven pero no se eligen (reemplaza 6.1, 6.2 y 6.3)
+32. [x] "¿Quién llega?": elegir qué patrullas mandar (las 1, 2 o 3 más cercanas, o a mano) y mandarlas a ese punto; las no activas se ven apagadas con el porqué
+33. [~] Reconocimiento facial: confirmar sin "enviar a Maic" (hecho; además es un tipo de alerta "Persona en lista" con su ícono). Falta sumar las integraciones de Aduanas, Interpol, PDI y Fiscalía
 34. [ ] Tipos de alerta y criticidad con formas, no solo color (retoma 6 y 7)
 35. [ ] Drones y helicópteros como objetos que se mueven en el mapa, junto a las patrullas
 36. [ ] Vista "cinematográfica" del centro de control y de reconocimiento facial, con la marca Spot Vision

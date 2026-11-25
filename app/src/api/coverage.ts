@@ -107,10 +107,10 @@ const zoneSources = (zones: Zone[], status: Record<string, ZoneStatus>): Source[
   // Aureola: la gente que se acerca o sale, alrededor de la zona.
   return [...spots, { lat: z.lat, lon: z.lon, a: Math.min(0.4, occ * 0.22), sigma: Math.max(200, r * 1.8) }];
 });
-/** Alertas abiertas (sin descartar ni cerradas en Maic), pesadas por criticidad. */
+/** Alertas abiertas (por revisar, o confirmadas con refuerzos en camino), pesadas por criticidad. */
 const SEV_W = { critica: 0.9, media: 0.6, baja: 0.35 } as const;
 const alertSources = (alerts: Alert[]): Source[] =>
-  alerts.filter((a) => a.review !== 'descartada' && a.maic !== 'cerrada').map((a) => ({ lat: a.lat, lon: a.lon, a: SEV_W[a.severity], sigma: 280 }));
+  alerts.filter((a) => a.review === 'por_revisar' || a.dispatch === 'en_camino').map((a) => ({ lat: a.lat, lon: a.lon, a: SEV_W[a.severity], sigma: 280 }));
 
 /** Multiplica en `empty` el Π(1 − aporte) de cada fuente, solo en las celdas que alcanza (3σ). */
 function addSources(g: HexGrid, src: Source[], empty: Float64Array) {
@@ -136,7 +136,7 @@ export function hexSignature(metric: HexMetric, d: HexData): string {
 function readingSig(metric: HexMetric, d: HexData): string {
   if (metric === 'personas') return d.zones.map((z) => { const s = d.status[z.id]; return `${z.id}:${s?.count == null ? '-' : Math.round((s.occupancy ?? (s.densityPerM2 ?? 0) / 5) * 50)}`; }).join(',') + '|' + camSig(d.cameras);
   // Con la posición: una alerta de placa se mueve con cada lectura nueva sin cambiar de número.
-  if (metric === 'alertas') return d.alerts.map((a) => `${a.id}:${a.severity}:${a.review}:${a.maic ?? ''}:${a.lat.toFixed(4)}:${a.lon.toFixed(4)}`).join(',');
+  if (metric === 'alertas') return d.alerts.map((a) => `${a.id}:${a.severity}:${a.review}:${a.dispatch ?? ''}:${a.lat.toFixed(4)}:${a.lon.toFixed(4)}`).join(',');
   return (d.units ?? []).filter(reporting).map((u) => `${u.id}:${u.lat.toFixed(4)}:${u.lon.toFixed(4)}`).join(',');
 }
 const camSig = (cameras: Camera[]) => cameras.map((c) => c.status[0]).join('');

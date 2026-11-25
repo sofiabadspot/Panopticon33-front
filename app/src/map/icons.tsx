@@ -9,7 +9,7 @@
       · Grupo   → chip con la forma de su categoría en chico y la cantidad.
    2. El DIBUJO de adentro dice el TIPO dentro de la categoría.
    3. El ROJO es solo para alertas, y en el mapa solo están las que esperan una decisión: todas iguales,
-      sin niveles. Las enviadas a Maic y las descartadas salen del mapa (ya están resueltas).
+      sin niveles. Las confirmadas y las descartadas se ven grises (ya están resueltas).
       Unidades y cámaras no usan color: su estado cambia el dibujo.
 
    Todos los dibujos son de 24 × 24, en currentColor y con trazo de 1,8. */

@@ -29,7 +29,7 @@ export function IconSheet() {
         <ol className="is-rules">
           <li><b>La forma de afuera dice la categoría.</b> Alerta: mira de fijación con asta. Unidad: hexágono. Cámara: nodo con mira.</li>
           <li><b>El dibujo de adentro dice el tipo.</b> Placa, multitud, falta de presencia o cámara; patrulla, moto o agente.</li>
-          <li><b>El rojo es solo para alertas que esperan una decisión.</b> Todas se ven igual: no hay niveles en el mapa. Las que ya se enviaron a Maic o se descartaron salen del mapa.</li>
+          <li><b>El rojo es solo para alertas que esperan una decisión.</b> Todas se ven igual: no hay niveles en el mapa. Las que ya se confirmaron o se descartaron quedan en gris.</li>
         </ol>
       </header>
 

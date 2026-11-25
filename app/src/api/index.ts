@@ -11,6 +11,7 @@ import seedJson from '../data/generated/seed.json';
 import * as seed from './seed';
 import { normalizePlate } from './format';
 import { KIND_LABEL } from './labels';
+import { etaMin } from './coverage';
 import type {
   Alert, AuditEntry, Camera, InvPlace, Investigation, MaicLink, MassEvent, PlateRead, Role, Rule, Sighting, Unit, User, WatchList, Zone, ZoneStatus,
 } from './types';
@@ -80,7 +81,7 @@ let state: State = {
 };
 
 const baseAlerts = seed.alerts.map((a) => placeAlert(a, seed.zones));
-/** Alertas de cada escenario. "Gestionadas": todo lo que esperaba decisión ya se resolvió y Maic lo cerró. */
+/** Alertas de cada escenario. "Gestionadas": todo lo que esperaba decisión ya se resolvió y los refuerzos llegaron. */
 function alertsFor(sc: Scenario): Alert[] {
   if (sc === 'sin_alertas' || sc === 'cargando') return [];
   if (sc !== 'gestionadas') return baseAlerts;
@@ -89,8 +90,8 @@ function alertsFor(sc: Scenario): Alert[] {
     if (a.review === 'por_revisar' && a.kind === 'camara_caida')
       return { ...a, review: 'descartada', reviewedBy: 'Karla Méndez', discardReason: 'La cámara volvió a enviar video', updatedAt: at, timeline: [...a.timeline, { at, label: 'Descartada: la cámara volvió a enviar video', by: 'Karla Méndez' }] };
     if (a.review === 'por_revisar')
-      return { ...a, review: 'confirmada', reviewedBy: 'Karla Méndez', maic: 'cerrada', maicId: `MAIC-${77300 + i}`, updatedAt: at, timeline: [...a.timeline, { at, label: 'Confirmada y enviada a Maic', by: 'Karla Méndez' }, { at: at + 6 * 60000, label: 'Llegó la unidad · cerrada en Maic' }] };
-    return a.maic === 'despachada' ? { ...a, maic: 'cerrada' } : a;
+      return { ...a, review: 'confirmada', reviewedBy: 'Karla Méndez', dispatch: 'en_lugar', updatedAt: at, timeline: [...a.timeline, { at, label: 'Confirmada: se envía 1 unidad', by: 'Karla Méndez' }, { at: at + 6 * 60000, label: 'Llegó la unidad · refuerzos en el lugar' }] };
+    return a.dispatch === 'en_camino' ? { ...a, dispatch: 'en_lugar' } : a;
   });
 }
 function scenarioPatch(sc: Scenario, now = Date.now()): Partial<State> {
@@ -185,13 +186,13 @@ export function sightingsOf(a: Alert): Sighting[] {
   const cam = state.cameras.find((c) => c.id === a.cameraId);
   return [{ at: a.createdAt, cameraId: a.cameraId, street: cam?.street ?? '', lat: a.lat, lon: a.lon, confidence: a.plate?.confidence ?? 0, evidence: a.evidence }];
 }
-/** Una placa en lista vuelve a pasar por una cámara. Si el vehículo ya tiene una alerta abierta (sin
-    descartar ni cerrada en Maic), se actualiza esa: dónde está ahora, una lectura más y una línea en su
+/** Una placa en lista vuelve a pasar por una cámara. Si el vehículo ya tiene una alerta abierta (por
+    revisar, o confirmada con refuerzos en camino), se actualiza esa: dónde está ahora, una lectura más y una línea en su
     historia; sube al principio de la lista. Si no, se crea una alerta nueva. Una sola alerta por vehículo:
     si no, la bandeja se llena con el mismo auto. */
 function plateSighting(alerts: Alert[], now: number): Alert[] {
   const read = newPlateAlert(now);
-  const open = alerts.find((a) => a.plate?.listed === read.plate!.listed && a.review !== 'descartada' && a.maic !== 'cerrada');
+  const open = alerts.find((a) => a.plate?.listed === read.plate!.listed && (a.review === 'por_revisar' || a.dispatch === 'en_camino'));
   if (!open) return [read, ...alerts];
   const s = sightingsOf(read)[0];
   const next: Alert = {
@@ -217,7 +218,7 @@ function newPlateAlert(now: number): Alert {
     observations: 1, evidence: { type: 'pendiente', caption: 'Recorte de placa y foto del vehículo' },
     plate: { read: plate, listed: plate, confidence: 0.95, reason: info.reason, caseId: info.case, since: info.since, vehicle: info.vehicle, direction: 'Hacia el oriente' },
     sightings: [{ at: now, cameraId: cam.id, street: cam.street, lat: cam.lat, lon: cam.lon, confidence: 0.95, evidence: { type: 'pendiente', caption: 'Recorte de placa y foto del vehículo' } }],
-    review: 'por_revisar', maic: null, timeline: [{ at: now, label: 'Alerta creada por la regla "Placa en lista de robados"' }],
+    review: 'por_revisar', dispatch: null, timeline: [{ at: now, label: 'Alerta creada por la regla "Placa en lista de robados"' }],
   }, state.zones);
 }
 
@@ -252,9 +253,10 @@ export function openAlert(id: string, user: User) {
   audit(user, 'Abrir alerta', id, KIND_LABEL[a.kind]);
 }
 
-/* ---------------- Unidades en camino ----------------
-   Cuando Maic despacha una alerta, las unidades más cercanas (a más de 300 m: si ya están ahí no "van")
-   salen hacia el lugar. Suele ser una; en aglomeraciones Maic manda más (ver unitsFor).
+/* ---------------- Refuerzos: unidades en camino ----------------
+   La plataforma asigna las unidades, no Maic (reunión con el Gobierno, 25/11): el operador 911 o el
+   mando elige cuántas y cuáles al confirmar una alerta, o manda las que quiera a un punto desde
+   "¿Quién llega?". A Maic le llega el evento por el backend, sin que el operador haga nada.
    En la demo avanzan en línea recta ~45 m cada 4 s y al llegar quedan en servicio. */
 const metersBetween = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => {
   const kx = 111320 * Math.cos((a.lat * Math.PI) / 180);
@@ -269,34 +271,50 @@ function followTarget(alertId: string): Alert | undefined {
   const a = state.alerts.find((x) => x.id === alertId); if (!a?.plate) return a;
   return state.alerts.filter((x) => x.plate?.listed === a.plate!.listed).sort((p, q) => q.createdAt - p.createdAt)[0];
 }
-/** Cuántas unidades manda Maic. Aglomeración: 3 si es crítica, 2 si es media; lo demás, una. */
-function unitsFor(a: Alert) {
+/** Cuántas unidades se sugieren al confirmar: aglomeración 3 si es crítica y 2 si es media; brecha de
+    presencia 2 si es crítica; placa y persona en lista, 1; cámara caída, ninguna. El operador lo cambia. */
+export function suggestedUnits(a: Alert) {
+  if (a.kind === 'camara_caida') return 0;
   if (a.kind === 'aglomeracion') return a.severity === 'critica' ? 3 : a.severity === 'media' ? 2 : 1;
+  if (a.kind === 'brecha_presencia') return a.severity === 'critica' ? 2 : 1;
   return 1;
 }
-function dispatchTo(alertId: string, minDist = 300) {
-  const a = state.alerts.find((x) => x.id === alertId); if (!a) return;
-  const need = unitsFor(a) - state.units.filter((u) => u.enRoute?.alertId === alertId).length;
-  if (need <= 0) return;
-  const picked = new Set(state.units.filter((u) => (u.status === 'disponible' || u.status === 'en_servicio') && !u.enRoute)
-    .map((u) => ({ u, d: metersBetween(u, a) })).filter((x) => x.d > minDist).sort((p, q) => p.d - q.d).slice(0, need).map((x) => x.u.id));
-  if (!picked.size) return;
-  const enRoute = { lat: a.lat, lon: a.lon, label: followLabel(a), alertId, since: Date.now() };
-  commit({ units: state.units.map((u) => (picked.has(u.id) ? { ...u, status: 'en_servicio', enRoute } : u)) });
+/** Distancia a la que una unidad ya cuenta como presente en el lugar (m). */
+const ALREADY_M = 150;
+/** Una unidad para mandar a un punto: cuánto tarda y si se puede elegir (si no, por qué). */
+export interface UnitOption { unit: Unit; eta: number; dist: number; free: boolean; why?: string }
+/** Todas las unidades, de la que llega antes a la que llega después. Las no activas (sin reporte o con
+    estado desconocido) y las que ya van a otro lugar aparecen, pero no se pueden elegir. */
+export function unitOptions(p: { lat: number; lon: number }): UnitOption[] {
+  return state.units.map((unit) => {
+    const dist = metersBetween(unit, p), eta = etaMin(unit, [p.lon, p.lat]);
+    // A menos de ALREADY_M ya está en el lugar: un refuerzo tiene que venir de afuera.
+    const why = unit.status === 'sin_reporte' ? 'Sin reporte' : unit.status === 'desconocida' ? 'Estado desconocido' : unit.enRoute ? `Va a otro lugar (${unit.enRoute.label})` : dist < ALREADY_M ? 'Ya está en el lugar' : undefined;
+    return { unit, eta, dist, free: !why, why };
+  }).sort((a, b) => Number(b.free) - Number(a.free) || a.eta - b.eta);
 }
-/** Unidades que llegaron en este ciclo: su alerta se cierra en Maic. */
+/** Las `n` más cercanas que se pueden mandar. */
+export const nearestFree = (p: { lat: number; lon: number }, n: number) => unitOptions(p).filter((o) => o.free).slice(0, n).map((o) => o.unit.id);
+/** Manda unidades a una alerta (siguen a la alerta si se mueve) o a un punto. */
+function sendUnits(ids: string[], target: { lat: number; lon: number; label: string; alertId?: string }) {
+  if (!ids.length) return;
+  const set = new Set(ids);
+  const enRoute = { lat: target.lat, lon: target.lon, label: target.label, alertId: target.alertId, since: Date.now() };
+  commit({ units: state.units.map((u) => (set.has(u.id) ? { ...u, status: 'en_servicio', enRoute } : u)) });
+}
+/** Unidades que llegaron en este ciclo. */
 let arrivals: { alertId: string; unitId: string }[] = [];
-/** Llegó una unidad. Si Maic mandó varias, cada llegada queda en la línea de tiempo; cuando llega la última,
-    la alerta (y, si es una placa, las lecturas confirmadas del mismo vehículo) queda cerrada en Maic. */
+/** Llegó una unidad. Si van varias, cada llegada queda en la línea de tiempo; cuando llega la última,
+    la alerta (y, si es una placa, las lecturas confirmadas del mismo vehículo) queda con los refuerzos en el lugar. */
 function closeArrived(alerts: Alert[], units: Unit[], now: number): Alert[] {
   if (!arrivals.length) return alerts;
   const done = arrivals; arrivals = [];
   return alerts.map((x) => {
     const hits = done.filter(({ alertId }) => { const a = alerts.find((y) => y.id === alertId); return x.id === alertId || (!!a?.plate && x.plate?.listed === a.plate.listed); });
-    if (!hits.length || x.review !== 'confirmada' || !x.maic || x.maic === 'cerrada') return x;
+    if (!hits.length || x.review !== 'confirmada' || x.dispatch !== 'en_camino') return x;
     const stillGoing = units.some((u) => u.enRoute?.alertId && hits.some((h) => h.alertId === u.enRoute!.alertId));
-    const timeline = [...x.timeline, ...hits.map((h, i) => ({ at: now, label: !stillGoing && i === hits.length - 1 ? `Llegó ${h.unitId} · cerrada en Maic` : `Llegó ${h.unitId}` }))];
-    return { ...x, maic: stillGoing ? x.maic : 'cerrada', updatedAt: now, timeline };
+    const timeline = [...x.timeline, ...hits.map((h, i) => ({ at: now, label: !stillGoing && i === hits.length - 1 ? `Llegó ${h.unitId} · refuerzos en el lugar` : `Llegó ${h.unitId}` }))];
+    return { ...x, dispatch: stillGoing ? x.dispatch : 'en_lugar', updatedAt: now, timeline };
   });
 }
 function advanceUnits(units: Unit[], now: number): Unit[] {
@@ -312,24 +330,33 @@ function advanceUnits(units: Unit[], now: number): Unit[] {
     return { ...u, lat: u.lat + (go.lat - u.lat) * k, lon: u.lon + (go.lon - u.lon) * k, lastReportAt: now };
   });
 }
-// Demo: las alertas ya despachadas al abrir tienen su unidad en camino (desde un poco más lejos, para que se vea el viaje).
-for (const a of state.alerts) if (a.maic === 'despachada') dispatchTo(a.id, 900);
+// Demo: las alertas con refuerzos en camino al abrir tienen sus unidades viajando (desde un poco más lejos, para que se vea el viaje).
+for (const a of state.alerts) if (a.dispatch === 'en_camino') {
+  let ids = unitOptions(a).filter((o) => o.free && o.dist > 900).slice(0, suggestedUnits(a)).map((o) => o.unit.id);
+  if (!ids.length) ids = nearestFree(a, suggestedUnits(a)); // si no hay lejos, las más cercanas
+  if (ids.length) sendUnits(ids, { lat: a.lat, lon: a.lon, label: followLabel(a), alertId: a.id });
+  else state.alerts = state.alerts.map((x) => (x.id === a.id ? { ...x, dispatch: 'en_lugar' } : x));
+}
 
 function patchAlert(id: string, fn: (a: Alert) => Alert) {
   commit({ alerts: state.alerts.map((a) => (a.id === id ? fn(a) : a)) });
 }
 
-/** POST /v1/alerts/{id}/confirm → crea el evento en Maic (sandbox). Maic devuelve el estado por /v1/stream. */
-export function confirmAlert(id: string, user: User) {
+const unitsTxt = (n: number) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`;
+/** POST /v1/alerts/{id}/confirm { units } — confirma y manda los refuerzos elegidos (pueden ser ninguno).
+    El evento le llega a Maic por el backend, sin que el operador haga nada. */
+export function confirmAlert(id: string, user: User, unitIds: string[] = []) {
   const now = Date.now();
-  const maicId = 'MAIC-' + (77200 + Math.floor(r() * 700));
-  patchAlert(id, (a) => ({ ...a, review: 'confirmada', reviewedBy: user.name, maic: 'enviada', maicId, updatedAt: now,
-    timeline: [...a.timeline, { at: now, label: 'Confirmada y enviada a Maic', by: user.name }] }));
-  audit(user, 'Confirmar alerta', id, 'Enviada a Maic');
-  // Sin conexión con Maic: la confirmación queda en cola y sale cuando vuelve el enlace.
-  if (!state.maic.connected) { patchAlert(id, (a) => ({ ...a, timeline: [...a.timeline, { at: now, label: 'En cola: Maic sin conexión' }] })); return; }
-  setTimeout(() => patchAlert(id, (a) => ({ ...a, maic: 'recibida', updatedAt: Date.now(), timeline: [...a.timeline, { at: Date.now(), label: `Recibida en Maic (${maicId})` }] })), 2200);
-  setTimeout(() => { patchAlert(id, (a) => ({ ...a, maic: 'despachada', updatedAt: Date.now(), timeline: [...a.timeline, { at: Date.now(), label: 'Despachada por Maic' }] })); dispatchTo(id); }, 9000);
+  const a = state.alerts.find((x) => x.id === id); if (!a) return;
+  patchAlert(id, (x) => ({ ...x, review: 'confirmada', reviewedBy: user.name, dispatch: unitIds.length ? 'en_camino' : null, updatedAt: now,
+    timeline: [...x.timeline, { at: now, label: unitIds.length ? `Confirmada: se ${unitIds.length === 1 ? 'envía' : 'envían'} ${unitsTxt(unitIds.length)} (${unitIds.join(', ')})` : 'Confirmada sin refuerzos', by: user.name }] }));
+  sendUnits(unitIds, { lat: a.lat, lon: a.lon, label: followLabel(a), alertId: id });
+  audit(user, 'Confirmar alerta', id, unitIds.length ? `Refuerzos: ${unitIds.join(', ')}` : 'Sin refuerzos');
+}
+/** POST /v1/dispatch { point, units } — manda unidades a un punto del mapa ("¿Quién llega?"). */
+export function sendUnitsTo(p: { lat: number; lon: number }, unitIds: string[], user: User, label = 'Refuerzo a un punto del mapa') {
+  sendUnits(unitIds, { lat: p.lat, lon: p.lon, label });
+  audit(user, 'Mandar unidades', unitIds.join(', '), `${unitsTxt(unitIds.length)} a ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`);
 }
 
 /** POST /v1/alerts/{id}/discard { reason } — el motivo alimenta el ajuste de umbrales. */

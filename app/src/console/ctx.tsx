@@ -81,7 +81,7 @@ interface Ctx {
   open: (s: Sheet) => void; close: () => void;
   overlay: Overlay; setOverlay: (o: Overlay) => void;
   pin: { lat: number; lon: number; label: string } | null; setPin: (p: Ctx['pin']) => void;
-  /** Emisión en el mapa al enviar algo a Maic (anillos y haz sobre el punto). */
+  /** Emisión en el mapa al confirmar una alerta (anillos y haz sobre el punto). */
   signal: { lat: number; lon: number; label: string; key: string } | null; setSignal: (s: Ctx['signal']) => void;
   /** Alerta bajo el mouse (en la lista o en el mapa): se destaca en los dos lugares. */
   hoverAlert: string | null; setHoverAlert: (id: string | null) => void;

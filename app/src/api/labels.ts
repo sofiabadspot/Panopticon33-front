@@ -1,4 +1,4 @@
-import type { AlertKind, CameraStatus, Coverage, MaicStatus, ReviewStatus, Role, Severity, UnitStatus } from './types';
+import type { AlertKind, CameraStatus, Coverage, DispatchStatus, ReviewStatus, Role, Severity, UnitStatus } from './types';
 
 /* Etiquetas visibles. Glosario de la ontología: "Aglomeración" = crowding, etc. */
 
@@ -40,7 +40,7 @@ export const SEVERITY_RANK: Record<Severity, number> = { critica: 0, media: 1, b
 
 export const REVIEW_LABEL: Record<ReviewStatus, string> = { por_revisar: 'Por revisar', confirmada: 'Confirmada', descartada: 'Descartada' };
 
-export const MAIC_LABEL: Record<MaicStatus, string> = { enviada: 'Enviada a Maic', recibida: 'Recibida en Maic', despachada: 'Despachada', cerrada: 'Cerrada en Maic' };
+export const DISPATCH_LABEL: Record<DispatchStatus, string> = { en_camino: 'Refuerzos en camino', en_lugar: 'Refuerzos en el lugar' };
 
 export const CAMERA_LABEL: Record<CameraStatus, string> = { operativa: 'Operativa', degradada: 'Degradada', caida: 'Caída', fuera_de_preset: 'Fuera de preset' };
 

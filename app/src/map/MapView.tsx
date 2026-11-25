@@ -18,8 +18,8 @@ import { drawHexLayer, makeHexLayer, unmeasured, type HexColors, type HexLayer }
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
 
-/** Confirmada y en manos de Maic, todavía sin cerrar: se ve gestionada (gris con tick) y dice en qué está, hasta que llega la unidad. */
-const inMaic = (a: Alert) => a.review === 'confirmada' && !!a.maic && a.maic !== 'cerrada';
+/** Confirmada con refuerzos en camino: se ve gestionada (gris con tick) y lo dice, hasta que llegan. */
+const goingTo = (a: Alert) => a.review === 'confirmada' && a.dispatch === 'en_camino';
 import { GOOGLE_LOGO, googleCopyright, googleSession, googleTiles, hasGoogleKey, type GoogleBase } from './google';
 // El worker del mapa se empaqueta con la app (sin CDN). Vite lo emite como archivo propio.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
@@ -85,7 +85,7 @@ interface Props {
   /** Alertas que acaban de llegar y nadie abrió: caen sobre el punto con anillos. */
   freshAlerts?: string[];
   onAlertHover?: (id: string | null) => void;
-  /** Emisión al enviar a Maic. */
+  /** Emisión al confirmar una alerta (sale sobre el punto). */
   signal?: { lat: number; lon: number; label: string; key: string } | null;
   /** Punto destacado (resultado de búsqueda). */
   pin?: { lat: number; lon: number; label: string } | null;
@@ -626,7 +626,7 @@ export function MapView(p: Props) {
     if (P.alerts) for (const a of alertSplit.singles) {
       // Pin rojo con la punta en el lugar exacto. Todas iguales: el dibujo dice el tipo.
       // .mk-alert-scale crece con el zoom del mapa (variable --az, ver onZoom), sin esperar a que termine.
-      add('a' + a.id, [a.lon, a.lat], <span className={`mk-alert-scale ${P.freshAlerts?.includes(a.id) ? 'is-new' : ''}`} onMouseEnter={() => P.onAlertHover?.(a.id)} onMouseLeave={() => P.onAlertHover?.(null)}><AlertMark kind={a.kind} size={34} muted={a.review !== 'por_revisar'} />{a.review !== 'por_revisar' && <i className={`mk-done ${a.review === 'confirmada' ? 'ok' : ''}`} aria-label="Gestionada" />}{inMaic(a) && <i className="mk-go-tag">{a.maic === 'despachada' ? 'Unidad en camino' : 'Enviada a Maic'}</i>}{P.freshAlerts?.includes(a.id) && <><i className="new-ring" /><i className="new-ring r2" /><i className="new-ring r3" /></>}</span>, P.onAlertClick ? () => P.onAlertClick!(a.id) : undefined, 'bottom', `Alerta ${a.id}${inMaic(a) ? (a.maic === 'despachada' ? ' · unidad en camino' : ' · enviada a Maic') : ''}`);
+      add('a' + a.id, [a.lon, a.lat], <span className={`mk-alert-scale ${P.freshAlerts?.includes(a.id) ? 'is-new' : ''}`} onMouseEnter={() => P.onAlertHover?.(a.id)} onMouseLeave={() => P.onAlertHover?.(null)}><AlertMark kind={a.kind} size={34} muted={a.review !== 'por_revisar'} />{a.review !== 'por_revisar' && <i className={`mk-done ${a.review === 'confirmada' ? 'ok' : ''}`} aria-label="Gestionada" />}{goingTo(a) && <i className="mk-go-tag">Refuerzos en camino</i>}{P.freshAlerts?.includes(a.id) && <><i className="new-ring" /><i className="new-ring r2" /><i className="new-ring r3" /></>}</span>, P.onAlertClick ? () => P.onAlertClick!(a.id) : undefined, 'bottom', `Alerta ${a.id}${goingTo(a) ? ' · refuerzos en camino' : ''}`);
     }
     if (selCam && !focus) add('csel' + selCam.id, [selCam.lon, selCam.lat], <span className="mk-camsel" aria-hidden><i /><i className="r2" /><b>{selCam.id}</b></span>);
     if (P.signal) add('sig' + P.signal.key, [P.signal.lon, P.signal.lat], <span className="mk-signal" aria-hidden><i /><i /><i /><s /><b /><em>{P.signal.label}</em></span>);

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import icons from '../data/generated/icons.json';
 import { Trend } from './Trend';
 import type { Alert, Coverage, Evidence as Ev, Severity } from '../api/types';
-import { COVERAGE_LABEL, KIND_ICON, MAIC_LABEL, REVIEW_LABEL, SEVERITY_LABEL } from '../api/labels';
+import { COVERAGE_LABEL, DISPATCH_LABEL, KIND_ICON, REVIEW_LABEL, SEVERITY_LABEL } from '../api/labels';
 
 const ICONS = icons as Record<string, string[]>;
 
@@ -24,14 +24,11 @@ export function SeverityChip({ severity }: { severity: Severity }) {
 export function StatusChip({ alert }: { alert: Alert }) {
   if (alert.review === 'por_revisar') return <span className="chip outline">{REVIEW_LABEL.por_revisar}</span>;
   if (alert.review === 'descartada') return <span className="chip">Descartada</span>;
-  /* Avance en Maic, cada paso distinto (el verde queda solo para "despachada": hay unidades en camino).
-     Enviada: en curso (punto que late) · Recibida: Maic acusó recibo (borde) · Despachada: verde ·
-     Cerrada: terminada, gris. Confirmada sin Maic: como enviada. */
-  const m = alert.maic ?? 'enviada';
-  if (m === 'despachada') return <span className="chip ok"><Icon name="done_all" />{MAIC_LABEL.despachada}</span>;
-  if (m === 'cerrada') return <span className="chip closed"><Icon name="check" />{MAIC_LABEL.cerrada}</span>;
-  if (m === 'recibida') return <span className="chip received"><Icon name="check" />{MAIC_LABEL.recibida}</span>;
-  return <span className="chip sending"><span className="pulse-dot" aria-hidden />{alert.maic ? MAIC_LABEL.enviada : 'Confirmada'}</span>;
+  /* Despacho de refuerzos, desde la plataforma. En camino: punto que late · En el lugar: verde ·
+     Confirmada sin refuerzos: terminada, gris. */
+  if (alert.dispatch === 'en_camino') return <span className="chip sending"><span className="pulse-dot" aria-hidden />{DISPATCH_LABEL.en_camino}</span>;
+  if (alert.dispatch === 'en_lugar') return <span className="chip ok"><Icon name="done_all" />{DISPATCH_LABEL.en_lugar}</span>;
+  return <span className="chip closed"><Icon name="check" />Confirmada</span>;
 }
 
 export function KindIcon({ alert }: { alert: Alert }) {

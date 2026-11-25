@@ -99,7 +99,7 @@ export function ZoneSheet({ id }: { id: string }) {
             ))}
           </ul>
         </div>
-        <p className="dim" style={{ fontSize: 'var(--fs-xs)', margin: 0 }}>El refuerzo se ordena por Maic o por radio. Si varias cámaras cubren la zona, cuenta la de mayor cobertura.</p>
+        <p className="dim" style={{ fontSize: 'var(--fs-xs)', margin: 0 }}>El refuerzo se manda desde la alerta o con «¿Quién llega?». Si varias cámaras cubren la zona, cuenta la de mayor cobertura.</p>
       </div>
     </>
   );

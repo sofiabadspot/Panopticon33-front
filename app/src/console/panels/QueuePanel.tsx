@@ -37,7 +37,7 @@ export function QueuePanel() {
   const matches = (a: Alert) => {
     const n = norm(q.trim()); if (!n) return true;
     const cam = cameras.find((x) => x.id === a.cameraId);
-    const text = norm([a.id, zones.find((z) => z.id === a.zoneId)?.name, cam?.street, a.cameraId, KIND_LABEL[a.kind], KIND_PHRASE[a.kind], a.maicId].filter(Boolean).join(' · '));
+    const text = norm([a.id, zones.find((z) => z.id === a.zoneId)?.name, cam?.street, a.cameraId, KIND_LABEL[a.kind], KIND_PHRASE[a.kind]].filter(Boolean).join(' · '));
     const plates = a.plate ? [a.plate.listed, a.plate.read].map(tight) : [];
     return n.split(/\s+/).every((w) => text.includes(w)) || plates.some((p) => p.includes(tight(n)));
   };

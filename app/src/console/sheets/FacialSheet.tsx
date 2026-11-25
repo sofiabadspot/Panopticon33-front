@@ -3,7 +3,7 @@
    desaparecidas). Una sola por persona: las detecciones nuevas se suman a la misma.
    Ficha: la captura más reciente, la reconstrucción 3D del perfil (ya hecha, afinada con cada detección)
    y todas las fotos de la lista. El operador 911 tiene el veredicto final: confirma que es la persona
-   (se genera la alerta y se envía a Maic) o la descarta. Nunca es una identificación automática. */
+   (se genera la alerta y se avisa al agente) o la descarta. Nunca es una identificación automática. */
 import { useEffect, useMemo, useState } from 'react';
 import { audit } from '../../api';
 import { ago, dateTime, hhmm, pct } from '../../api/format';
@@ -16,10 +16,7 @@ import { useConsole } from '../ctx';
 import { SheetHead } from './SheetHead';
 
 const STATUS: Record<FacialMatch['status'], string> = { por_revisar: 'Por revisar', confirmada: 'Confirmada', descartada: 'Descartada' };
-const MAIC: Record<NonNullable<FacialMatch['maic']>, string> = { enviada: 'Enviada a Maic', recibida: 'Recibida en Maic' };
-const statusChip = (m: FacialMatch) => m.status === 'confirmada' && m.maic
-  ? <span className={`chip ${m.maic === 'recibida' ? 'received' : 'sending'}`}>{m.maic === 'enviada' && <span className="pulse-dot" aria-hidden />}{MAIC[m.maic]}</span>
-  : <span className={`chip ${m.status === 'por_revisar' ? 'outline' : ''}`}>{STATUS[m.status]}</span>;
+const statusChip = (m: FacialMatch) => <span className={`chip ${m.status === 'por_revisar' ? 'outline' : m.status === 'confirmada' ? 'ok' : ''}`}>{STATUS[m.status]}</span>;
 
 function Phase3Notice() {
   return <div className="notice"><Icon name="lock" /><span>Requiere base legal confirmada.</span></div>;
@@ -156,7 +153,7 @@ export function FacialSheet({ id }: { id: string }) {
       {role !== 'operator_911' && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: confirma o descarta el operador 911.</span></div>}
       <div className="pf">
         {role === 'operator_911' && m.status === 'por_revisar' && !discarding && <>
-          <button className="btn positive" style={{ flex: 1 }} onClick={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta enviada a Maic y agente avisado'); }}><Icon name="send" />Es la persona: enviar a Maic</button>
+          <button className="btn positive" style={{ flex: 1 }} onClick={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta generada y agente avisado'); }}><Icon name="check" />Es la persona: confirmar</button>
           <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />No coincide</button>
         </>}
         {role === 'operator_911' && m.status === 'por_revisar' && discarding && <>
@@ -166,7 +163,7 @@ export function FacialSheet({ id }: { id: string }) {
             <button className="btn ghost xs" onClick={() => setDiscarding(false)}>Cancelar</button>
           </div>
         </>}
-        {m.status === 'confirmada' && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> Confirmada{m.reviewedBy ? ` por ${m.reviewedBy}` : ''}. {m.maic === 'recibida' ? `Maic recibió la alerta (${m.maicId}).` : 'Enviando a Maic…'} El agente en el punto de control está avisado.</span>}
+        {m.status === 'confirmada' && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> Confirmada{m.reviewedBy ? ` por ${m.reviewedBy}` : ''}. El agente en el punto de control está avisado.</span>}
         {m.status === 'descartada' && <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Descartada{m.discardReason ? `: ${m.discardReason.toLowerCase()}` : ''}. El rostro no se guarda.</span>}
       </div>
     </>

@@ -6,8 +6,8 @@
      suma la detección a su coincidencia abierta (dónde está ahora, recorrido), no se crea otra.
    · Cada perfil de la lista ya tiene su reconstrucción 3D, que se afina con cada detección confirmada:
      no hay un paso de "reconstruir".
-   · Si el 911 confirma la identidad, se genera la alerta y se envía a Maic (en este primer entregable,
-     a mano; el escalamiento automático va después). Si no, la descarta con un motivo.
+   · Si el 911 confirma la identidad, se genera la alerta y se avisa al agente del punto de control; a
+     Maic le llega el evento por el backend, sin que el operador haga nada. Si no, la descarta con un motivo.
 
    Datos de ejemplo ficticios (media/demo, aportados por SPOTVISION).
    Endpoints previstos: GET /v1/checkpoints/matches · POST /v1/checkpoints/matches/{id}/confirm · /discard */
@@ -37,8 +37,6 @@ export interface FacialMatch {
   /** Detecciones de esta coincidencia: la primera la creó; la última es dónde está ahora. */
   detections: FacialDetection[];
   status: FacialStatus; reviewedBy?: string; discardReason?: string;
-  /** Al confirmar: la alerta generada y su avance en Maic. */
-  maic: null | 'enviada' | 'recibida'; maicId?: string;
   agent: string; timeline: { at: number; label: string; by?: string }[];
 }
 export const lastDetection = (m: FacialMatch) => m.detections[m.detections.length - 1];
@@ -56,17 +54,17 @@ const seedMatches = (): FacialMatch[] => [
   { id: 'FC-7301', spotbox: 'SPOTBOX-PC-03', list: 'buscadas', listRef: 'LB-0291', reason: 'Orden de captura vigente', orderUntil: '15 ene 2027',
     listPhotos: ['/media/demo/portrait.jpg', '/media/demo/id.jpg'], profile3d: { detections: 14, updatedAt: NOW - 2 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
     detections: [det(2, NOW - 19 * MIN, 0.88), det(5, NOW - 11 * MIN, 0.91), det(0, NOW - 3 * MIN, 0.96)],
-    status: 'por_revisar', maic: null, agent: 'Agente PNC-224 (punto de control)',
+    status: 'por_revisar', agent: 'Agente PNC-224 (punto de control)',
     timeline: [{ at: NOW - 19 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 88 %)' }, { at: NOW - 11 * MIN, label: 'Nueva detección (91 %)' }, { at: NOW - 3 * MIN, label: 'Nueva detección (96 %)' }] },
   { id: 'FC-7302', spotbox: 'SPOTBOX-PC-05', list: 'investigacion', listRef: 'LI-1187', reason: 'Seguimiento por investigación de extorsión', orderUntil: null,
     listPhotos: ['/media/demo/id.jpg'], profile3d: { detections: 6, updatedAt: NOW - 9 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
     detections: [det(7, NOW - 9 * MIN, 0.89)],
-    status: 'por_revisar', maic: null, agent: 'Agente PNC-118 (punto de control)',
+    status: 'por_revisar', agent: 'Agente PNC-118 (punto de control)',
     timeline: [{ at: NOW - 9 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 89 %)' }] },
   { id: 'FC-7298', spotbox: 'SPOTBOX-PC-03', list: 'desaparecidas', listRef: 'LD-0044', reason: 'Denuncia de desaparición', orderUntil: null,
     listPhotos: ['/media/demo/portrait.jpg'], profile3d: { detections: 3, updatedAt: NOW - 30 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
     detections: [det(3, NOW - 52 * MIN, 0.86)],
-    status: 'descartada', reviewedBy: 'José Portillo', discardReason: 'No es la misma persona', maic: null, agent: 'Agente PNC-224 (punto de control)',
+    status: 'descartada', reviewedBy: 'José Portillo', discardReason: 'No es la misma persona', agent: 'Agente PNC-224 (punto de control)',
     timeline: [{ at: NOW - 52 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 86 %)' }, { at: NOW - 50 * MIN, label: 'Descartada: No es la misma persona', by: 'José Portillo' }] },
 ];
 
@@ -92,7 +90,7 @@ function toAlert(m: FacialMatch): Alert {
     id: m.id, kind: 'persona_en_lista', severity: SEV[m.list], createdAt: first.at, updatedAt: d.at, zoneId: null, cameraId: d.cameraId, lat: d.lat, lon: d.lon,
     rule: { id: 'R-FACIAL', name: `Persona en lista · ${FACIAL_LISTS[m.list].name}`, threshold: 'Puntaje ≥ 85 %', measured: `Puntaje ${Math.round(d.score * 100)} %`, persistence: 'Inmediata' },
     observations: m.detections.length, evidence: { type: 'imagen', src: d.capture, caption: 'Captura del punto de control' },
-    review: m.status, reviewedBy: m.reviewedBy, discardReason: m.discardReason, maic: m.maic, maicId: m.maicId, timeline: m.timeline,
+    review: m.status, reviewedBy: m.reviewedBy, discardReason: m.discardReason, dispatch: null, timeline: m.timeline,
   }, snapshot().zones);
 }
 const emit = () => { syncFaceAlerts(matches.map(toAlert)); subs.forEach((f) => f()); };
@@ -113,17 +111,12 @@ if (typeof window !== 'undefined') setTimeout(() => {
   emit();
 }, 40_000);
 
-let maicSeq = 77950;
-/** El 911 confirma que es la persona: se genera la alerta, se avisa al agente en el punto de control y
-    se envía a Maic. Maic acusa recibo unos segundos después (simulado). */
+/** El 911 confirma que es la persona: se genera la alerta y se avisa al agente en el punto de control. */
 export function confirmFacial(id: string, user: User) {
-  const maicId = 'MAIC-' + maicSeq++;
-  set((m) => ({ ...m, status: 'confirmada', reviewedBy: user.name, maic: 'enviada', maicId, timeline: [...m.timeline,
+  set((m) => ({ ...m, status: 'confirmada', reviewedBy: user.name, timeline: [...m.timeline,
     { at: Date.now(), label: 'Identidad confirmada por el operador 911: se genera la alerta', by: user.name },
-    { at: Date.now(), label: 'Se avisa al agente con foto de referencia, motivo y certeza' },
-    { at: Date.now(), label: 'Enviada a Maic' }] }), id);
-  audit(user, 'Confirmar coincidencia facial', id, 'Verificación facial · enviada a Maic');
-  setTimeout(() => set((m) => (m.maic === 'enviada' ? { ...m, maic: 'recibida', timeline: [...m.timeline, { at: Date.now(), label: `Recibida en Maic (${maicId})` }] } : m), id), 3000);
+    { at: Date.now(), label: 'Se avisa al agente con foto de referencia, motivo y certeza' }] }), id);
+  audit(user, 'Confirmar coincidencia facial', id, 'Verificación facial · alerta generada');
 }
 export function discardFacial(id: string, reason: string, user: User) {
   set((m) => ({ ...m, status: 'descartada', reviewedBy: user.name, discardReason: reason, timeline: [...m.timeline, { at: Date.now(), label: `Descartada: ${reason}`, by: user.name }] }), id);
