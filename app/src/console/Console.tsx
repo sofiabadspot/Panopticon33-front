@@ -328,7 +328,8 @@ function Layout() {
         {/* Tocar cualquier capa con una ficha abierta suelta el foco: así la capa se ve al instante. */}
         <div className="mstrip" role="group" aria-label="Capas del mapa" onClickCapture={() => { if (focusSel && !unfocus) setUnfocus(true); }}>
           {/* Hexágonos + qué muestran: un solo control, como Cámaras + Visión. Las lecturas aparecen pegadas
-              cuando están prendidos y se elige una por vez. */}
+              cuando están prendidos y se elige una por vez. Solo texto: el ícono (la escala de la lectura
+              elegida) va una vez, en el chip Hexágonos. */}
           <div className={`lchip-group ${layers.hex ? 'on' : ''}`} role="group" aria-label="Hexágonos">
             <button className={`lchip ${layers.hex && !hexOff(layers.hex) ? 'on' : ''}`} aria-pressed={!!layers.hex && !hexOff(layers.hex)}
               title="Hexágonos sobre todo el mapa" onClick={() => setLayers((l) => ({ ...l, hex: l.hex && !hexOff(l.hex) ? null : !hexOff(hexPick) ? hexPick : inv ? 'alertas' : 'personas' }))}>
@@ -337,7 +338,7 @@ function Layout() {
             {layers.hex && !hexOff(layers.hex) && HEX_OPTS.map(([m, label, help]) => (
               <button key={m} className={`lchip sub ${layers.hex === m ? 'on' : ''}`} aria-pressed={layers.hex === m} disabled={hexOff(m)}
                 title={hexOff(m) ? hexTitle(m) : help} onClick={() => { setHexPick(m); setLayers((l) => ({ ...l, hex: m })); }}>
-                {hexIcon(m)}{label}
+                {label}
               </button>
             ))}
           </div>

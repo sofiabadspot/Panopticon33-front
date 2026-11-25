@@ -13,7 +13,7 @@ import type { Alert, Camera, Evidence as Ev, LngLat, Unit, Zone, ZoneStatus } fr
 import { fmtCrowd, hhmm } from '../api/format';
 import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
-import { HEX_TIERS, smoothArea, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
+import { HEX_TIERS, hexesOutline, zoneHexes, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
 import { drawHexLayer, makeHexLayer, type HexColors, type HexLayer } from './hexCanvas';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
@@ -91,6 +91,11 @@ interface Props {
 
 const token = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888888';
 const SHOW_DETAIL = 12.2;
+/** Desde qué zoom se rotula cada cosa. Alejado, los rótulos se amontonan y tapan el mapa: primero se van
+    los de zona (a 14,5 ya se ven las cuadras y no se pisan) y queda el del evento como referencia hasta 13;
+    más lejos solo quedan la línea del área y los hexágonos. */
+const ZONE_LABEL_Z = 14.5;
+const EVENT_LABEL_Z = 13;
 /** Escala de las alertas según el zoom: nunca bajan de 0,95 (de lejos siguen siendo lo que más se ve) y de cerca crecen hasta 1,5. */
 const alertScale = (z: number) => Math.min(1.5, Math.max(0.95, 1 + (z - 15) * 0.14));
 /** Desde este zoom se ve cada elemento suelto; más lejos, lo que cae cerca se agrupa. */
@@ -203,15 +208,19 @@ export function MapView(p: Props) {
       /* Zonas: ya no se dibujan. La capa queda invisible solo para poder tocarlas y abrir su ficha;
          el nombre y el conteo van en su rótulo. */
       map.addLayer({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': muted, 'fill-opacity': 0 } });
-      /* Lo que se delimita es el evento en curso (y la zona elegida en el lateral): un área suave que
-         envuelve sus zonas, con un velo apenas más claro y una línea fina. El nombre del evento va en su
-         propio rótulo, arriba del área (ver los marcadores). */
+      /* Lo que se delimita es el evento en curso (y la zona elegida en el lateral). Un evento se delimita
+         eligiendo hexágonos, así que su área es la forma de esas celdas: un velo claro, el contorno de la
+         figura en una línea fina continua y, adentro, las aristas de cada hexágono apenas marcadas. El
+         nombre del evento va en su propio rótulo, arriba del área (ver los marcadores). */
       map.addSource('area', { type: 'geojson', data: fc([]) });
+      map.addSource('areaCells', { type: 'geojson', data: fc([]) });
       map.addLayer({ id: 'area-fill', type: 'fill', source: 'area', paint: {
-        'fill-color': ink, 'fill-opacity': ['case', ['get', 'dim'], 0.015, ['match', ['get', 'k'], 'sel', 0.06, 0.04]] } });
+        'fill-color': ink, 'fill-opacity': ['case', ['get', 'dim'], 0.02, ['match', ['get', 'k'], 'sel', 0.08, 0.06]] } });
+      map.addLayer({ id: 'area-cells', type: 'line', source: 'areaCells', minzoom: 14, paint: {
+        'line-color': ink, 'line-width': 0.6, 'line-opacity': ['case', ['get', 'dim'], 0.05, 0.16] } });
       map.addLayer({ id: 'area-line', type: 'line', source: 'area', layout: { 'line-join': 'round' }, paint: {
-        'line-color': ink, 'line-width': ['match', ['get', 'k'], 'sel', 2, 1.25],
-        'line-opacity': ['case', ['get', 'dim'], 0.3, ['match', ['get', 'k'], 'sel', 0.9, 0.6]] } });
+        'line-color': ink, 'line-width': ['match', ['get', 'k'], 'sel', 2, 1.4],
+        'line-opacity': ['case', ['get', 'dim'], 0.3, ['match', ['get', 'k'], 'sel', 0.9, 0.7]] } });
       // Campo de visión de cada cámara: hacia dónde mira, con qué ángulo y hasta dónde llega.
       map.addLayer({ id: 'cones-fill', type: 'fill', source: 'cones', minzoom: 15, paint: { 'fill-color': ink, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.04, 17, 0.09] } });
       map.addLayer({ id: 'cones-line', type: 'line', source: 'cones', minzoom: 15, paint: { 'line-color': ink, 'line-opacity': 0.28, 'line-width': 1 } });
@@ -416,21 +425,29 @@ export function MapView(p: Props) {
       properties: { id: z.id, sev: P.severityOf?.(z.id) ? 'alerta' : 'none', sel: P.selectedZone === z.id || !!P.highlightZones?.includes(z.id), dim: (!!P.highlightZones && !P.highlightZones.includes(z.id) && P.selectedZone !== z.id) || (!!selZone && z.id !== selZone) || (!!P.focusSel && !selZone), nodata: !!P.zoneStatus && (st[z.id]?.coverage ?? 'sin_datos') !== 'medida' },
     })) : []));
     // Áreas delimitadas: cada evento en curso (sus zonas juntas) y la zona elegida
-    const area: GeoJSON.Feature[] = [];
-    const eventAreas: { name: string; end: number; ring: LngLat[]; dim: boolean }[] = [];
+    const area: GeoJSON.Feature[] = [], areaCells: GeoJSON.Feature[] = [];
+    const eventAreas: { name: string; end: number; top: LngLat; dim: boolean }[] = [];
+    const addArea = (cells: string[], k: 'evento' | 'sel', dim: boolean) => {
+      const shape = hexesOutline(cells); if (!shape.length) return null;
+      area.push({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: shape }, properties: { k, dim } });
+      for (const c of cells) areaCells.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(c)] }, properties: { dim } });
+      return shape.flat(2).reduce((a, q) => (q[1] > a[1] ? q : a)); // el punto más al norte, para el rótulo
+    };
     if (L.events) {
       const events = new Map<string, { end: number; zones: Zone[] }>();
       for (const z of P.zones) { const ev = P.eventOf?.(z.id); if (ev) events.set(ev.name, { end: ev.end, zones: [...(events.get(ev.name)?.zones ?? []), z] }); }
       for (const [name, e] of events) {
-        const ring = smoothArea(e.zones), dim = !!selZone && !e.zones.some((z) => z.id === selZone);
-        if (ring.length) { area.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: { k: 'evento', dim } }); eventAreas.push({ name, end: e.end, ring, dim }); }
+        const dim = !!selZone && !e.zones.some((z) => z.id === selZone);
+        const top = addArea(zoneHexes(e.zones), 'evento', dim);
+        if (top) eventAreas.push({ name, end: e.end, top, dim });
       }
     }
     if (L.zones) {
       const sel = P.zones.filter((z) => z.id === selZone || z.id === P.selectedZone || P.highlightZones?.includes(z.id));
-      if (sel.length) area.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [smoothArea(sel, 30)] }, properties: { k: 'sel', dim: false } });
+      if (sel.length) addArea(zoneHexes(sel), 'sel', false);
     }
     (map.getSource('area') as GeoJSONSource).setData(fc(area));
+    (map.getSource('areaCells') as GeoJSONSource).setData(fc(areaCells));
     // Agrupación al alejar el zoom (cámaras, unidades y alertas por separado). Se calcula en pantalla:
     // lo que cae en la misma celda se junta. Desde UNGROUP en adelante todo va suelto.
     const zoom = map.getZoom(), detailZ = zoom >= SHOW_DETAIL, cell = zoom >= UNGROUP ? 0 : zoom >= 15.6 ? 30 : zoom >= 14.4 ? 40 : 56;
@@ -480,7 +497,8 @@ export function MapView(p: Props) {
     map.setPaintProperty('focus-dim', 'fill-opacity', focus ? 0.55 : 0);
     for (const id of HEX_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', focus || !L.hex ? 'none' : 'visible');
     for (const id of ['zones-fill', 'cameras', 'cameras-hit', 'cones-fill', 'cones-line', 'cone-hi-fill', 'cone-hi-line']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', focus ? 'none' : 'visible');
-    map.setPaintProperty('area-line', 'line-opacity', focus ? 0.22 : ['case', ['get', 'dim'], 0.35, 1]);
+    map.setPaintProperty('area-line', 'line-opacity', focus ? 0.22 : ['case', ['get', 'dim'], 0.3, ['match', ['get', 'k'], 'sel', 0.9, 0.7]]);
+    if (map.getLayer('area-cells')) map.setLayoutProperty('area-cells', 'visibility', focus ? 'none' : 'visible');
     const rkey = R ? JSON.stringify(R.map((s) => [s.lon, s.lat])) : '';
     if (rkey !== anim.current.key) { anim.current.key = rkey; if (R) playRoute(R); else stopRoute(); }
     (map.getSource('routeGhost') as GeoJSONSource).setData(fc(R ? [{ type: 'Feature', geometry: { type: 'LineString', coordinates: streetRoute(R.map((s) => [s.lon, s.lat])).path }, properties: {} }] : []));
@@ -513,7 +531,7 @@ export function MapView(p: Props) {
     };
     const detail = map.getZoom() >= SHOW_DETAIL && !focus;
     if (P.region && !detail && !focus) add('region', [P.region.lon, P.region.lat], <span className="mk-region"><b>{P.region.title}</b><span>{P.region.sub}</span></span>, P.region.onClick, 'bottom', P.region.title);
-    if (detail && L.zones && !P.compact) for (const z of P.zones) {
+    if (detail && L.zones && !P.compact && map.getZoom() >= ZONE_LABEL_Z) for (const z of P.zones) {
       const dimZ = !!P.highlightZones && !P.highlightZones.includes(z.id) && P.selectedZone !== z.id;
       // El rótulo de la zona es neutro: que tenga una alerta lo dice el ícono de la alerta, no un color
       // (en el mapa, los íconos son alertas y los colores son lo que miden los hexágonos).
@@ -532,10 +550,8 @@ export function MapView(p: Props) {
       ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'bottom', `Zona ${z.name}${ev ? ` · evento en curso hasta ${hhmm(ev.end)}` : ''}`);
     }
     // Rótulo del evento: arriba de su área (en el punto más al norte), con su nombre y hasta qué hora dura.
-    // Se ve a cualquier zoom, para que el evento se ubique aun con el mapa alejado.
-    if (!focus && !P.compact) for (const e of eventAreas) {
-      const top = e.ring.reduce((a, q) => (q[1] > a[1] ? q : a));
-      add('ev' + e.name, top, (
+    if (!focus && !P.compact && map.getZoom() >= EVENT_LABEL_Z) for (const e of eventAreas) {
+      add('ev' + e.name, e.top, (
         <span className={`mk-event ${e.dim ? 'dimz' : ''}`}>
           <span className="el"><Icon name="flag" className="eflag" /><span className="en">{e.name}</span><em>Evento en curso · hasta {hhmm(e.end)}</em></span>
           <u className="estem" aria-hidden />
