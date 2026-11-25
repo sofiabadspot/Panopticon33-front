@@ -11,7 +11,7 @@ import { FACIAL_DISCARD, FACIAL_LISTS, FACIAL_SOURCES, confirmFacial, discardFac
 import { useSession } from '../../shell/session';
 import { FaceCloud } from '../../ui/FaceCloud';
 import { useInspect } from '../../ui/ImageInspect';
-import { FacialDossier } from './FacialDossier';
+import { FacialDossier, Traits } from './FacialDossier';
 import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
 import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
@@ -121,7 +121,6 @@ export function FacialSheet({ id }: { id: string }) {
       {insp.viewer}
       <div className="pb">
         <div className="callout"><Icon name="info" /><span className="grow">Una coincidencia no es una identificación. Tú tienes la última palabra: confirma solo si es la persona.</span></div>
-        <button className="btn secondary fc-open" onClick={openDossier}><Icon name="open_in_full" />Abrir expediente<span className="fc-open-sub">3D para girar, señas, conexiones</span></button>
         <section className="fc-compare" aria-label="Comparar la captura con la lista">
           <div className="fc-pair">
             <figure>
@@ -150,10 +149,7 @@ export function FacialSheet({ id }: { id: string }) {
         </div>
         <div className="box">
           <div className="bh"><h3>Señas para confirmar</h3></div>
-          <div className="bb fc-marks">
-            <div><h4>En la lista</h4><ul>{m.marks.map((x) => <li key={x}>{x}</li>)}</ul></div>
-            <div><h4>En la captura</h4><ul>{m.observed.map((x) => <li key={x}>{x}</li>)}</ul></div>
-          </div>
+          <div className="bb fc-traits"><Traits m={m} /></div>
         </div>
         <div className="box"><div className="bb" style={{ paddingTop: 12 }}><dl className="details">
           <dt>Nombre</dt><dd>{m.name}</dd>
@@ -195,6 +191,11 @@ export function FacialSheet({ id }: { id: string }) {
         onDiscard={() => { setDossier(false); setDiscarding(true); }} />}
       {role !== 'operator_911' && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: confirma o descarta el operador 911.</span></div>}
       <div className="pf">
+        <button className="fc-open" onClick={openDossier}>
+          <i aria-hidden><Icon name="open_in_full" /></i>
+          <span><b>Abrir expediente completo</b><small>3D para girar · señas · conexiones en el tiempo · {m.links.length} vínculos</small></span>
+          <Icon name="arrow_forward" />
+        </button>
         {role === 'operator_911' && m.status === 'por_revisar' && !discarding && <>
           <button className="btn positive" style={{ flex: 1 }} onClick={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta generada y agente avisado'); }}><Icon name="check" />Es la persona: confirmar</button>
           <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />No coincide</button>

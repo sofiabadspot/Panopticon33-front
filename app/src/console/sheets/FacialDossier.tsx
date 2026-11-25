@@ -4,24 +4,29 @@
      Clic en una imagen la amplía ahí mismo; mover el mouse recorre la imagen y la rueda acerca más.
    · Reconstrucción 3D: se gira arrastrando, la rueda acerca, puede girar sola, marcar los puntos de
      referencia del rostro y escanear.
-   · Señas para confirmar: cada seña de la lista se marca como "Coincide" o "No coincide" frente a lo que
-     se ve en la captura, con un resumen. Es ayuda para decidir; no queda guardado.
-   · Conexiones: la persona en el centro y lo que tiene vinculado (vehículos, personas, lugares, casos).
+   · Señas: por grupo (cuerpo, rostro, tatuajes y cicatrices, ropa), lo que dice la lista frente a lo
+     que se ve en la captura, y qué no se puede ver.
+   · Conexiones en el tiempo: cada vehículo, persona, lugar o caso vinculado es una fila con sus fechas.
+     Al elegir una se ve su ficha: datos, su historia con la persona y con qué otras conexiones coincide.
    · Detecciones, datos y fuentes. El 911 decide desde acá también.
    Esc cierra el expediente (no la ficha). Todo es de ejemplo hasta que lleguen los datos reales. */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { ago, dateTime, hhmm, pct } from '../../api/format';
-import { FACIAL_LISTS, FACIAL_SOURCES, lastDetection, type FacialMatch, type LinkKind } from '../../api/facial';
+import { ago, dateShort, dateTime, hhmm, pct } from '../../api/format';
+import { FACIAL_LISTS, FACIAL_SOURCES, TRAIT_GROUPS, lastDetection, type FacialMatch, type LinkKind, type PersonLink, type TraitGroup } from '../../api/facial';
 import { FaceCloud } from '../../ui/FaceCloud';
 import { Icon, useNow } from '../../ui/kit';
 
-const KIND: Record<LinkKind, { label: string; icon: string; angle: number }> = {
-  vehiculo: { label: 'Vehículos', icon: 'directions_car', angle: -150 },
-  persona: { label: 'Personas', icon: 'person', angle: -30 },
-  lugar: { label: 'Lugares', icon: 'location_on', angle: 150 },
-  caso: { label: 'Casos', icon: 'gavel', angle: 30 },
+const KIND: Record<LinkKind, { label: string; one: string; icon: string }> = {
+  vehiculo: { label: 'Vehículos', one: 'Vehículo', icon: 'directions_car' },
+  persona: { label: 'Personas', one: 'Persona', icon: 'person' },
+  lugar: { label: 'Lugares', one: 'Lugar', icon: 'location_on' },
+  caso: { label: 'Casos', one: 'Caso', icon: 'gavel' },
 };
+// Mismo día en hora de El Salvador (no en UTC).
+const dayOf = (t: number) => dateShort(t);
+const dm = (t: number) => dateShort(t).replace(/\s*de\s*/g, ' ').replace(/\s\d{4}$/, '');
+const strength = (w: number) => (w >= 0.75 ? 'Vínculo fuerte' : w >= 0.5 ? 'Vínculo medio' : 'Vínculo débil');
 
 /** Imagen que se amplía ahí mismo: clic acerca (2,5×) hacia donde está el puntero, mover la recorre,
     la rueda cambia el aumento, otro clic vuelve. */
@@ -47,52 +52,150 @@ function ZoomImg({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-/** Conexiones: la persona al centro y cada vínculo en su cuadrante (vehículos, personas, lugares, casos).
-    El grosor de la línea es la fuerza del vínculo; al pasar el mouse se resalta y se lee el detalle. */
-function Connections({ m }: { m: FacialMatch }) {
-  const [hover, setHover] = useState<number | null>(null);
-  // Ancho de sobra para los rótulos; los nodos se mantienen lejos de los bordes.
-  const W = 860, H = 300, cx = W / 2, cy = H / 2, PAD = 190;
-  const nodes = useMemo(() => {
-    const out: { i: number; x: number; y: number; kind: LinkKind }[] = [];
-    (Object.keys(KIND) as LinkKind[]).forEach((k) => {
-      const list = m.links.map((l, i) => ({ l, i })).filter((x) => x.l.kind === k);
-      list.forEach((x, j) => {
-        const a = ((KIND[k].angle + (j - (list.length - 1) / 2) * 22) * Math.PI) / 180;
-        const r = 120 + (j % 2) * 22;
-        out.push({ i: x.i, x: Math.max(PAD, Math.min(W - PAD, cx + Math.cos(a) * r * 1.9)), y: Math.max(24, Math.min(H - 24, cy + Math.sin(a) * r * 0.95)), kind: k });
+/** Conexiones: la persona al centro, de ella salen los cuatro grupos (vehículos, personas, lugares,
+    casos) y de cada grupo lo que tiene vinculado. El grosor de la línea es la fuerza del vínculo; las
+    líneas punteadas unen conexiones que aparecen el mismo día (por ejemplo, el vehículo y el coimputado
+    vistos juntos en el mercado). Elegir un nodo (clic, Enter o Espacio) abre su ficha al costado: datos,
+    su historia con la persona y con qué otras conexiones coincide en fecha. */
+function Connections({ m, now }: { m: FacialMatch; now: number }) {
+  const [kind, setKind] = useState<LinkKind | 'todas'>('todas');
+  const order = Object.keys(KIND) as LinkKind[];
+  const kinds = order.filter((k) => m.links.some((l) => l.kind === k));
+  const byWeight = useMemo(() => [...m.links].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || b.weight - a.weight), [m.links]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [sel, setSel] = useState<string>(byWeight[0]?.id ?? '');
+  const [hover, setHover] = useState<string | null>(null);
+  // Ubicación: cada grupo en su cuadrante (vehículos arriba a la izquierda, personas arriba a la derecha,
+  // lugares abajo a la izquierda, casos abajo a la derecha); sus conexiones se abren en abanico hacia afuera.
+  const W = 800, H = 330, cx = W / 2, cy = H / 2, PAD = 175;
+  const ANG: Record<LinkKind, number> = { vehiculo: -150, persona: -30, lugar: 150, caso: 30 };
+  const lay = useMemo(() => {
+    const hubs = kinds.map((k) => { const a = (ANG[k] * Math.PI) / 180; return { k, x: cx + Math.cos(a) * 120, y: cy + Math.sin(a) * 78 }; });
+    const leaves: { l: PersonLink; x: number; y: number; hx: number; hy: number; left: boolean }[] = [];
+    hubs.forEach((h) => {
+      const list = byWeight.filter((l) => l.kind === h.k);
+      list.forEach((l, j) => {
+        const a = ((ANG[h.k] + (j - (list.length - 1) / 2) * 26) * Math.PI) / 180;
+        const x = Math.max(PAD, Math.min(W - PAD, cx + Math.cos(a) * 250));
+        const y = Math.max(22, Math.min(H - 22, cy + Math.sin(a) * 135));
+        leaves.push({ l, x, y, hx: h.x, hy: h.y, left: x < cx });
       });
     });
-    return out;
-  }, [m, cx, cy]);
-  const h = hover != null ? m.links[hover] : null;
+    // Pares que coinciden en fecha (una vez por par).
+    const pairs: { a: number; b: number }[] = [];
+    leaves.forEach((p, i) => leaves.forEach((q, k) => { if (k > i && p.l.events.some((e) => q.l.events.some((f) => dayOf(e.at) === dayOf(f.at)))) pairs.push({ a: i, b: k }); }));
+    return { hubs, leaves, pairs };
+  }, [m.links, byWeight]); // eslint-disable-line react-hooks/exhaustive-deps
+  const l = m.links.find((v) => v.id === sel) ?? byWeight[0];
+  const focus = hover ?? l?.id;
+  const cross = l ? m.links.filter((o) => o.id !== l.id && o.events.some((e) => l.events.some((f) => dayOf(f.at) === dayOf(e.at)))) : [];
+  const shown = (k: LinkKind) => kind === 'todas' || kind === k;
+  const pick = (v: PersonLink) => { if (!shown(v.kind)) setKind('todas'); setSel(v.id); };
+  // Al filtrar, si lo elegido queda oculto, se elige lo más fuerte del tipo filtrado.
+  const filter = (k: LinkKind | 'todas') => { setKind(k); if (k !== 'todas' && l?.kind !== k) setSel(byWeight.find((v) => v.kind === k)?.id ?? sel); };
+  const short = (s: string) => (s.length > 25 ? s.slice(0, 24) + '…' : s);
   return (
-    <div className="ds-graph">
-      <svg viewBox={`0 0 ${W} ${H}`} role="group" aria-label={`Conexiones de ${m.listRef}`}>
-        <defs><clipPath id={`ds-face-${m.id}`}><circle cx={cx} cy={cy} r="30" /></clipPath></defs>
-        {nodes.map((n) => {
-          const l = m.links[n.i];
-          return <line key={'e' + n.i} x1={cx} y1={cy} x2={n.x} y2={n.y} className={`ds-edge ${hover === n.i ? 'on' : hover != null ? 'dim' : ''}`} style={{ strokeWidth: 0.8 + l.weight * 2.4 }} />;
-        })}
-        <circle cx={cx} cy={cy} r="38" className="ds-ring" />
-        <image href={m.listPhotos[0]?.src} x={cx - 30} y={cy - 30} width="60" height="60" preserveAspectRatio="xMidYMid slice" clipPath={`url(#ds-face-${m.id})`} aria-hidden />
-        <g role="list">{nodes.map((n) => {
-          const l = m.links[n.i];
-          return (
-            <g key={'n' + n.i} className={`ds-node k-${n.kind} ${hover === n.i ? 'on' : hover != null ? 'dim' : ''}`} transform={`translate(${n.x} ${n.y})`}
-              onMouseEnter={() => setHover(n.i)} onMouseLeave={() => setHover(null)} onFocus={() => setHover(n.i)} onBlur={() => setHover(null)} tabIndex={0} role="listitem" aria-label={`${KIND[n.kind].label}: ${l.label}, ${l.sub}`}>
-              <circle r="15" />
-              <foreignObject x="-8" y="-8" width="16" height="16"><Icon name={KIND[n.kind].icon} /></foreignObject>
-              <text className="ds-node-lbl" textAnchor={n.x < cx ? 'end' : 'start'} x={n.x < cx ? -22 : 22} dy="4">{l.label}</text>
+    <div className="cx">
+      <div className="cx-main">
+        <div className="cx-filter" role="group" aria-label="Tipo de conexión">
+          <button aria-pressed={kind === 'todas'} className={kind === 'todas' ? 'on' : ''} onClick={() => filter('todas')}>Todas <b className="mono">{m.links.length}</b></button>
+          {kinds.map((k) => <button key={k} aria-pressed={kind === k} className={kind === k ? 'on' : ''} onClick={() => filter(k)}><Icon name={KIND[k].icon} />{KIND[k].label} <b className="mono">{m.links.filter((v) => v.kind === k).length}</b></button>)}
+        </div>
+        <svg className="cx-graph" viewBox={`0 0 ${W} ${H}`} role="group" aria-label={`Conexiones de ${m.listRef}`}>
+          <defs><clipPath id={`ds-face-${m.id}`}><circle cx={cx} cy={cy} r="28" /></clipPath></defs>
+          {lay.pairs.map(({ a, b }) => {
+            const p = lay.leaves[a], q = lay.leaves[b];
+            const on = focus === p.l.id || focus === q.l.id;
+            const mx = (p.x + q.x) / 2 + (cy - (p.y + q.y) / 2) * 0.25, my = (p.y + q.y) / 2 + ((p.x + q.x) / 2 - cx) * -0.08;
+            return <path key={`x${a}-${b}`} d={`M${p.x} ${p.y} Q${mx} ${my} ${q.x} ${q.y}`} className={`cx-co ${on ? 'on' : ''} ${shown(p.l.kind) && shown(q.l.kind) ? '' : 'dim'}`} />;
+          })}
+          {lay.hubs.map((h) => <line key={'h' + h.k} x1={cx} y1={cy} x2={h.x} y2={h.y} className={`cx-trunk ${shown(h.k) ? '' : 'dim'}`} />)}
+          {lay.leaves.map((n) => (
+            <line key={'e' + n.l.id} x1={n.hx} y1={n.hy} x2={n.x} y2={n.y} style={{ strokeWidth: 0.8 + n.l.weight * 2.6 }}
+              className={`cx-edge ${focus === n.l.id ? 'on' : ''} ${shown(n.l.kind) ? '' : 'dim'}`} />
+          ))}
+          <circle cx={cx} cy={cy} r="40" className="cx-pulse" />
+          <circle cx={cx} cy={cy} r="34" className="cx-ring" />
+          {m.listPhotos[0] && <image href={m.listPhotos[0].src} x={cx - 28} y={cy - 28} width="56" height="56" preserveAspectRatio="xMidYMid slice" clipPath={`url(#ds-face-${m.id})`} aria-hidden />}
+          {lay.hubs.map((h) => (
+            <g key={'g' + h.k} className={`cx-hub ${shown(h.k) ? '' : 'dim'}`} transform={`translate(${h.x} ${h.y})`} aria-hidden>
+              <circle r="13" />
+              <foreignObject x="-8" y="-8" width="16" height="16"><Icon name={KIND[h.k].icon} /></foreignObject>
+              <text y={h.y < cy ? -19 : 27} textAnchor="middle">{KIND[h.k].label.toUpperCase()}</text>
             </g>
-          );
-        })}</g>
-      </svg>
-      <div className="ds-legend">
-        {(Object.keys(KIND) as LinkKind[]).filter((k) => m.links.some((l) => l.kind === k)).map((k) => <span key={k}><Icon name={KIND[k].icon} />{KIND[k].label} <b className="mono">{m.links.filter((l) => l.kind === k).length}</b></span>)}
+          ))}
+          <g role="list">{lay.leaves.map((n) => {
+            const on = l?.id === n.l.id;
+            const act = () => setSel(n.l.id);
+            return (
+              <g key={'n' + n.l.id} role="listitem" transform={`translate(${n.x} ${n.y})`}
+                className={`cx-node ${on ? 'sel' : ''} ${hover === n.l.id ? 'on' : ''} ${shown(n.l.kind) ? '' : 'dim'}`}>
+                <g role="button" tabIndex={shown(n.l.kind) ? 0 : -1} aria-pressed={on} aria-label={`${KIND[n.l.kind].one}: ${n.l.label}, ${n.l.sub}. ${strength(n.l.weight)}.`}
+                  onClick={act} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } }}
+                  onMouseEnter={() => setHover(n.l.id)} onMouseLeave={() => setHover(null)} onFocus={() => setHover(n.l.id)} onBlur={() => setHover(null)}>
+                  <circle r="20" className="cx-hit" />
+                  <circle r={10 + n.l.weight * 6} className="cx-dotc" />
+                  <foreignObject x="-8" y="-8" width="16" height="16"><Icon name={KIND[n.l.kind].icon} /></foreignObject>
+                  <text className="cx-lbl" textAnchor={n.left ? 'end' : 'start'} x={n.left ? -24 : 24} dy="-1">{short(n.l.label)}</text>
+                  <text className="cx-lbl2" textAnchor={n.left ? 'end' : 'start'} x={n.left ? -24 : 24} dy="12">{n.l.events.length} {n.l.events.length === 1 ? 'fecha' : 'fechas'}</text>
+                </g>
+              </g>
+            );
+          })}</g>
+        </svg>
+        <p className="ds-hint">Tocá una conexión para ver su ficha. Las líneas punteadas unen conexiones que aparecen el mismo día.</p>
       </div>
-      <p className="ds-graph-note" aria-live="polite">{h ? <><b>{h.label}</b> · {h.sub}</> : 'Pasá el mouse por una conexión para ver el detalle.'}</p>
+
+      {l && (
+        <aside className={`cx-card k-${l.kind}`} aria-label={`${KIND[l.kind].one}: ${l.label}`}>
+          <div className="cx-card-hd">
+            <i className="cx-ic lg"><Icon name={KIND[l.kind].icon} /></i>
+            <div><span className="ds-k">{KIND[l.kind].one}</span><h3>{l.label}</h3></div>
+          </div>
+          <div className="cx-str"><span>{strength(l.weight)}</span><i><b style={{ width: `${l.weight * 100}%` }} /></i></div>
+          <dl className="ds-dl">{l.facts.map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{v}</dd></Fragment>)}</dl>
+          <h4 className="ds-k">Historia con la persona</h4>
+          <ol className="cx-hist">
+            {[...l.events].sort((a, b) => b.at - a.at).map((e, i) => (
+              <li key={i}><span className="mono">{dayOf(e.at) === dayOf(now) ? `hoy ${hhmm(e.at)}` : dm(e.at)}</span><div><b>{e.label}</b>{(e.place || e.src) && <small>{[e.place, e.src].filter(Boolean).join(' · ')}</small>}</div></li>
+            ))}
+          </ol>
+          {cross.length > 0 && <>
+            <h4 className="ds-k">Coincide en fecha con</h4>
+            <div className="cx-cross">{cross.map((o) => <button key={o.id} onClick={() => pick(o)}><Icon name={KIND[o.kind].icon} />{o.label}</button>)}</div>
+          </>}
+        </aside>
+      )}
     </div>
+  );
+}
+
+/** Señas por grupo: lo registrado en la lista frente a lo que se ve en la captura. */
+export function Traits({ m }: { m: FacialMatch }) {
+  const both = m.traits.filter((x) => x.list && x.seen).length;
+  const hidden = m.traits.filter((x) => x.list && !x.seen).length;
+  const groups = (Object.keys(TRAIT_GROUPS) as TraitGroup[]).filter((g) => m.traits.some((x) => x.group === g));
+  return (
+    <>
+      <div className="tr-sum">
+        <span><b className="mono">{both}</b> se pueden comparar</span>
+        {hidden > 0 && <span><b className="mono">{hidden}</b> no se {hidden === 1 ? 've' : 'ven'} en la captura</span>}
+      </div>
+      <table className="tr">
+        <thead><tr><th scope="col"><span className="sr">Seña</span></th><th scope="col">En la lista</th><th scope="col">En la captura</th></tr></thead>
+        {groups.map((g) => (
+          <tbody key={g}>
+            <tr className="tr-g"><th colSpan={3} scope="rowgroup">{TRAIT_GROUPS[g]}</th></tr>
+            {m.traits.filter((x) => x.group === g).map((x, i) => (
+              <tr key={g + i}>
+                <th scope="row">{x.label}</th>
+                <td>{x.list ?? <span className="tr-na">Sin registro</span>}</td>
+                <td>{x.seen ?? <span className="tr-na"><Icon name="visibility_off" />No se ve{x.note ? ` · ${x.note}` : ''}</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        ))}
+      </table>
+    </>
   );
 }
 
@@ -110,8 +213,6 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
   const [marks3d, setMarks3d] = useState(true);
   const [scan, setScan] = useState(true);
   const [reset, setReset] = useState(0);
-  const [checks, setChecks] = useState<Record<string, 'si' | 'no' | undefined>>({});
-  const yes = m.marks.filter((x) => checks[x] === 'si').length, no = m.marks.filter((x) => checks[x] === 'no').length;
   const seed = [...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7);
   const box = useRef<HTMLDivElement>(null);
   const close = useRef(onClose); close.current = onClose;
@@ -183,20 +284,9 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
         </section>
 
         <section className="ds-panel ds-side" aria-label="Para confirmar">
-          <h2>Señas para confirmar <span className="ds-sub" aria-live="polite">{yes} de {m.marks.length} coinciden{no ? ` · ${no} no` : ''}</span></h2>
-          <div className="ds-meter" aria-hidden><i className="si" style={{ width: `${(yes / Math.max(1, m.marks.length)) * 100}%` }} /><i className="no" style={{ width: `${(no / Math.max(1, m.marks.length)) * 100}%` }} /></div>
-          <ul className="ds-marks">
-            {m.marks.map((x) => (
-              <li key={x}>
-                <span>{x}</span>
-                <span className="ds-yn" role="group" aria-label={x}>
-                  <button className={checks[x] === 'si' ? 'si' : ''} aria-pressed={checks[x] === 'si'} onClick={() => setChecks((c) => ({ ...c, [x]: c[x] === 'si' ? undefined : 'si' }))}><Icon name="check" />Coincide</button>
-                  <button className={checks[x] === 'no' ? 'no' : ''} aria-pressed={checks[x] === 'no'} onClick={() => setChecks((c) => ({ ...c, [x]: c[x] === 'no' ? undefined : 'no' }))}><Icon name="close" />No</button>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="ds-seen"><span className="ds-k">En la captura</span>{m.observed.map((x) => <span key={x} className="chip">{x}</span>)}</div>
+          <h2>Señas para confirmar</h2>
+          <Traits m={m} />
+          <h2 className="ds-h2b">Datos</h2>
           <dl className="ds-dl">
             <dt>Nombre</dt><dd>{m.name}</dd>
             <dt>Documento</dt><dd className="mono">{m.docId}</dd>
@@ -211,8 +301,8 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
         </section>
 
         <section className="ds-panel ds-links" aria-label="Conexiones">
-          <h2>Conexiones <span className="ds-sub">{m.links.length}</span></h2>
-          <Connections m={m} />
+          <h2>Conexiones <span className="ds-sub">{m.links.length} vínculos · tocá uno para ver sus datos y fechas</span></h2>
+          <Connections m={m} now={now} />
         </section>
 
         <section className="ds-panel ds-dets" aria-label="Detecciones">
