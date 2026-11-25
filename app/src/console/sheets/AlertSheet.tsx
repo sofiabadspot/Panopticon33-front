@@ -14,6 +14,7 @@ import type { Evidence as Ev } from '../../api/types';
 import { byUrgency } from '../../views/shared';
 import { useConsole } from '../ctx';
 import { SheetHead, useSheetGo } from './SheetHead';
+import type { RouteStop } from '../../map/MapView';
 
 export function AlertSheet({ id }: { id: string }) {
   const { user, role } = useSession();
@@ -40,8 +41,10 @@ export function AlertSheet({ id }: { id: string }) {
   const traceReads = useMemo(() => [...prev].sort((x, y) => x.at - y.at), [prev]);
   useEffect(() => {
     if (!trace || !a) return;
-    const stops = traceReads.map((r, i) => ({ lat: r.lat, lon: r.lon, label: String(i + 1), time: hhmm(r.at), title: `${dateTime(r.at)} · ${r.cameraId} · ${r.street}` }));
-    stops.push({ lat: a.lat, lon: a.lon, label: String(stops.length + 1), time: hhmm(a.createdAt), title: `Ahora · lectura de esta alerta · ${a.cameraId}` });
+    const stops: RouteStop[] = traceReads.map((r, i) => ({ lat: r.lat, lon: r.lon, label: String(i + 1), time: hhmm(r.at), title: `${dateTime(r.at)} · ${r.cameraId} · ${r.street}`,
+      snap: { camera: r.cameraId, street: r.street, evidence: r.evidence, confidence: r.confidence } }));
+    stops.push({ lat: a.lat, lon: a.lon, label: String(stops.length + 1), time: hhmm(a.createdAt), title: `Ahora · lectura de esta alerta · ${a.cameraId}`,
+      snap: { camera: a.cameraId, street: 'Lectura de esta alerta', evidence: a.evidence } });
     c.setOverlay({ route: stops, routeLabel: a.plate?.listed, fit: { points: stops.map((s) => [s.lon, s.lat]), key: `recorrido-${a.id}` } });
     return () => c.setOverlay({});
   }, [trace, a?.id, traceReads]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -9,9 +9,9 @@ import type { GeoJSONSource, LngLatBoundsLike, Map as MLMap, MapLayerMouseEvent,
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import geo from '../data/generated/geo.json';
-import type { Alert, Camera, LngLat, Unit, Zone, ZoneStatus } from '../api/types';
+import type { Alert, Camera, Evidence as Ev, LngLat, Unit, Zone, ZoneStatus } from '../api/types';
 import { fmtCrowd, hhmm } from '../api/format';
-import { Icon } from '../ui/kit';
+import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
 import { coverageHexes, hexCounts, hexRing, peopleRes, resForZoom, type HexMetric } from '../api/coverage';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
@@ -33,7 +33,8 @@ export interface MapLayers { heat: boolean; zones: boolean; cameras: boolean; un
   hex?: HexMetric | null;
   /** Zonas pintadas por cobertura policial: cubierta, patrulla cerca, sin cobertura. */
   cover?: boolean }
-export interface RouteStop { lat: number; lon: number; label: string; title: string; /** Hora de la lectura, al lado del número. */ time?: string }
+export interface RouteStop { lat: number; lon: number; label: string; title: string; /** Hora de la lectura, al lado del número. */ time?: string; /** Captura de la cámara que hizo la lectura: se proyecta sobre la parada. */
+  snap?: { camera: string; street: string; evidence: Ev; confidence?: number } }
 
 interface Props {
   zones: Zone[];
@@ -160,6 +161,8 @@ export function MapView(p: Props) {
   /* Recorrido animado: se dibuja de punta a punta con una estela; cada parada se enciende al pasar. */
   const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[] }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
   const [hud, setHud] = useState<{ reached: number; n: number; done: boolean } | null>(null);
+  /* Capturas proyectadas sobre las paradas del recorrido: se pueden ocultar desde el HUD. */
+  const [snaps, setSnaps] = useState(true); const snapsRef = useRef(snaps); snapsRef.current = snaps;
 
   // Crear el mapa una vez
   useEffect(() => {
@@ -520,7 +523,15 @@ export function MapView(p: Props) {
     if (P.pin) add('pin', [P.pin.lon, P.pin.lat], <span className="mk-pin"><i /><b>{P.pin.label}</b></span>, undefined, 'bottom');
     if (R) {
       const reached = anim.current.reached;
-      R.forEach((s, i) => add(`r${i}`, [s.lon, s.lat], <span className={`mk-stop ${i === 0 ? 'first' : ''} ${i === R.length - 1 ? 'last' : ''} ${i <= reached ? 'on' : 'pending'} ${i === reached ? 'now' : ''}`} title={s.title}>{s.label}{s.time && <em>{s.time}</em>}</span>));
+      // Pasar el mouse por una parada (o por su captura) pone esa captura adelante de las demás.
+      const front = (i: number, on: boolean) => markers.current.get(`rs${i}`)?.el.classList.toggle('is-front', on);
+      R.forEach((s, i) => add(`r${i}`, [s.lon, s.lat], <span className={`mk-stop ${i === 0 ? 'first' : ''} ${i === R.length - 1 ? 'last' : ''} ${i <= reached ? 'on' : 'pending'} ${i === reached ? 'now' : ''}`} title={s.title} onMouseEnter={() => front(i, true)} onMouseLeave={() => front(i, false)}>{s.label}{s.time && <em>{s.time}</em>}</span>));
+      // Proyección de cámara: cada lectura ya alcanzada levanta su captura sobre la parada, con un haz
+      // que baja hasta el punto. Alternan de lado y de altura para no taparse entre paradas vecinas.
+      if (snapsRef.current) R.forEach((s, i) => {
+        if (!s.snap || i > reached) return;
+        add(`rs${i}`, [s.lon, s.lat], <SnapCard s={s} n={i + 1} side={i % 2 ? 'l' : 'r'} beam={SNAP_BEAM + (i % 3) * 40} now={i === reached} last={i === R.length - 1} />, undefined, 'bottom');
+      });
       // Sentido del recorrido: una flecha a mitad de cada tramo ya recorrido
       anim.current.arrows.forEach((ar, i) => {
         if (i >= reached) return; const deg = ar.deg;
@@ -530,7 +541,7 @@ export function MapView(p: Props) {
     // Atenuar todo lo que no es lo seleccionado en el lateral
     if (map.getLayer('heat')) map.setPaintProperty('heat', 'heatmap-opacity', P.focusSel && !focus ? 0.3 : ['interpolate', ['linear'], ['zoom'], 14, 1, 17, 0.7]);
     for (const [key, h] of markers.current) {
-      const keep = !P.focusSel || focus || key === 'a' + (selAlert?.id ?? '') || (selZone && key === 'z' + selZone) || key === 'pin' || key.startsWith('sig') || key.startsWith('csel') || /^ra?\d/.test(key);
+      const keep = !P.focusSel || focus || key === 'a' + (selAlert?.id ?? '') || (selZone && key === 'z' + selZone) || key === 'pin' || key.startsWith('sig') || key.startsWith('csel') || /^r[as]?\d/.test(key);
       h.el.classList.toggle('is-dim', !keep && key !== 'a' + P.hoverAlert);
       h.el.classList.toggle('is-hover', !!P.hoverAlert && key === 'a' + P.hoverAlert);
       h.el.classList.toggle('is-sel', !!P.focusSel && !focus && (key === 'a' + (selAlert?.id ?? '') || (P.focusSel.k === 'zona' && key === 'z' + P.focusSel.id)));
@@ -597,7 +608,10 @@ export function MapView(p: Props) {
             <div className="rh-top"><span className="rh-eyebrow">Recorrido{p.routeLabel ? ` · ${p.routeLabel}` : ''}</span><span className="rh-count">{String(Math.max(1, hud.reached + 1)).padStart(2, '0')}<small>/{String(hud.n).padStart(2, '0')}</small></span></div>
             <div className="rh-now"><b>{s.time ?? ''}</b><span>{s.title.split(' · ').slice(1).join(' · ') || s.title}</span></div>
             <div className="rh-bar"><i style={{ width: `${((Math.max(0, hud.reached) + (hud.done ? 1 : 0.5)) / hud.n) * 100}%` }} /></div>
-            {hud.done && <button className="rh-replay" onClick={replay}><Icon name="refresh" />Repetir trazado</button>}
+            <div className="rh-actions">
+              {p.route.some((x) => x.snap) && <button className="rh-replay" onClick={() => setSnaps(!snaps)}><Icon name={snaps ? 'visibility_off' : 'image'} />{snaps ? 'Ocultar capturas' : 'Ver capturas'}</button>}
+              {hud.done && <button className="rh-replay" onClick={replay}><Icon name="refresh" />Repetir trazado</button>}
+            </div>
           </div>
         );
       })()}
@@ -633,5 +647,27 @@ function ViewControl({ view, map }: { view: { bearing: number; pitch: number }; 
         <small>{card}</small>
       </button>
     </div>
+  );
+}
+
+/* ---------- Captura proyectada de una lectura ----------
+   Cuadro de la cámara flotando sobre la parada, unido al punto por un haz (como una proyección de
+   cámara). Solo muestra evidencia real; mientras no la hay, el marcador con el logo en B/N. */
+const SNAP_W = 152, SNAP_H = 128, SNAP_GAP = 14, SNAP_BEAM = 44;
+function SnapCard({ s, n, side, beam, now, last }: { s: RouteStop; n: number; side: 'l' | 'r'; beam: number; now: boolean; last: boolean }) {
+  const sn = s.snap!; const W = 2 * (SNAP_W + SNAP_GAP); const cx = W / 2;
+  const x0 = side === 'r' ? cx + SNAP_GAP : 0, x1 = x0 + SNAP_W;
+  return (
+    <span className={`mk-snap ${now ? 'now' : ''} ${last ? 'last' : ''}`} style={{ width: W, height: SNAP_H + beam }} role="img" aria-label={`Captura ${n}: cámara ${sn.camera}, ${s.time ?? ''}`}>
+      <span className="sn-card" style={{ left: x0, width: SNAP_W }}>
+        <span className="sn-frame"><Evidence ev={sn.evidence} small /><i className="sn-scan" aria-hidden /><b className="sn-idx">{String(n).padStart(2, '0')}</b></span>
+        <span className="sn-row"><b>CAM {sn.camera}</b><em>{s.time}</em></span>
+        <span className="sn-row sub"><span>{sn.street}</span>{sn.confidence != null && <em>{Math.round(sn.confidence * 100)} %</em>}</span>
+      </span>
+      <svg className="sn-beam" width={W} height={beam} viewBox={`0 0 ${W} ${beam}`} aria-hidden>
+        <polygon points={`${x0},0 ${x1},0 ${cx},${beam}`} />
+        <path d={`M${x0} 0L${cx} ${beam}M${x1} 0L${cx} ${beam}`} />
+      </svg>
+    </span>
   );
 }

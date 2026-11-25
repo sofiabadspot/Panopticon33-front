@@ -59,7 +59,8 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
   const [trace, setTrace] = useState(false);
   useEffect(() => {
     if (!trace || !p.reads.length) return;
-    const stops = p.reads.map((r, i) => ({ lat: r.lat, lon: r.lon, label: String(i + 1), time: hhmm(r.at), title: `${dateTime(r.at)} · ${r.cameraId} · ${r.street}` }));
+    const stops = p.reads.map((r, i) => ({ lat: r.lat, lon: r.lon, label: String(i + 1), time: hhmm(r.at), title: `${dateTime(r.at)} · ${r.cameraId} · ${r.street}`,
+      snap: { camera: r.cameraId, street: r.street, evidence: r.evidence, confidence: r.confidence } }));
     c.setOverlay({ route: stops, routeLabel: p.plate, fit: { points: stops.map((s) => [s.lon, s.lat]), key: `vehiculo-${p.plate}` } });
     return () => c.setOverlay({});
   }, [trace, p]); // eslint-disable-line react-hooks/exhaustive-deps

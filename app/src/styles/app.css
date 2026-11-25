@@ -626,6 +626,8 @@ button:hover > .mk-group, button:focus-visible > .mk-group { border-color: var(-
 @media (prefers-reduced-motion: reduce) { .mk-comet b, .mk-stop.on::after { animation: none; } .mk-stop.on { transition: none; } }
 /* Lectura HUD del recorrido, arriba al centro del mapa */
 .route-hud { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); z-index: 5; width: min(420px, calc(100% - 32px)); display: grid; gap: 6px; padding: 10px 14px 12px; background: var(--hud-bg); border: 1px solid var(--hud-line); border-radius: var(--radius-xs); backdrop-filter: var(--hud-blur); -webkit-backdrop-filter: var(--hud-blur); box-shadow: var(--shadow-lg); animation: hudin .3s ease-out; }
+.rh-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.rh-actions .rh-replay { margin-top: 0; }
 .route-hud::before, .route-hud::after { content: ''; position: absolute; width: 12px; height: 12px; border: 0 solid var(--ink); pointer-events: none; }
 .route-hud::before { left: -1px; top: -1px; border-left-width: 2px; border-top-width: 2px; }
 .route-hud::after { right: -1px; bottom: -1px; border-right-width: 2px; border-bottom-width: 2px; }
@@ -1630,3 +1632,44 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .mapcard:has(.mc-live.solo) { padding: 0; overflow: hidden; }
 .mc-live.solo { margin: 0; border-bottom: 0; }
 .mc-live-id { position: absolute; left: 8px; bottom: 6px; font-size: var(--fs-2xs); color: #fff; text-shadow: 0 0 4px #000; }
+
+/* ---------- Recorrido: captura proyectada de cada lectura ----------
+   Cuadro HUD (mismo fondo, filete y esquinas que el HUD del recorrido) sobre un haz que baja hasta la
+   parada. Solo tinta: el color sigue reservado a estados (la última lectura, la que dio la alerta, en rojo). */
+.mk-snap { position: relative; display: block; pointer-events: none; animation: snapin .45s cubic-bezier(.2,.8,.2,1) both; transform-origin: 50% 100%; }
+.mk-snap .sn-card { position: absolute; top: 0; height: 128px; display: grid; grid-template-rows: 82px auto auto; gap: 3px; padding: 4px 4px 6px; background: var(--hud-bg); border: 1px solid var(--hud-line); border-radius: var(--radius-xs); backdrop-filter: var(--hud-blur); -webkit-backdrop-filter: var(--hud-blur); box-shadow: var(--shadow-lg); }
+.sn-card::before, .sn-card::after { content: ''; position: absolute; width: 10px; height: 10px; border: 0 solid var(--hud-corner); pointer-events: none; }
+.sn-card::before { left: -1px; top: -1px; border-left-width: 2px; border-top-width: 2px; }
+.sn-card::after { right: -1px; bottom: -1px; border-right-width: 2px; border-bottom-width: 2px; }
+.sn-frame { position: relative; display: block; overflow: hidden; border-radius: var(--radius-xs); }
+.sn-frame .thumb { display: block; width: 100%; height: 100%; border: 0; border-radius: 0; }
+.sn-frame .thumb > img, .sn-frame .thumb > video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sn-frame .ph-ev img { width: 34% !important; }
+.sn-scan { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent 0 2px, color-mix(in srgb, var(--ink) 5%, transparent) 2px 3px); pointer-events: none; }
+.sn-idx { position: absolute; left: 4px; top: 4px; padding: 0 4px; font: var(--type-hud-label); letter-spacing: var(--type-hud-tracking); color: var(--ink); background: var(--hud-bg); border-radius: var(--radius-xs); }
+.sn-row { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; padding: 0 2px; min-width: 0; font: var(--type-hud-label); letter-spacing: var(--type-hud-tracking); text-transform: uppercase; color: var(--ink); }
+.sn-row em { font-style: normal; color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sn-row.sub { color: var(--ink-subtle); text-transform: none; letter-spacing: 0; font-family: var(--font-sans); }
+.sn-row.sub span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sn-beam { position: absolute; left: 0; bottom: 0; overflow: visible; }
+.sn-beam polygon { fill: color-mix(in srgb, var(--ink) 6%, transparent); }
+.sn-beam path { fill: none; stroke: color-mix(in srgb, var(--ink) 45%, transparent); stroke-width: 1; stroke-dasharray: 2 3; }
+.mk-snap:not(.now) { opacity: .88; }
+.maplibregl-marker:has(> .mk-snap) { z-index: 2; }
+.maplibregl-marker:has(> .mk-snap.now) { z-index: 3; }
+/* Al pasar el mouse por una parada del recorrido o por su captura, esa captura queda adelante. */
+.mk-snap .sn-card { pointer-events: auto; cursor: default; }
+.maplibregl-marker.is-front, .maplibregl-marker:has(> .mk-snap .sn-card:hover) { z-index: 5; }
+.is-front > .mk-snap, .mk-snap:has(.sn-card:hover) { opacity: 1; }
+.is-front > .mk-snap .sn-card, .mk-snap .sn-card:hover { border-color: color-mix(in srgb, var(--ink) 55%, transparent); }
+.is-front > .mk-snap .sn-beam path, .mk-snap:has(.sn-card:hover) .sn-beam path { stroke: var(--ink); }
+.is-front > .mk-snap.last .sn-card, .mk-snap.last .sn-card:hover { border-color: var(--status-negative); }
+.is-front > .mk-snap.last .sn-beam path, .mk-snap.last:has(.sn-card:hover) .sn-beam path { stroke: var(--status-negative); }
+.mk-snap:has(.sn-card:hover) .sn-beam path { stroke: var(--ink); }
+.mk-snap.now .sn-card { border-color: color-mix(in srgb, var(--ink) 40%, transparent); }
+.mk-snap.now .sn-beam path { stroke: var(--ink); }
+.mk-snap.last .sn-card, .mk-snap.last .sn-card::before, .mk-snap.last .sn-card::after { border-color: var(--status-negative); }
+.mk-snap.last .sn-beam path { stroke: var(--status-negative); }
+.mk-snap.last .sn-beam polygon { fill: var(--status-negative-tint); }
+@keyframes snapin { from { opacity: 0; transform: translateY(8px) scaleY(.6); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .mk-snap { animation: none; } }
