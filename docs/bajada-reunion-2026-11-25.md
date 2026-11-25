@@ -34,7 +34,7 @@ Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
 
 18. [ ] Vista por defecto del Analista: hexágonos por filtro y período (5.3)
 19. [ ] Vistas de Admin y Auditor, según lo que salga del seguimiento (5.4)
-20. [x] Filtrar hexágonos por personas, cobertura o alertas (1.5). Un solo chip "Hexágonos" en la barra de capas con tres lecturas; el chip "Cobertura" aparte se sacó
+20. [x] Filtrar hexágonos por personas, cobertura o alertas (1.5). Un solo chip "Mapa de calor" en la barra de capas con tres lecturas; el chip "Cobertura" aparte se sacó
 21. [ ] Al crear un evento, elegir sus hexágonos en el mapa (1.6). El mapa ya dibuja el área de un evento como la forma de sus hexágonos (hoy salen de sus zonas); falta la selección
 22. [ ] Criterios de criticidad configurables (2.6)
 23. [ ] Ícono secundario de antigüedad de la alerta (2.7)
