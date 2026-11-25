@@ -1752,7 +1752,7 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 /* ---------- Expediente de una persona (verificación facial, pantalla completa) ----------
    Lenguaje de sala de control: fondo oscuro con un halo, paneles con esquinas de mira, tipografía HUD.
    El acento (escaneo, puntos de referencia, conexiones activas) es el verde del tema. */
-.ds { --fc-accent: var(--status-positive); position: fixed; inset: 0; z-index: 70; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 14px; padding: 18px 22px 22px;
+.ds { --fc-accent: var(--status-positive); position: fixed; inset: 0; z-index: 70; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 14px; padding: 18px 22px 22px;
   background: radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--status-positive) 7%, transparent), transparent 60%), color-mix(in srgb, var(--surface) 97%, transparent);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: var(--ink); animation: dsin .35s cubic-bezier(.2,.8,.2,1); outline: none; }
 @keyframes dsin { from { opacity: 0; transform: scale(.985); } }
@@ -1981,3 +1981,27 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .cn-open { display: grid; gap: 8px; padding: 4px 8px 8px 21px; }
 .iv-nav { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: var(--fs-xs); color: var(--ink-muted); }
 .pv { min-width: 0; } .pv-t { min-width: 0; }
+
+/* Expediente: de la cámara al agente, fuentes cruzadas y garantías. */
+.sc { display: grid; gap: 8px; margin-top: -4px; }
+.sc-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: var(--fs-xs); color: var(--ink-subtle); }
+.sc-step { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-full); }
+.sc-step i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--ink-subtle); }
+.sc-step small { color: var(--ink-subtle); }
+.sc-step.done { color: var(--ink); border-color: color-mix(in srgb, var(--fc-accent) 40%, var(--border)); }
+.sc-step.done i { background: var(--fc-accent); border-color: var(--fc-accent); }
+.sc-gap { color: var(--fc-accent); }
+.sc-total { margin-left: auto; font-size: var(--fs-sm); font-weight: 500; color: var(--ink); }
+.sc-total .mono { color: var(--fc-accent); }
+.sc-src { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: var(--fs-xs); color: var(--ink-muted); }
+.sc-k { font: var(--type-hud-label); letter-spacing: var(--type-hud-tracking); text-transform: uppercase; color: var(--ink-subtle); }
+.sc-chip { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
+.sc-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--status-positive); }
+.sc-chip b { font-weight: 500; color: var(--ink-muted); }
+.sc-pend { color: var(--ink-subtle); }
+.sc-guard { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--ink-muted); }
+.sc-guard .ms { width: 16px; height: 16px; font-size: 16px; color: var(--fc-accent); }
+.ft-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
+.ft-play { position: absolute; left: 10px; top: 10px; z-index: 2; }
+.ft-mk.off { opacity: 0; pointer-events: none; }
+.ft-mk { transition: opacity .3s ease; }

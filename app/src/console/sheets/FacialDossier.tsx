@@ -16,7 +16,7 @@ import { dateShort, dateTime, hhmm, pct } from '../../api/format';
 import { FACIAL_LISTS, FACIAL_SOURCES, TRAIT_GROUPS, lastDetection, type FacialMatch, type LinkKind, type Proof, type ProofKind, type TraitGroup } from '../../api/facial';
 import { FaceCloud } from '../../ui/FaceCloud';
 import { FaceTrail } from './FaceTrail';
-import { Icon } from '../../ui/kit';
+import { Icon, useNow } from '../../ui/kit';
 
 const KIND: Record<LinkKind, { label: string; one: string; icon: string }> = {
   vehiculo: { label: 'Vehículos', one: 'Vehículo', icon: 'directions_car' },
@@ -172,6 +172,49 @@ function Connections({ m, sel, setSel, onProof }: { m: FacialMatch; sel: string 
   );
 }
 
+/** De qué institución sale un respaldo (las cámaras y el SpotBox cuentan como "Cámaras"). */
+const institution = (src: string) => (/^(CAM-|SM-|SPOTBOX|SpotBox)/.test(src) ? 'Cámaras' : src.startsWith('Juzgado') ? 'Juzgado' : src);
+
+/** Franja para mostrar la plataforma: cuánto tardó de la cámara al agente, de qué instituciones salen
+    los datos y las garantías. */
+function Showcase({ m, now }: { m: FacialMatch; now: number }) {
+  const d = lastDetection(m);
+  const confirmed = m.timeline.find((x) => x.label.startsWith('Identidad confirmada'));
+  // Detección → coincidencia en el SpotBox → aviso al 911 → decisión del 911 → agente avisado.
+  const steps: { label: string; at: number | null }[] = [
+    { label: 'Detección', at: d.at },
+    { label: 'Coincidencia en el SpotBox', at: d.at + 2000 },
+    { label: 'Aviso al 911', at: d.at + 3000 },
+    { label: 'Confirma el 911', at: confirmed?.at ?? null },
+    { label: 'Agente avisado', at: confirmed ? confirmed.at + 3000 : null },
+  ];
+  const secs = (ms: number) => (ms < 60000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${Math.floor(ms / 60000)} min ${Math.round((ms % 60000) / 1000)} s`);
+  const total = confirmed ? confirmed.at + 3000 - d.at : null;
+  const counts = new Map<string, number>();
+  [...m.docs, ...m.links.flatMap((l) => l.proofs)].forEach((p) => counts.set(institution(p.src), (counts.get(institution(p.src)) ?? 0) + 1));
+  counts.set('Cámaras', (counts.get('Cámaras') ?? 0) + m.detections.length);
+  const pending = FACIAL_SOURCES.filter((s) => s.state === 'por_conectar' && !counts.has(s.name)).map((s) => s.name);
+  return (
+    <div className="sc">
+      <div className="sc-flow" aria-label="De la cámara al agente">
+        {steps.map((s, i) => (
+          <Fragment key={s.label}>
+            {i > 0 && <span className="sc-gap mono">{s.at != null && steps[i - 1].at != null ? `+${secs(s.at - (steps[i - 1].at as number))}` : '…'}</span>}
+            <span className={`sc-step ${s.at != null ? 'done' : ''}`}><i />{s.label}{s.at != null && <small className="mono">{hhmm(s.at)}</small>}</span>
+          </Fragment>
+        ))}
+        <b className="sc-total">{total != null ? <>De la cámara al agente en <span className="mono">{secs(total)}</span></> : <>Esperando al 911 · <span className="mono">{secs(now - d.at - 3000)}</span></>}</b>
+      </div>
+      <div className="sc-src">
+        <span className="sc-k">Fuentes cruzadas</span>
+        {[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([k, n]) => <span key={k} className="sc-chip"><i />{k} <b className="mono">{n}</b></span>)}
+        {pending.length > 0 && <span className="sc-pend">Por conectar: {pending.join(' · ')}</span>}
+        <span className="sc-guard"><Icon name="verified_user" />Decide una persona · todo queda en la bitácora · los rostros descartados no se guardan</span>
+      </div>
+    </div>
+  );
+}
+
 /** Metadatos de la persona en un solo lugar y con un solo formato: identidad, señas (lo que dice la
     lista y lo que se ve en la captura) y fuentes. */
 function Meta({ m, onProof }: { m: FacialMatch; onProof: (items: Proof[], i: number) => void }) {
@@ -245,6 +288,7 @@ export function Traits({ m, only }: { m: FacialMatch; only?: TraitGroup[] }) {
 export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
   m: FacialMatch; canDecide: boolean; onConfirm: () => void; onDiscard: () => void; onClose: () => void;
 }) {
+  const now = useNow(5000);
   const L = FACIAL_LISTS[m.list];
   const photos = useMemo(() => [...m.listPhotos].sort((a, b) => b.score - a.score), [m.listPhotos]);
   const [sel, setSel] = useState<string | null>(null);
@@ -305,6 +349,8 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
           <button className="iconbtn ds-close" onClick={onClose} aria-label="Cerrar el expediente (Esc)"><Icon name="close" /></button>
         </div>
       </header>
+
+      <Showcase m={m} now={now} />
 
       <div className="ds-grid">
         <section className="ds-panel ds-compare" aria-label="Imágenes">

@@ -2,14 +2,18 @@
    que la tomó, numerada en orden de hora, y una línea las une. Sirve para evaluar de un vistazo si es la
    misma persona (dónde, cuándo y cómo se ve en cada punto). Tocar una captura la abre grande (sin imágenes ficticias: un recuadro reservado). */
 import * as maplibregl from 'maplibre-gl';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { hhmm, pct } from '../../api/format';
 import type { FacialDetection } from '../../api/facial';
 import { baseStyle } from '../../map/MapView';
+import { Icon } from '../../ui/kit';
 
 export function FaceTrail({ dets, onOpen }: { dets: FacialDetection[]; onOpen: (i: number) => void }) {
   const el = useRef<HTMLDivElement>(null);
   const open = useRef(onOpen); open.current = onOpen;
+  const api = useRef<{ map: maplibregl.Map; marks: maplibregl.Marker[]; pts: [number, number][] } | null>(null);
+  // Reproducir el día: los puntos se encienden en orden de hora y la línea los va uniendo.
+  const [step, setStep] = useState<number | null>(null);
   useEffect(() => {
     if (!el.current || !dets.length) return;
     const pts = dets.map((d) => [d.lon, d.lat] as [number, number]);
@@ -30,7 +34,25 @@ export function FaceTrail({ dets, onOpen }: { dets: FacialDetection[]; onOpen: (
       div.addEventListener('click', () => open.current(i));
       return new maplibregl.Marker({ element: div, anchor: 'bottom' }).setLngLat(pts[i]).addTo(map);
     });
-    return () => { marks.forEach((mk) => mk.remove()); map.remove(); };
+    api.current = { map, marks, pts };
+    return () => { marks.forEach((mk) => mk.remove()); map.remove(); api.current = null; };
   }, [dets]);
-  return <div className="ft" ref={el} />;
+  useEffect(() => {
+    const a = api.current; if (!a) return;
+    const upto = step ?? a.pts.length - 1;
+    a.marks.forEach((mk, i) => mk.getElement().classList.toggle('off', i > upto));
+    const src = a.map.getSource('trail') as maplibregl.GeoJSONSource | undefined;
+    src?.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: a.pts.slice(0, upto + 1) } });
+    if (step == null) return;
+    const id = setTimeout(() => setStep(step + 1 < a.pts.length ? step + 1 : null), step + 1 < a.pts.length ? 900 : 1500);
+    return () => clearTimeout(id);
+  }, [step]);
+  return (
+    <div className="ft-wrap">
+      <div className="ft" ref={el} />
+      <button className="ft-play btn secondary sm" onClick={() => setStep(step == null ? 0 : null)} aria-pressed={step != null}>
+        <Icon name={step == null ? 'play_arrow' : 'stop'} />{step == null ? 'Reproducir el día' : `${hhmm(dets[step].at)} · ${step + 1} de ${dets.length}`}
+      </button>
+    </div>
+  );
 }

@@ -40,7 +40,8 @@ function tripCheck(ds: FacialDetection[]): { ok: boolean; text: string } {
 const traced = new Set<string>();
 
 const STATUS: Record<FacialMatch['status'], string> = { por_revisar: 'Por revisar', confirmada: 'Confirmada', descartada: 'Descartada' };
-const statusChip = (m: FacialMatch) => <span className={`chip ${m.status === 'por_revisar' ? 'outline' : m.status === 'confirmada' ? 'ok' : ''}`}>{STATUS[m.status]}</span>;
+// Solo se marca lo ya decidido (confirmada o descartada); lo pendiente no lleva chip.
+const statusChip = (m: FacialMatch) => (m.status === 'por_revisar' ? null : <span className={`chip ${m.status === 'confirmada' ? 'ok' : ''}`}>{STATUS[m.status]}</span>);
 
 function Phase3Notice() {
   return <div className="notice"><Icon name="lock" /><span>Requiere base legal confirmada.</span></div>;
