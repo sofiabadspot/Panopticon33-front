@@ -1,7 +1,8 @@
 /* Verificación facial (fase 3) — operador 911.
    Panel: coincidencias de los puntos de control, filtrables por lista (buscadas, en investigación,
    desaparecidas). Una sola por persona: las detecciones nuevas se suman a la misma.
-   Ficha: para decidir rápido si es la persona. Arriba el puntaje; después el video, todas las imágenes
+   Ficha: para decidir rápido si es la persona. Primero la coincidencia (la captura junto a la foto de la
+   lista, con el puntaje); después el video, todas las imágenes
    juntas (capturas de hoy y fotos de la lista), una línea de recorrido, última ubicación y riesgo, y
    pedir la verificación en terreno. Después los metadatos (datos de la lista y señas registradas) y los estados. La 3D
    y las conexiones quedan en el expediente.
@@ -161,6 +162,19 @@ export function FacialSheet({ id }: { id: string }) {
       )}
       <div className="pb">
         {/* Video primero: el andar y los gestos son lo que más ayuda a decidir. */}
+        {/* Primero la coincidencia: la mejor captura de hoy junto a la foto de la lista más parecida. */}
+        <div className="fc-match">
+          <button className="fc-mside" onClick={() => setView({ items: imgs, i: m.detections.length - 1 - m.detections.indexOf(best) })} aria-label="Ver la captura en grande">
+            <span className="fc-ph"><Shot /></span>
+            <span className="fc-cap"><b>Captura · hoy {hhmm(best.at)}</b>{best.cameraId}</span>
+          </button>
+          <span className="fc-mscore"><b className="mono">{pct(best.score)}</b><span className={`chip ${meaning.band === 'Alta' ? 'ok' : meaning.band === 'Baja' ? 'media' : ''}`}>{meaning.band}</span></span>
+          <button className="fc-mside" onClick={() => setView({ items: imgs, i: m.detections.length })} aria-label="Ver la foto de la lista en grande">
+            <span className="fc-ph"><Shot /></span>
+            <span className="fc-cap"><b>{photos[0]?.caption ?? 'Sin foto en la lista'}</b>{photos[0]?.year ?? ''}</span>
+          </button>
+        </div>
+
         {/* Grabación de la mejor captura o la cámara en vivo donde la vieron por última vez, ahí mismo. */}
         <div className="fc-video">
           <div className="seg fc-vseg" role="group" aria-label="Video">

@@ -1,13 +1,14 @@
 /* Expediente de una persona a pantalla completa (verificación facial), para mando y para mostrar la
    plataforma. Arriba: quién es, la decisión y la franja de la cámara al agente (tiempos, fuentes cruzadas
-   y garantías). Abajo: el muro de evidencias (ver EvidenceWall): el perfil en grande y, por fuente, cada
-   captura, video, documento y registro, conectados con los vínculos de la persona. Todo se abre en grande
+   y garantías). Abajo: el mapa de la persona (ver PersonMap): la cara al centro y lo que se juntó saliendo de ella
+   por categoría y por fecha, con buscador y el detalle al costado. Todo se abre en grande
    y se recorre con las flechas. Esc cierra el expediente (no la ficha). Todo es de ejemplo. */
-import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, type ReactNode, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { dateShort, hhmm, pct } from '../../api/format';
 import { FACIAL_LISTS, FACIAL_SOURCES, TRAIT_GROUPS, lastDetection, type FacialMatch, type Proof, type ProofKind, type TraitGroup } from '../../api/facial';
-import { Artifact, EvidenceWall, type Card } from './EvidenceWall';
+import { Artifact, type Card } from './EvidenceWall';
+import { PersonMap } from './PersonMap';
 import { Icon, useNow } from '../../ui/kit';
 
 // Mismo día en hora de El Salvador (no en UTC).
@@ -19,7 +20,7 @@ export function Shot({ label }: { label?: string }) {
 
 /** Algo para ver en grande: una imagen, un video, un documento o un registro. */
 export interface ViewItem { src: string; tag: string; title: string; sub: string; icon: string }
-const PROOF_ICON: Record<ProofKind, string> = { imagen: 'image', video: 'play_circle', documento: 'description', registro: 'dataset' };
+const PROOF_ICON: Record<ProofKind, string> = { imagen: 'image', video: 'smart_display', documento: 'description', registro: 'database' };
 const PROOF_TAG: Record<ProofKind, string> = { imagen: 'Imagen', video: 'Video', documento: 'Documento', registro: 'Registro' };
 export const proofItem = (p: Proof): ViewItem => ({ src: '', tag: PROOF_TAG[p.kind], title: p.title, sub: `${p.src} · ${dateShort(p.at)}`, icon: PROOF_ICON[p.kind] });
 
@@ -194,12 +195,6 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
 }) {
   const now = useNow(5000);
   const L = FACIAL_LISTS[m.list];
-  const photos = useMemo(() => [...m.listPhotos].sort((a, b) => b.score - a.score), [m.listPhotos]);
-  // Todas las imágenes juntas: primero las fotos de la lista, después las capturas de hoy en orden.
-  const imgs = useMemo(() => [
-    ...photos.map((x): ViewItem & { kind: 'lista' } => ({ src: x.src, kind: 'lista', tag: 'Lista', icon: 'badge', title: x.caption, sub: `${x.year} · ${pct(x.score)}` })),
-    ...m.detections.map((x): ViewItem & { kind: 'captura' } => ({ src: x.capture, kind: 'captura', tag: 'Hoy', icon: 'videocam', title: `${hhmm(x.at)} · ${x.cameraId}`, sub: `${x.place} · ${pct(x.score)}` })),
-  ], [photos, m.detections]);
   // Lo que está abierto en grande: las imágenes de la persona o los respaldos de algo.
   const [view, setView] = useState<{ items: ViewItem[]; index: number; compare?: ViewItem | null; cards?: Card[] } | null>(null);
   const viewRef = useRef(view); viewRef.current = view;
@@ -249,24 +244,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
 
       <Showcase m={m} now={now} />
 
-      <EvidenceWall m={m} onOpen={openCards} profile={(
-        <>
-          <span className="ev-portrait"><Shot label={photos[0] ? `${photos[0].caption} · ${photos[0].year}` : 'Sin foto en la lista'} /></span>
-          <div className="ev-id">
-            <span className="mono">{m.listRef} · {L.name}</span>
-            <h2>{m.name}</h2>
-            <p>{m.reason}{m.orderUntil ? ` · vigente hasta el ${m.orderUntil}` : ''}</p>
-          </div>
-          <dl className="ev-dl">
-            <dt>Documento</dt><dd className="mono">{m.docId}</dd>
-            {m.traits.filter((x) => x.list).map((x, i) => <Fragment key={i}><dt>{x.label}</dt><dd>{x.list}</dd></Fragment>)}
-            <dt>Riesgo</dt><dd>{m.risk.level} · {m.risk.notes[0]}</dd>
-            <dt>Agente cerca</dt><dd>{m.agent}</dd>
-            <dt>Procesado en</dt><dd className="mono">{m.spotbox}</dd>
-          </dl>
-          {photos.length > 1 && <button className="btn secondary sm" onClick={() => setView({ items: imgs, index: 0, compare: null })}><Icon name="photo_library" />Ver las {photos.length} fotos de la lista y las {m.detections.length} capturas</button>}
-        </>
-      )} />
+      <PersonMap m={m} onOpen={openCards} />
 
       {view && <Viewer items={view.items} index={view.index} compare={view.compare} render={view.cards ? (i) => <Artifact c={view.cards![i]} /> : undefined} onIndex={(i) => setView({ ...view, index: i })} onClose={() => setView(null)} />}
     </div>,
