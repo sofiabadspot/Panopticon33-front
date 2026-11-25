@@ -17,8 +17,8 @@ Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
 3. [x] Sacar el mapa de calor y mostrar la densidad por hexágono (1.1, 1.4). La gente es un campo continuo sobre toda la ciudad (el fondo de la ciudad es SIMULADO), de amarillo a rojo. Las zonas ya no dibujan contorno: se delimita el evento en curso con un borde de hexágonos
 4. [x] Escala de colores de cobertura policial por hexágono, haya o no evento (1.3). Lectura "Cobertura" de los hexágonos (verde ≤2 min, amarillo ≤4, rojo más), en toda la ciudad. La contradicción con las zonas era de palabras: su "Sin cobertura" quería decir que ninguna cámara las mide, y ahora dice "Sin medición". Falta validar la escala con Gerardo
 5. [x] Separar lenguajes: alertas como íconos, cobertura como color del hexágono (2.1). Las zonas ya no se pintan y su rótulo no se pone rojo con una alerta: en el mapa, los íconos son alertas y los colores, lo que miden los hexágonos
-6. [ ] Elegir la iconografía de criticidad: Propuesta A o B, y cómo se marca el nivel (2.3)
-7. [ ] Mostrar la criticidad en los íconos de alerta del mapa y de la lista (2.2)
+6. [ ] Elegir la iconografía de criticidad: Propuesta A o B, y cómo se marca el nivel (2.3). **En pausa** (pedido de Sofía, 25/11)
+7. [ ] Mostrar la criticidad en los íconos de alerta del mapa y de la lista (2.2). **En pausa**: depende de la 6
 8. [ ] Una sola alerta por placa: cada nueva lectura actualiza la alerta existente (2.4, 3.2)
 9. [ ] "Ver recorrido" de placa con la captura y la cámara en cada punto (3.1). Ya hay un avance sin commitear: cada parada muestra su captura y se puede ocultar desde el HUD
 10. [ ] Facial: sacar el paso "Reconstruir en 3D" (4.3)
@@ -35,7 +35,7 @@ Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
 18. [ ] Vista por defecto del Analista: hexágonos por filtro y período (5.3)
 19. [ ] Vistas de Admin y Auditor, según lo que salga del seguimiento (5.4)
 20. [x] Filtrar hexágonos por personas, cobertura o alertas (1.5). Un solo chip "Hexágonos" en la barra de capas con tres lecturas; el chip "Cobertura" aparte se sacó
-21. [ ] Al crear un evento, elegir sus hexágonos en el mapa (1.6)
+21. [ ] Al crear un evento, elegir sus hexágonos en el mapa (1.6). El mapa ya dibuja el área de un evento como la forma de sus hexágonos (hoy salen de sus zonas); falta la selección
 22. [ ] Criterios de criticidad configurables (2.6)
 23. [ ] Ícono secundario de antigüedad de la alerta (2.7)
 24. [ ] Mover "Buscar identidad" a la vista del Analista (4.7)
