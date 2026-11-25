@@ -1707,17 +1707,7 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 
 
 /* Ficha facial: comparar la captura con una foto de la lista, lado a lado; tira con todas las fotos. */
-.fc-compare { display: grid; gap: 8px; }
-.fc-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.fc-pair figure { margin: 0; display: grid; gap: 6px; }
 /* Rostros: proporción vertical (la evidencia de cámara es 16:9 por defecto). */
-.fc-pair .evidence { aspect-ratio: 3 / 4; }
-.fc-pair .caption, .fc-compare > .caption { text-transform: none; letter-spacing: 0; font: var(--fs-xs) var(--font-sans); }
-.fc-pair figcaption { text-align: center; }
-.fc-strip { display: flex; gap: 6px; overflow-x: auto; }
-.fc-strip button { flex: none; display: grid; grid-template-columns: 36px auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 4px 10px 4px 4px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: var(--fs-xs); text-align: left; }
-.fc-strip button img { grid-row: span 2; width: 36px; height: 44px; object-fit: cover; border-radius: var(--radius-xs); }
-.fc-strip button.on { border-color: var(--border-control); background: var(--surface-raised); color: var(--ink); }
 .fc-3d { height: 200px; padding-top: 8px; }
 .fc-src { list-style: none; margin: 0; padding-top: 8px; display: grid; gap: 6px; }
 .fc-src li { display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-sm); }
@@ -1836,7 +1826,6 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .tr td { color: var(--ink); }
 .tr-na { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-subtle); font-style: italic; }
 .tr-na .ms { width: 14px; height: 14px; font-size: 14px; }
-.fc-traits { display: grid; gap: 8px; padding-top: 10px; }
 
 /* Expediente: conexiones en el tiempo (filas con fechas) y la ficha de la elegida. */
 @media (prefers-reduced-motion: reduce) { .cx-edge, .cx-pulse { animation: none; } }
@@ -1944,24 +1933,23 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .ft-mk.last .ft-ph, .ft-mk:hover .ft-ph { border-color: var(--fc-accent); }
 .cn-face .ms { width: 36px; height: 36px; font-size: 36px; color: var(--fc-accent); }
 
-/* Ficha facial del 911: calidad de la captura, significado del puntaje, riesgo. */
-.fc-q { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; }
-.fc-verdict { flex: 1 1 100%; margin: 4px 0 0; display: flex; align-items: flex-start; gap: 6px; font-size: var(--fs-sm); color: var(--ink); }
-.fc-verdict .ms { width: 18px; height: 18px; font-size: 18px; flex: none; }
-.fc-verdict.ok .ms { color: var(--status-positive); }
-.fc-verdict.warn .ms { color: var(--status-alert); }
-.fc-meaning { display: grid; gap: 6px; padding-top: 10px; font-size: var(--fs-sm); color: var(--ink-muted); }
-.fc-meaning p { margin: 0; } .fc-meaning b { color: var(--ink); font-weight: 500; }
-.fc-meaning .fc-warn { display: flex; gap: 6px; color: var(--ink); }
-.fc-warn .ms { color: var(--status-alert); width: 18px; height: 18px; font-size: 18px; flex: none; }
-.fc-n { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border-control); font-size: var(--fs-2xs); color: var(--ink-muted); }
-.fc-video { display: grid; gap: 8px; padding-top: 10px; }
-.fc-video .fc-ph { aspect-ratio: 16 / 9; width: 100%; }
-.fc-risk { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
-.fc-risk li { display: flex; gap: 6px; font-size: var(--fs-sm); color: var(--ink); }
-.fc-risk .ms { width: 18px; height: 18px; font-size: 18px; flex: none; color: var(--status-alert); }
-.fc-then { margin: 10px 0 0; font-size: var(--fs-sm); color: var(--ink-muted); }
-.fc-strip .fc-ph { grid-row: span 2; width: 36px; height: 44px; }
-.fc-pair .fc-ph, .fc-pair .evidence { aspect-ratio: 3 / 4; }
-.fc-trip { margin: 8px 16px 4px; }
 .fc-check { width: 100%; margin-top: 10px; }
+
+/* Ficha facial del 911: video, todas las imágenes, datos en una línea y metadatos plegados. */
+.fc-video { display: grid; gap: 8px; }
+.fc-video .fc-ph { aspect-ratio: 16 / 9; width: 100%; }
+.fc-video .btn { justify-self: start; }
+.fc-gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+.fc-gallery .evidence { aspect-ratio: 3 / 4; }
+.fc-facts { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.fc-facts li { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--ink); }
+.fc-facts li > .ms { width: 18px; height: 18px; font-size: 18px; flex: none; color: var(--ink-muted); }
+.fc-facts li > span { flex: 1; min-width: 0; }
+.fc-facts li.warn > .ms { color: var(--status-alert); }
+.fc-facts li.danger > .ms { color: var(--status-negative-text); }
+.fc-check { width: 100%; margin-top: 12px; }
+.fc-asked { margin: 12px 0 0; display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--ink-muted); }
+.fc-asked .ms { width: 18px; height: 18px; font-size: 18px; color: var(--status-positive); }
+.fc-more { margin-top: 14px; display: flex; align-items: center; gap: 4px; width: 100%; padding: 8px 0; border: 0; border-top: 1px solid var(--border); background: none; color: var(--ink-muted); font-size: var(--fs-sm); cursor: pointer; }
+.fc-more:hover { color: var(--ink); }
+.fc-meta { display: grid; gap: 14px; }

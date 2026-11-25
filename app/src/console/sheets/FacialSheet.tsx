@@ -1,15 +1,15 @@
 /* Verificación facial (fase 3) — operador 911.
    Panel: coincidencias de los puntos de control, filtrables por lista (buscadas, en investigación,
    desaparecidas). Una sola por persona: las detecciones nuevas se suman a la misma.
-   Ficha: solo lo que el operador 911 necesita para decidir si es la persona, en este orden: si la
-   captura sirve, la comparación con la foto de la lista, qué significa el puntaje, las señas que no
-   cambian, si el recorrido de hoy cierra, el video, el riesgo y qué pasa al confirmar, dónde está ahora
-   y pedir la verificación en terreno. Lo demás (3D, conexiones) queda en el expediente.
+   Ficha: para decidir rápido si es la persona. Arriba el puntaje; después el video, todas las imágenes
+   juntas (capturas de hoy y fotos de la lista), una línea de recorrido, última ubicación y riesgo, y
+   pedir la verificación en terreno. Los metadatos (señas, motivo, estados) van plegados al final. La 3D
+   y las conexiones quedan en el expediente.
    El operador 911 tiene el veredicto final. Nunca es una identificación automática. */
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { audit } from '../../api';
 import { ago, dateTime, hhmm, pct } from '../../api/format';
-import { FACIAL_DISCARD, FACIAL_LISTS, POSE_LABEL, SHARP_LABEL, bestDetection, confirmFacial, discardFacial, lastDetection, requestFieldCheck, scoreMeaning, usable, useFacial, type FacialDetection, type FacialList, type FacialMatch } from '../../api/facial';
+import { FACIAL_DISCARD, FACIAL_LISTS, bestDetection, confirmFacial, discardFacial, lastDetection, requestFieldCheck, scoreMeaning, useFacial, type FacialDetection, type FacialList, type FacialMatch } from '../../api/facial';
 import { useSession } from '../../shell/session';
 import { useInspect } from '../../ui/ImageInspect';
 import { FacialDossier, Shot, Traits } from './FacialDossier';
@@ -18,8 +18,6 @@ import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
 import { SheetHead } from './SheetHead';
 
-/** Años desde el año de una foto. */
-const age = (year: string) => (/^\d{4}$/.test(year) ? new Date().getFullYear() - Number(year) : 0);
 const gapMin = (ms: number) => { const mn = Math.round(ms / 60000); return mn < 60 ? `${mn} min` : `${Math.floor(mn / 60)} h${mn % 60 ? ` ${mn % 60} min` : ''}`; };
 const distM = (a: FacialDetection, b: FacialDetection) => {
   const R = 6371e3, r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
@@ -35,15 +33,6 @@ function tripCheck(ds: FacialDetection[]): { ok: boolean; text: string } {
     if ((h <= 0 && km > 0.2) || (h > 0 && km / h > 60)) return { ok: false, text: `No cierra: de ${ds[i - 1].cameraId} a ${ds[i].cameraId} hay ${km.toFixed(1)} km en ${gapMin(ds[i].at - ds[i - 1].at)}. Puede ser otra persona.` };
   }
   return { ok: true, text: `Cierra: ${ds.length} detecciones en orden y a distancias posibles, de ${hhmm(ds[0].at)} a ${hhmm(ds[ds.length - 1].at)}.` };
-}
-/** Hacia dónde iba, según las dos últimas detecciones. */
-function headingOf(ds: FacialDetection[]) {
-  if (ds.length < 2) return null;
-  const a = ds[ds.length - 2], b = ds[ds.length - 1];
-  if (distM(a, b) < 30) return null;
-  const deg = (Math.atan2((b.lon - a.lon) * Math.cos((a.lat * Math.PI) / 180), b.lat - a.lat) * 180) / Math.PI;
-  const dirs = ['norte', 'noreste', 'este', 'sureste', 'sur', 'suroeste', 'oeste', 'noroeste'];
-  return `Hacia el ${dirs[Math.round(((deg + 360) % 360) / 45) % 8]} (desde ${a.cameraId})`;
 }
 
 /** Coincidencias cuyo recorrido ya quedó en la bitácora en esta sesión. */
@@ -113,7 +102,7 @@ export function FacialSheet({ id }: { id: string }) {
   const [discarding, setDiscarding] = useState(false);
   /* Comparar: la captura junto a una foto de la lista (la que más se parece, o la que elija el operador).
      Toda imagen se amplía con un clic (zoom, mover, girar) en el visor sobre el mapa. */
-  const [cmp, setCmp] = useState(0);
+  const [more, setMore] = useState(false);
   /** Expediente a pantalla completa: todo junto, con la 3D para girar, señas para marcar y conexiones. */
   const [dossier, setDossier] = useState(false);
   const insp = useInspect(m ? `${m.listRef} · ${bestDetection(m).cameraId} · ${dateTime(bestDetection(m).at)}` : '');
@@ -122,7 +111,7 @@ export function FacialSheet({ id }: { id: string }) {
   const [trace, setTrace] = useState(false);
   // Al abrir la coincidencia, el recorrido (o el punto, si hay una sola detección) arranca solo. Queda en la bitácora.
   useEffect(() => {
-    setDiscarding(false); setTrace(!!m); setCmp(0); setDossier(false);
+    setDiscarding(false); setTrace(!!m); setMore(false); setDossier(false);
     // Una sola vez por coincidencia en la sesión (volver desde la cámara no repite el registro).
     if (m && !traced.has(m.id)) { traced.add(m.id); audit(user, 'Ver recorrido de persona', m.listRef, 'Al abrir la coincidencia'); }
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -146,143 +135,58 @@ export function FacialSheet({ id }: { id: string }) {
   const toggleTrace = () => { if (!trace) audit(user, 'Ver recorrido de persona', m.listRef, `${m.detections.length} detecciones en el mapa`); setTrace(!trace); };
   const openDossier = () => { setDossier(true); audit(user, 'Abrir expediente facial', m.listRef, m.id); };
   const photos = [...m.listPhotos].sort((x, y) => y.score - x.score);
-  const ph = photos[Math.min(cmp, photos.length - 1)] ?? { src: '', caption: 'Sin fotos en la lista', year: '—', score: 0 };
   const best = bestDetection(m);
   const meaning = scoreMeaning(best.score);
   const cams = new Set(m.detections.map((x) => x.cameraId)).size;
   const trip = tripCheck(m.detections);
-  const heading = headingOf(m.detections);
   return (
     <>
-      <SheetHead kicker={<><span className="mono">{m.id}</span>·<span>{ago(d.at, now)}</span></>} title={<>Coincidencia {pct(best.score)}</>} sub={`${m.name} · ${m.docId} · ${L.name} · ${m.listRef}`}
+      <SheetHead kicker={<><span className="mono">{m.id}</span>·<span>{ago(d.at, now)}</span></>} title={<>Coincidencia {pct(best.score)} <span className={`chip ${meaning.band === 'Alta' ? 'ok' : meaning.band === 'Baja' ? 'media' : ''}`}>{meaning.band}</span></>} sub={`${m.name} · ${m.reason}`}
         aside={statusChip(m)} />
       {insp.viewer}
       <div className="pb">
-        <div className="callout"><Icon name="info" /><span className="grow">Una coincidencia no es una identificación. Tú tienes la última palabra: confirma solo si es la persona.</span></div>
-
-        {/* 1. ¿La captura sirve para comparar? */}
-        <div className="box">
-          <div className="bh"><h3>1 · La captura</h3><span className="sub">la mejor de hoy · {hhmm(best.at)} · {best.cameraId}</span></div>
-          <div className="bb fc-q">
-            <span className={`chip ${best.quality.pose === 'perfil' ? 'media' : 'ok'}`}>{POSE_LABEL[best.quality.pose]}</span>
-            <span className={`chip ${best.quality.sharp === 'borrosa' ? 'media' : best.quality.sharp === 'nitida' ? 'ok' : ''}`}>{SHARP_LABEL[best.quality.sharp]}</span>
-            {best.quality.covered.length ? best.quality.covered.map((x) => <span key={x} className="chip media">Tapa: {x.toLowerCase()}</span>) : <span className="chip ok">Cara descubierta</span>}
-            <p className={`fc-verdict ${usable(best.quality) ? 'ok' : 'warn'}`}><Icon name={usable(best.quality) ? 'check_circle' : 'warning'} />{usable(best.quality) ? 'Sirve para comparar.' : `Captura pobre: no alcanza para confirmar. ${role === 'operator_911' ? 'Pide' : 'Hace falta'} la verificación en terreno.`}</p>
-          </div>
+        {/* Video primero: el andar y los gestos son lo que más ayuda a decidir. */}
+        <div className="fc-video">
+          <span className="fc-ph"><Shot label={`Video · ${hhmm(best.at)} · ${best.cameraId}`} /></span>
+          <button className="btn secondary sm" onClick={() => c.open({ k: 'camara', id: d.cameraId })}><Icon name="videocam" />En vivo · {d.cameraId}</button>
         </div>
 
-        {/* 2. Comparar la captura con la foto de la lista más parecida y reciente. */}
-        <div className="box">
-          <div className="bh"><h3>2 · Comparar</h3><span className="sub">rasgos que no cambian: cara, nariz, orejas, cejas</span></div>
-          <div className="bb fc-compare">
-            <div className="fc-pair">
-              <figure>
-                {insp.thumb('captura', { type: 'pendiente', caption: 'Captura de la detección' }, 'Captura', <span className="chip"><Icon name="videocam" />{best.cameraId}</span>)}
-                <figcaption className="caption">Captura · hoy {hhmm(best.at)}</figcaption>
-              </figure>
-              <figure>
-                {insp.thumb('lista-' + cmp, { type: 'pendiente', caption: ph.caption }, `${ph.caption} (${ph.year})`, <span className="chip">{pct(ph.score)}</span>)}
-                <figcaption className="caption">{ph.caption} · {ph.year}{age(ph.year) >= 5 ? ` · tiene ${age(ph.year)} años` : ''}</figcaption>
-              </figure>
-            </div>
-            {photos.length > 1 && (
-              <div className="fc-strip" role="group" aria-label={`Fotos en la lista (${photos.length})`}>
-                {photos.map((x, i) => (
-                  <button key={i} className={i === cmp ? 'on' : ''} aria-pressed={i === cmp} onClick={() => setCmp(i)} title={`Comparar con ${x.caption.toLowerCase()} (${x.year})`}>
-                    <span className="fc-ph"><Shot /></span><span>{x.caption} · {x.year}</span><b className="mono">{pct(x.score)}</b>
-                  </button>
-                ))}
-              </div>
-            )}
-            <p className="caption">Toca una imagen para ampliarla.</p>
-          </div>
+        {/* Todas las imágenes juntas: las capturas de hoy y las fotos de la lista. */}
+        <div className="fc-gallery">
+          {m.detections.map((x, i) => insp.thumb('cap-' + i, { type: 'pendiente', caption: `Captura ${hhmm(x.at)}` }, `Captura ${hhmm(x.at)} · ${x.cameraId}`, <span className="chip">{hhmm(x.at)} · {pct(x.score)}</span>)).reverse()}
+          {photos.map((x, i) => insp.thumb('lista-' + i, { type: 'pendiente', caption: x.caption }, `${x.caption} (${x.year})`, <span className="chip ok">{x.caption} · {x.year}</span>))}
         </div>
 
-        {/* 3. Qué significa el puntaje. */}
-        <div className="box">
-          <div className="bh"><h3>3 · El puntaje</h3><span className={`chip ${meaning.band === 'Alta' ? 'ok' : meaning.band === 'Baja' ? 'media' : ''}`} style={{ marginLeft: 'auto' }}>{meaning.band} · {pct(best.score)}</span></div>
-          <div className="bb fc-meaning">
-            <p>De cada 100 coincidencias con este puntaje, <b>unas {meaning.of100}</b> resultaron ser la persona.</p>
-            <p>{m.detections.length > 1 ? <>Hoy la vieron <b>{m.detections.length} veces en {cams} cámaras</b>: varias detecciones que coinciden pesan más que una sola.</> : 'Hoy hay una sola detección.'}</p>
-            {m.similarDiscarded > 0 && <p className="fc-warn"><Icon name="warning" />Ya se descartaron {m.similarDiscarded} {m.similarDiscarded === 1 ? 'coincidencia' : 'coincidencias'} con esta persona de la lista: hay alguien que se le parece.</p>}
-          </div>
-        </div>
+        <ul className="fc-facts">
+          <li className={trip.ok ? '' : 'warn'}><Icon name="route" /><span>{m.detections.length} {m.detections.length === 1 ? 'detección' : 'detecciones'} hoy en {cams} {cams === 1 ? 'cámara' : 'cámaras'}{trip.ok ? '' : ' · el recorrido no cierra'}</span>
+            <button className="btn ghost xs" onClick={toggleTrace}>{trace ? 'Ocultar' : 'Ver en el mapa'}</button></li>
+          <li><Icon name="location_on" /><span>Última: {d.place} · {ago(d.at, now)}</span></li>
+          <li className={m.risk.level === 'alto' ? 'danger' : m.risk.level === 'medio' ? 'warn' : ''}><Icon name="warning" /><span>Riesgo {m.risk.level}: {m.risk.notes[0]}</span></li>
+          {m.similarDiscarded > 0 && <li className="warn"><Icon name="group" /><span>Hay alguien que se le parece: {m.similarDiscarded} ya {m.similarDiscarded === 1 ? 'descartada' : 'descartadas'}</span></li>}
+        </ul>
 
-        {/* 4. Señas que no cambian. */}
-        <div className="box">
-          <div className="bh"><h3>4 · Señas permanentes</h3><span className="sub">la ropa no sirve para confirmar</span></div>
-          <div className="bb fc-traits"><Traits m={m} only={['cuerpo', 'rostro', 'marcas']} /></div>
-        </div>
+        {m.status === 'por_revisar' && (m.fieldCheck
+          ? <p className="fc-asked"><Icon name="schedule" />El agente está verificando el documento ({ago(m.fieldCheck.at, now)}).</p>
+          : role === 'operator_911' && <button className="btn secondary fc-check" onClick={() => { requestFieldCheck(m.id, user); toast('Pedido enviado al agente: verificar el documento'); }}><Icon name="badge" />Pedir al agente que verifique el documento</button>)}
 
-        {/* 5. ¿El recorrido de hoy cierra? (se dibuja en el mapa) */}
-        <div className="box flush">
-          <div className="bh"><h3>5 · Recorrido de hoy</h3>
-            <button className="btn secondary sm" style={{ marginLeft: 'auto' }} onClick={toggleTrace}><Icon name={trace ? 'visibility_off' : 'route'} />{trace ? 'Ocultar del mapa' : 'Ver en el mapa'}</button>
-          </div>
-          <p className={`fc-verdict fc-trip ${trip.ok ? 'ok' : 'warn'}`}><Icon name={trip.ok ? 'check_circle' : 'warning'} />{trip.text}</p>
-          <ul className="list bb">
-            {[...m.detections].map((x, i) => ({ x, i })).reverse().map(({ x, i }) => (
-              <li key={x.at}><div className="item" style={{ gridTemplateColumns: '24px 1fr auto', cursor: 'default' }}>
-                <span className="fc-n mono">{i + 1}</span>
-                <div><div className="t mono">{hhmm(x.at)} · {x.cameraId}</div><div className="s">{x.place} · {POSE_LABEL[x.quality.pose].toLowerCase()}, {SHARP_LABEL[x.quality.sharp].toLowerCase()}</div></div>
-                <div className="r"><span className="mono">{pct(x.score)}</span>{i > 0 && <span>{gapMin(x.at - m.detections[i - 1].at)} después</span>}</div>
-              </div></li>
-            ))}
-          </ul>
-        </div>
-
-        {/* 6. Video de la detección y la cámara en vivo. */}
-        <div className="box">
-          <div className="bh"><h3>6 · Video</h3><span className="sub">el andar y los gestos ayudan a decidir</span></div>
-          <div className="bb fc-video">
-            <span className="fc-ph"><Shot label={`Video de la captura de las ${hhmm(best.at)} en ${best.cameraId} (5 s antes y después)`} /></span>
-            <button className="btn secondary sm" onClick={() => c.open({ k: 'camara', id: d.cameraId })}><Icon name="videocam" />Ver en vivo {d.cameraId}, donde la vieron por última vez</button>
-          </div>
-        </div>
-
-        {/* 7. Riesgo y qué pasa si confirma. */}
-        <div className="box">
-          <div className="bh"><h3>7 · Si confirmas</h3><span className={`chip ${m.risk.level === 'alto' ? 'critica' : m.risk.level === 'medio' ? 'media' : 'baja'}`} style={{ marginLeft: 'auto' }}>Riesgo {m.risk.level}</span></div>
-          <div className="bb">
+        {/* Metadatos: plegados. */}
+        <button className="fc-more" aria-expanded={more} onClick={() => setMore(!more)}><Icon name={more ? 'expand_less' : 'expand_more'} />Metadatos</button>
+        {more && (
+          <div className="fc-meta">
             <dl className="details">
               <dt>Persona</dt><dd>{m.name} · <span className="mono">{m.docId}</span></dd>
-              <dt>Motivo</dt><dd>{m.reason}</dd>
-              {m.orderUntil && <><dt>Orden</dt><dd>Vigente hasta el {m.orderUntil}</dd></>}
+              <dt>Motivo</dt><dd>{m.reason}{m.orderUntil ? ` · hasta el ${m.orderUntil}` : ''}</dd>
               <dt>Lista</dt><dd>{L.name} · <span className="mono">{m.listRef}</span></dd>
-            </dl>
-            <ul className="fc-risk">{m.risk.notes.map((x) => <li key={x}><Icon name="warning" />{x}</li>)}</ul>
-            <p className="fc-then">Al confirmar: se genera la alerta, se avisa al {m.agent.split(' (')[0]} con la foto, el motivo y la certeza, y puedes enviar refuerzos desde la alerta.</p>
-          </div>
-        </div>
-
-        {/* 8. Dónde está ahora y 9. verificación en terreno. */}
-        <div className="box">
-          <div className="bh"><h3>8 · Dónde está ahora</h3><span className="sub">{ago(d.at, now)}</span></div>
-          <div className="bb">
-            <dl className="details">
-              <dt>Última cámara</dt><dd><span className="mono">{d.cameraId}</span> · {d.place}</dd>
-              {heading && <><dt>Iba</dt><dd>{heading}</dd></>}
+              {m.risk.notes.slice(1).map((x) => <Fragment key={x}><dt>Ojo</dt><dd>{x}</dd></Fragment>)}
               <dt>Cerca</dt><dd>{m.agent}</dd>
+              <dt>Procesado en</dt><dd className="mono">{m.spotbox}</dd>
             </dl>
-          </div>
-        </div>
-
-        {m.status === 'por_revisar' && (
-          <div className="box">
-            <div className="bh"><h3>9 · Verificación en terreno</h3><span className="sub">la confirmación más fuerte</span></div>
-            <div className="bb">
-              {m.fieldCheck
-                ? <p className="fc-verdict ok"><Icon name="schedule" />Verificación pedida {ago(m.fieldCheck.at, now)}: el agente revisa el documento <span className="mono">{m.docId}</span>.</p>
-                : role === 'operator_911'
-                  ? <button className="btn secondary fc-check" onClick={() => { requestFieldCheck(m.id, user); toast('Pedido enviado al agente: verificar el documento'); }}><Icon name="badge" />Pedir al agente que verifique el documento</button>
-                  : <p className="fc-verdict"><Icon name="lock" />La pide el operador 911.</p>}
-            </div>
+            <Traits m={m} />
+            <ol className="timeline">
+              {m.timeline.map((t, i) => <li key={i} className={i === m.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
+            </ol>
           </div>
         )}
-
-        <div className="box"><div className="bh"><h3>Estados</h3></div><div className="bb"><ol className="timeline">
-          {m.timeline.map((t, i) => <li key={i} className={i === m.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
-        </ol></div></div>
       </div>
       {dossier && <FacialDossier m={m} canDecide={role === 'operator_911' && m.status === 'por_revisar'} onClose={() => setDossier(false)}
         onConfirm={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta generada y agente avisado'); setDossier(false); }}
