@@ -1166,8 +1166,7 @@ body:has(.isheet) { overflow: auto; }
 
 /* Íconos de los chips de capas: los mismos que en el mapa (el chip es filtro y referencia a la vez) */
 .lchip .ic-alert, .lchip .ic-unit, .lchip .ic-cam { flex: none; }
-.lchip:not(.on) .ic-alert, .lchip:not(.on) .ic-unit, .lchip:not(.on) .ic-cam, .lchip:not(.on) .li-hex, .lchip:not(.on) .li-heat, .lchip:not(.on) .li-zone, .lchip:not(.on) .li-cover { opacity: .45; filter: grayscale(.6); }
-.li-heat { width: 18px; height: 8px; border-radius: var(--radius-full); flex: none; background: linear-gradient(90deg, color-mix(in srgb, var(--ink) 20%, transparent), color-mix(in srgb, var(--status-alert) 70%, transparent), color-mix(in srgb, var(--status-negative) 85%, transparent)); }
+.lchip:not(.on) .ic-alert, .lchip:not(.on) .ic-unit, .lchip:not(.on) .ic-cam, .lchip:not(.on) .li-hex, .lchip:not(.on) .li-zone, .lchip:not(.on) .li-cover { opacity: .45; filter: grayscale(.6); }
 .li-zone { width: 16px; height: 16px; flex: none; }
 .li-zone path { fill: color-mix(in srgb, var(--ink) 8%, transparent); stroke: var(--ink-muted); stroke-width: 1.4; stroke-linejoin: round; }
 .li-hex { width: 24px; height: 16px; flex: none; }
@@ -1178,6 +1177,9 @@ body:has(.isheet) { overflow: auto; }
 .li-hex.cov .ok { fill: var(--status-positive-tint); stroke: var(--status-positive); }
 .li-hex.cov .near { fill: var(--status-alert-tint); stroke: var(--status-alert); }
 .li-hex.cov .no { fill: var(--status-negative-tint); stroke: var(--status-negative); }
+.li-hex.dens .lo { fill: color-mix(in srgb, var(--ink) 8%, transparent); stroke: color-mix(in srgb, var(--ink) 30%, transparent); }
+.li-hex.dens .mid { fill: var(--status-alert-tint); stroke: var(--status-alert); }
+.li-hex.dens .hi { fill: var(--status-negative-tint); stroke: var(--status-negative); }
 .li-cover { display: inline-flex; gap: 2px; flex: none; }
 .li-cover i { width: 6px; height: 6px; border-radius: 50%; }
 .li-cover .ok { background: var(--status-positive); }

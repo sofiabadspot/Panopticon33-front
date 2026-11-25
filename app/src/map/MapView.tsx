@@ -6,14 +6,14 @@
    No se usan capas de texto (no hay servidor de glifos): los rótulos son marcadores HTML. */
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, LngLatBoundsLike, Map as MLMap, MapLayerMouseEvent, StyleSpecification } from 'maplibre-gl';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import geo from '../data/generated/geo.json';
 import type { Alert, Camera, Evidence as Ev, LngLat, Unit, Zone, ZoneStatus } from '../api/types';
 import { fmtCrowd, hhmm } from '../api/format';
 import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
-import { coverageHexes, hexCounts, hexRing, peopleRes, resForZoom, type HexMetric } from '../api/coverage';
+import { coverageHexes, densityHexes, hexCounts, hexRing, HEX_RES, type HexMetric } from '../api/coverage';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
 
@@ -26,7 +26,7 @@ maplibregl.setWorkerUrl(workerUrl);
 
 export const COUNTRY_BOUNDS: LngLatBoundsLike = [[-90.15, 13.13], [-87.68, 14.46]];
 
-export interface MapLayers { heat: boolean; zones: boolean; cameras: boolean; units: boolean; alerts: boolean;
+export interface MapLayers { /** Personas: ocupación por hexágono. */ people: boolean; zones: boolean; cameras: boolean; units: boolean; alerts: boolean;
   /** Campo de visión de las cámaras (ángulo y alcance). Apagado por defecto: carga mucho el mapa. */
   fov?: boolean;
   /** Capa de hexágonos H3: qué se cuenta (patrullas, personas o alertas). null = apagada. */
@@ -122,17 +122,6 @@ function baseStyle(): StyleSpecification {
   };
 }
 
-/* Puntos para el mapa de calor, repartidos dentro de cada zona (una vez por zona). */
-function heatPoints(zone: Zone, n = 40): LngLat[] {
-  const xs = zone.ring.map((p) => p[0]), ys = zone.ring.map((p) => p[1]);
-  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  const inside = (x: number, y: number) => { let c = false; const r = zone.ring; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { if (r[i][1] > y !== r[j][1] > y && x < ((r[j][0] - r[i][0]) * (y - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c; } return c; };
-  const out: LngLat[] = []; let s = zone.id.charCodeAt(2) * 97;
-  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-  for (let k = 0; k < n * 20 && out.length < n; k++) { const x = x0 + rnd() * (x1 - x0), y = y0 + rnd() * (y1 - y0); if (inside(x, y)) out.push([x, y]); }
-  return out;
-}
-
 const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features });
 
 /** Nodo de cámara como imagen para la capa del mapa. Misma geometría que CameraNode (src/map/icons.tsx). */
@@ -153,7 +142,6 @@ export function MapView(p: Props) {
   const ready = useRef(false);
   const markers = useRef(new Map<string, { m: maplibregl.Marker; root: Root; el: HTMLElement; onClick?: () => void; hover?: (x: number, y: number) => Hover }>());
   const cb = useRef(p); cb.current = p;
-  const heatCache = useMemo(() => new Map<string, LngLat[]>(), []);
   const [google, setGoogle] = useState<{ session: string; copyright: string | null } | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [view, setView] = useState({ bearing: p.compact ? 0 : -18, pitch: p.compact ? 0 : 45 });
@@ -178,8 +166,6 @@ export function MapView(p: Props) {
     map.on('rotate', () => setView((v) => ({ ...v, bearing: map.getBearing() })));
     map.on('pitch', () => setView((v) => ({ ...v, pitch: map.getPitch() })));
     map.on('load', () => {
-      /** Color del tema con opacidad (los tokens vienen en hex). */
-      const colorA = (hex: string, alpha: number) => { const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map((x) => x + x).join('') : h.slice(0, 6), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`; };
       const negative = token('--status-negative'), alertC = token('--status-alert'), muted = token('--ink-muted'), subtle = token('--ink-subtle'), ink = token('--ink');
       for (const st of ['operativa', 'degradada', 'fuera_de_preset', 'caida'] as const) {
         const img = new Image(48, 48);
@@ -196,7 +182,7 @@ export function MapView(p: Props) {
       // Hexágonos H3: intensidad en blanco según la cantidad (no es un estado, así que no lleva color)
       map.addLayer({ id: 'hex-fill', type: 'fill', source: 'hex', paint: { 'fill-color': ink, 'fill-opacity': ['*', 0.5, ['get', 'k']] } });
       map.addLayer({ id: 'hex-line', type: 'line', source: 'hex', paint: { 'line-color': ink, 'line-opacity': ['+', 0.08, ['*', 0.3, ['get', 'k']]], 'line-width': 0.8 } });
-      map.addSource('heat', { type: 'geojson', data: fc([]) });
+      map.addSource('dens', { type: 'geojson', data: fc([]) });
 
       map.addSource('zones', { type: 'geojson', data: fc([]) });
       map.addSource('cameras', { type: 'geojson', data: fc([]) });
@@ -208,17 +194,13 @@ export function MapView(p: Props) {
       map.addSource('sketch', { type: 'geojson', data: fc([]) });
       map.addSource('cones', { type: 'geojson', data: fc([]) });
       map.addSource('coneHi', { type: 'geojson', data: fc([]) });
-      map.addLayer({ id: 'heat', type: 'heatmap', source: 'heat', maxzoom: 19, paint: {
-        'heatmap-weight': ['get', 'w'],
-        // Al acercar, la gente se reparte en más pantalla: la intensidad sube para que el color no se lave a gris.
-        'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 8, 1.1, 13, 1.2, 15, 1.6, 17, 2.2],
-        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 8, 6, 13, 22, 16, 48],
-        // Niveles de color como en Cobertura: gris (poca gente) → amarillo → rojo (mucha), siempre
-        // con transparencia para que se lea el mapa debajo.
-        'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'],
-          0, 'rgba(0,0,0,0)', 0.1, 'rgba(255,255,255,0.1)', 0.3, colorA(alertC, 0.4), 0.55, colorA(alertC, 0.6), 0.8, colorA(negative, 0.65), 1, colorA(negative, 0.8)],
-        'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 14, 1, 17, 0.7],
-      } });
+      /* Personas: cada hexágono según cuánto se llena su zona. Misma escala que tenía el mapa de calor:
+         gris (poca gente) → amarillo → rojo (llena), siempre con transparencia para leer el mapa debajo. */
+      const densC = ['interpolate', ['linear'], ['get', 'w'], 0, ink, 0.3, alertC, 0.8, negative] as maplibregl.ExpressionSpecification;
+      map.addLayer({ id: 'dens-fill', type: 'fill', source: 'dens', paint: {
+        'fill-color': densC, 'fill-opacity': ['interpolate', ['linear'], ['get', 'w'], 0, 0.08, 0.3, 0.3, 0.8, 0.45, 1, 0.55] } });
+      map.addLayer({ id: 'dens-line', type: 'line', source: 'dens', paint: {
+        'line-color': densC, 'line-opacity': ['interpolate', ['linear'], ['get', 'w'], 0, 0.2, 1, 0.75], 'line-width': 0.8 } });
       map.addLayer({ id: 'zones-fill', type: 'fill', source: 'zones', paint: {
         'fill-color': ['match', ['get', 'sev'], 'alerta', negative, muted],
         'fill-opacity': ['case', ['get', 'dim'], 0.02, ['get', 'nodata'], 0.05, ['get', 'sel'], 0.2, 0.08],
@@ -355,22 +337,16 @@ export function MapView(p: Props) {
     // Selección del lateral: la alerta abierta (y su zona), la zona o la cámara.
     const selAlert = P.focusSel?.k === 'alerta' ? P.alerts?.find((x) => x.id === P.focusSel!.id) ?? null : null;
     const selZone = P.focusSel?.k === 'zona' ? P.focusSel.id : selAlert?.zoneId ?? null;
-    const L: MapLayers = { heat: true, zones: true, cameras: false, units: false, alerts: true, fov: false, hex: null, cover: false, ...P.layers };
-    const heat: GeoJSON.Feature[] = [];
-    if (L.heat) for (const z of P.zones) {
-      const s = st[z.id]; if (!s || s.densityPerM2 == null) continue;
-      if (!heatCache.has(z.id)) heatCache.set(z.id, heatPoints(z));
-      const w = Math.max(0.04, Math.min(1, s.occupancy ?? s.densityPerM2 / 5)); // según cuánto se llena la zona: llena = rojo
-      for (const c of heatCache.get(z.id)!) heat.push({ type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: { w } });
-    }
-    (map.getSource('heat') as GeoJSONSource).setData(fc(heat));
-    // Hexágonos H3 según el zoom
+    const L: MapLayers = { people: true, zones: true, cameras: false, units: false, alerts: true, fov: false, hex: null, cover: false, ...P.layers };
+    (map.getSource('dens') as GeoJSONSource).setData(fc(L.people ? densityHexes(P.zones, st)
+      .map(({ cell, w }) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: { w } })) : []));
+    // Hexágonos H3, siempre del mismo tamaño
     if (L.hex) {
-      const counts = hexCounts(L.hex, L.hex === 'personas' ? peopleRes(map.getZoom()) : resForZoom(map.getZoom()), { units: P.units ?? null, alerts: P.alerts ?? [], zones: P.zones, status: st });
+      const counts = hexCounts(L.hex, HEX_RES, { units: P.units ?? null, alerts: P.alerts ?? [], zones: P.zones, status: st });
       const max = Math.max(1, ...counts.values());
       (map.getSource('hex') as GeoJSONSource).setData(fc([...counts].filter(([, n]) => n > 0).map(([cell, n]) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: { k: Math.max(0.3, Math.sqrt(n / max)) } })))); // raíz: las zonas con poca gente igual se leen
     } else (map.getSource('hex') as GeoJSONSource).setData(fc([]));
-    (map.getSource('covhex') as GeoJSONSource).setData(fc(L.cover ? coverageHexes(P.zones, resForZoom(map.getZoom()), P.units ?? null)
+    (map.getSource('covhex') as GeoJSONSource).setData(fc(L.cover ? coverageHexes(P.zones, HEX_RES, P.units ?? null)
       .map(({ cell, state }) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: { st: state } })) : []));
     // Medición de cobertura alrededor de un punto
     const M = P.measure;
@@ -431,7 +407,7 @@ export function MapView(p: Props) {
     // ---- Recorrido: modo foco y animación ----
     const R = P.route && P.route.length > 1 ? P.route : null; const focus = !!R;
     map.setPaintProperty('focus-dim', 'fill-opacity', focus ? 0.55 : 0);
-    for (const id of ['heat', 'hex-fill', 'hex-line', 'covhex-fill', 'covhex-line', 'zones-fill', 'cameras', 'cameras-hit', 'cones-fill', 'cones-line', 'cone-hi-fill', 'cone-hi-line']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', focus ? 'none' : 'visible');
+    for (const id of ['dens-fill', 'dens-line', 'hex-fill', 'hex-line', 'covhex-fill', 'covhex-line', 'zones-fill', 'cameras', 'cameras-hit', 'cones-fill', 'cones-line', 'cone-hi-fill', 'cone-hi-line']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', focus ? 'none' : 'visible');
     map.setPaintProperty('zones-line', 'line-opacity', focus ? 0.22 : ['case', ['get', 'dim'], 0.35, 1]);
     const rkey = R ? JSON.stringify(R.map((s) => [s.lon, s.lat])) : '';
     if (rkey !== anim.current.key) { anim.current.key = rkey; if (R) playRoute(R); else stopRoute(); }
@@ -539,7 +515,10 @@ export function MapView(p: Props) {
       });
     }
     // Atenuar todo lo que no es lo seleccionado en el lateral
-    if (map.getLayer('heat')) map.setPaintProperty('heat', 'heatmap-opacity', P.focusSel && !focus ? 0.3 : ['interpolate', ['linear'], ['zoom'], 14, 1, 17, 0.7]);
+    // Personas, relleno y contorno: atenuados mientras hay algo seleccionado en el lateral
+    const dim = P.focusSel && !focus ? 0.4 : 1;
+    if (map.getLayer('dens-fill')) map.setPaintProperty('dens-fill', 'fill-opacity', ['*', dim, ['interpolate', ['linear'], ['get', 'w'], 0, 0.08, 0.3, 0.3, 0.8, 0.45, 1, 0.55]]);
+    if (map.getLayer('dens-line')) map.setPaintProperty('dens-line', 'line-opacity', ['*', dim, ['interpolate', ['linear'], ['get', 'w'], 0, 0.2, 1, 0.75]]);
     for (const [key, h] of markers.current) {
       const keep = !P.focusSel || focus || key === 'a' + (selAlert?.id ?? '') || (selZone && key === 'z' + selZone) || key === 'pin' || key.startsWith('sig') || key.startsWith('csel') || /^r[as]?\d/.test(key);
       h.el.classList.toggle('is-dim', !keep && key !== 'a' + P.hoverAlert);

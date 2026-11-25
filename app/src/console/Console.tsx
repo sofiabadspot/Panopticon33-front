@@ -75,7 +75,7 @@ function Layout() {
   const facial = useFacial();
   const sevOf = useZoneSeverity(alerts);
 
-  const [layers, setLayers] = useState<MapLayers>({ heat: true, zones: true, alerts: true, units: false, cameras: role === 'admin' || role === 'analyst', fov: false, hex: null, cover: false });
+  const [layers, setLayers] = useState<MapLayers>({ people: true, zones: true, alerts: true, units: false, cameras: role === 'admin' || role === 'analyst', fov: false, hex: null, cover: false });
   /* Medir cobertura alrededor de un punto: se activa, se hace clic en el mapa y se ve el radio,
      las unidades dentro y cuánto tardaría en llegar cada una. */
   const [wallOpen, setWallOpen] = useState(false);
@@ -161,8 +161,8 @@ function Layout() {
   /* Capas del mapa. Cada chip lleva el MISMO ícono que ese elemento tiene en el mapa, así el chip es a la vez
      el filtro y la referencia (no hay leyenda aparte). */
   const LAYER_ICON: Record<string, ReactNode> = {
-    // Personas: mapa de calor, de gris (poca gente) a rojo (mucha)
-    people: <span className="li-heat" aria-hidden />,
+    // Personas: hexágonos de gris (poca gente) a rojo (llena), igual que en el mapa
+    people: <svg className="li-hex dens" viewBox="0 0 30 20" aria-hidden><path className="lo" d="M6 3l5 2.9v5.8L6 14.6 1 11.7V5.9z" /><path className="mid" d="M15 8.4l5 2.9v5.8l-5 2.9-5-2.9v-5.8z" /><path className="hi" d="M24 3l5 2.9v5.8l-5 2.9-5-2.9V5.9z" /></svg>,
     zones: <svg className="li-zone" viewBox="0 0 20 20" aria-hidden><path d="M3 7l6-4 8 3-1 9-9 2z" /></svg>,
     alerts: <AlertMark kind="placa_en_lista" size={18} still />,
     units: <UnitHex type="Patrulla" size={18} />,
@@ -171,15 +171,15 @@ function Layout() {
   };
   type ChipKey = 'people' | 'zones' | 'alerts' | 'units' | 'cover';
   const chips: [ChipKey, string, string, boolean?][] = [
-    ['people', 'Personas', inv ? 'En vivo: no se muestra en modo histórico' : 'Mapa de calor: dónde hay gente, de gris (poca) a rojo (mucha)', !!inv],
+    ['people', 'Personas', inv ? 'En vivo: no se muestra en modo histórico' : 'Cuánto se llena cada hexágono: gris poca gente, amarillo se va llenando, rojo lleno', !!inv],
     ['zones', 'Zonas', 'Lugares vigilados. En rojo si tienen una alerta esperando decisión. Contorno punteado: sin cámaras que midan'],
     ['alerts', 'Alertas', inv ? 'Alertas de la ventana del hecho' : 'Alertas que esperan una decisión'],
     ['units', 'Unidades', inv ? 'En vivo: no se muestra en modo histórico' : 'Unidades policiales (MAIC)', !policeSource || !!inv],
     // Cámaras y su campo de visión van juntos: ver el grupo más abajo
     ['cover', 'Cobertura', inv ? 'En vivo: no se muestra en modo histórico' : 'Cuánto tarda en llegar la unidad más cercana: verde 2 min o menos, amarillo hasta 4 min, rojo más de 4 min', !policeSource || !!inv],
   ];
-  const chipOn = (k: ChipKey) => (k === 'people' ? layers.heat : layers[k]);
-  const toggleChip = (k: ChipKey) => setLayers((l) => (k === 'people' ? { ...l, heat: !l.heat } : { ...l, [k]: !l[k] }));
+  const chipOn = (k: ChipKey) => layers[k];
+  const toggleChip = (k: ChipKey) => setLayers((l) => ({ ...l, [k]: !l[k] }));
 
   // ESC vuelve al mapa: cierra el detalle abierto en el lateral
   useEffect(() => {
@@ -260,7 +260,7 @@ function Layout() {
         <div className="mapwrap">
           <MapView
             zones={zones} zoneStatus={inv ? NO_STATUS : loading ? undefined : status} cameras={cameras} units={policeSource && !inv ? units : null} alerts={mapAlerts}
-            layers={{ ...layers, heat: layers.heat && !inv, units: layers.units && policeSource && !inv, cover: layers.cover && !inv }} severityOf={sevOf} eventOf={inv ? undefined : eventOf} selectedZone={selectedZone} focusSel={mapFocus} hoverAlert={c.hoverAlert} onAlertHover={c.setHoverAlert} freshAlerts={c.fresh}
+            layers={{ ...layers, people: layers.people && !inv, units: layers.units && policeSource && !inv, cover: layers.cover && !inv }} severityOf={sevOf} eventOf={inv ? undefined : eventOf} selectedZone={selectedZone} focusSel={mapFocus} hoverAlert={c.hoverAlert} onAlertHover={c.setHoverAlert} freshAlerts={c.fresh}
             highlightZones={c.overlay.highlightZones} route={c.overlay.route} routeLabel={c.overlay.routeLabel} sketch={c.overlay.sketch} pin={c.pin} signal={c.signal}
             bounds={boundsOf(fit.points, 0.0008)} fitKey={fit.key} backOutKey={backOut} padding={{ top: 24, right: 24, bottom: 24, left: 24 }}
             base={base} onBaseStatus={setBaseStatus} onPointer={setPointer}

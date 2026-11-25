@@ -1,20 +1,21 @@
 /* Cobertura y densidad con H3 (hexágonos de Uber, https://www.uber.com/us/en/blog/h3/).
-   Cada punto (unidad, alerta) cae en un hexágono; los hexágonos se agrupan en otros más grandes
-   según el zoom, sin recalcular nada. Sirve para leer densidad y cobertura de un vistazo.
+   Todo el mapa se lee sobre la misma grilla: personas, cobertura y alertas caen en hexágonos de un
+   solo tamaño (HEX_RES), que no cambia con el zoom. Así un hexágono es siempre la misma porción de
+   calle y se pueden comparar entre sí, y la cobertura se calcula sobre las mismas celdas que se ven.
    Las zonas no se reemplazan: una alerta sigue siendo sobre "Plaza Salvador del Mundo".
 
    En producción esto lo calcula el backend (mismas celdas H3). Hoy usa los datos simulados. */
-import { cellToBoundary, cellToLatLng, cellToParent, gridDisk, latLngToCell, polygonToCells } from 'h3-js';
+import { cellToBoundary, cellToLatLng, gridDisk, latLngToCell, polygonToCells } from 'h3-js';
 import type { Alert, LngLat, Unit, Zone, ZoneStatus } from './types';
 
 export type HexMetric = 'patrullas' | 'personas' | 'alertas';
 export type ZoneCoverage = 'cubierta' | 'cerca' | 'sin_cobertura';
 
-/** Resolución H3 según el zoom: res 9 (~175 m de lado, barrio) · res 8 (~460 m) · res 7 (~1,2 km, ciudad). */
-export const resForZoom = (z: number) => (z >= 15 ? 9 : z >= 13 ? 8 : 7);
-/** Personas: un nivel más fino, para que se distinga una zona de otra aun con el zoom alejado
-    (res 10 ~65 m · res 9 ~175 m · res 8 ~460 m). */
-export const peopleRes = (z: number) => Math.min(10, resForZoom(z) + 1);
+/** Resolución H3 de todo el mapa, fija: res 11, ~25 m de lado (~2.100 m²), unos 43 m entre centros.
+    Más fina que una cuadra, para ver dentro de una plaza dónde se junta la gente. */
+export const HEX_RES = 11;
+/** Distancia entre centros de hexágonos vecinos a HEX_RES (m), para pasar un radio a anillos. */
+const HEX_STEP_M = 43;
 
 /** Velocidad media de una unidad en calle (km/h) y factor calle/línea recta, para estimar la llegada. */
 const SPEED = { Patrulla: 30, Motorizada: 35, 'A pie': 5 } as const;
@@ -47,9 +48,21 @@ export function hexCounts(metric: HexMetric, res: number, d: { units: Unit[] | n
   return m;
 }
 
+/** Cuánta gente hay en cada hexágono, como fracción de lo que soporta su zona (0–1): la ocupación de la
+    zona en cada una de sus celdas, o la densidad (personas/m²) sobre 5 si no hay aforo. Si dos zonas
+    comparten una celda, manda la más llena. Reemplaza al mapa de calor. */
+export function densityHexes(zones: Zone[], status: Record<string, ZoneStatus>): { cell: string; w: number }[] {
+  const m = new Map<string, number>();
+  for (const z of zones) {
+    const s = status[z.id]; if (!s || s.densityPerM2 == null) continue;
+    const w = Math.max(0.04, Math.min(1, s.occupancy ?? s.densityPerM2 / 5));
+    for (const c of cellsOf(z, HEX_RES)) m.set(c, Math.max(m.get(c) ?? 0, w));
+  }
+  return [...m].map(([cell, w]) => ({ cell, w }));
+}
+
 /** Contorno de un hexágono para el mapa ([lon, lat], cerrado). */
 export function hexRing(cell: string): LngLat[] { const b = cellToBoundary(cell).map(([lat, lon]) => [lon, lat] as LngLat); return [...b, b[0]]; }
-export const parentOf = (cell: string, res: number) => cellToParent(cell, res);
 
 /** Cobertura de una zona: cubierta (hay unidades adentro), patrulla cerca (llega en ≤ NEAR_MIN) o sin cobertura. */
 export function zoneCoverage(z: Zone, units: Unit[] | null): { state: ZoneCoverage; inside: number; nearest: { unit: Unit; eta: number } | null } {
@@ -66,8 +79,8 @@ export function coverageAt(p: LngLat, radiusM: number, units: Unit[] | null) {
   const within = us.filter((x) => x.dist <= radiusM).sort((a, b) => a.eta - b.eta);
   const nearest = us.sort((a, b) => a.eta - b.eta)[0] ?? null;
   const state: ZoneCoverage = within.length ? 'cubierta' : nearest && nearest.eta <= NEAR_MIN ? 'cerca' : 'sin_cobertura';
-  // Hexágonos (res 9) que toca el radio, para dibujarlos
-  const c = latLngToCell(p[1], p[0], 9); const k = Math.max(1, Math.round(radiusM / 300));
+  // Hexágonos que toca el radio, para dibujarlos
+  const c = latLngToCell(p[1], p[0], HEX_RES); const k = Math.max(1, Math.round(radiusM / HEX_STEP_M));
   return { state, within, nearest, cells: gridDisk(c, k) };
 }
 
