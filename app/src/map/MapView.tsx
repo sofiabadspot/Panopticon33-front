@@ -13,7 +13,7 @@ import type { Alert, Camera, Evidence as Ev, LngLat, Unit, Zone, ZoneStatus } fr
 import { fmtCrowd, hhmm } from '../api/format';
 import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
-import { coverageHexes, densityHexes, hexCounts, hexRing, HEX_RES, type HexMetric } from '../api/coverage';
+import { areaOutline, coverageHexes, hexCounts, hexRing, HEX_RES, peopleField, type HexMetric } from '../api/coverage';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
 
@@ -123,6 +123,9 @@ function baseStyle(): StyleSpecification {
 }
 
 const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features });
+/** Personas: opacidad según cuánta gente hay. Casi nada en los bordes de la mancha, más al centro. */
+const DENS_FILL_OP: maplibregl.ExpressionSpecification = ['interpolate', ['linear'], ['get', 'w'], 0, 0.1, 0.3, 0.3, 0.7, 0.5, 1, 0.6];
+const DENS_LINE_OP: maplibregl.ExpressionSpecification = ['interpolate', ['linear'], ['get', 'w'], 0, 0.06, 1, 0.4];
 
 /** Nodo de cámara como imagen para la capa del mapa. Misma geometría que CameraNode (src/map/icons.tsx). */
 function cameraSvg(st: Camera['status'], c: { ink: string; muted: string; subtle: string }) {
@@ -194,23 +197,21 @@ export function MapView(p: Props) {
       map.addSource('sketch', { type: 'geojson', data: fc([]) });
       map.addSource('cones', { type: 'geojson', data: fc([]) });
       map.addSource('coneHi', { type: 'geojson', data: fc([]) });
-      /* Personas: cada hexágono según cuánto se llena su zona. Misma escala que tenía el mapa de calor:
-         gris (poca gente) → amarillo → rojo (llena), siempre con transparencia para leer el mapa debajo. */
-      const densC = ['interpolate', ['linear'], ['get', 'w'], 0, ink, 0.3, alertC, 0.8, negative] as maplibregl.ExpressionSpecification;
-      map.addLayer({ id: 'dens-fill', type: 'fill', source: 'dens', paint: {
-        'fill-color': densC, 'fill-opacity': ['interpolate', ['linear'], ['get', 'w'], 0, 0.08, 0.3, 0.3, 0.8, 0.45, 1, 0.55] } });
-      map.addLayer({ id: 'dens-line', type: 'line', source: 'dens', paint: {
-        'line-color': densC, 'line-opacity': ['interpolate', ['linear'], ['get', 'w'], 0, 0.2, 1, 0.75], 'line-width': 0.8 } });
-      map.addLayer({ id: 'zones-fill', type: 'fill', source: 'zones', paint: {
-        'fill-color': ['match', ['get', 'sev'], 'alerta', negative, muted],
-        'fill-opacity': ['case', ['get', 'dim'], 0.02, ['get', 'nodata'], 0.05, ['get', 'sel'], 0.2, 0.08],
-      } });
-      map.addLayer({ id: 'zones-line', type: 'line', source: 'zones', paint: {
-        'line-color': ['match', ['get', 'sev'], 'alerta', negative, ['case', ['get', 'sel'], ink, muted]],
-        'line-width': ['case', ['get', 'sel'], 2.5, 1.2],
+      /* Personas en todo el mapa: hexágonos de amarillo (poca gente) a rojo (mucha), cada vez más
+         transparentes hacia el borde de la mancha para que se lea el mapa debajo. */
+      const densC = ['interpolate', ['linear'], ['get', 'w'], 0, alertC, 0.6, negative] as maplibregl.ExpressionSpecification;
+      map.addLayer({ id: 'dens-fill', type: 'fill', source: 'dens', paint: { 'fill-color': densC, 'fill-opacity': DENS_FILL_OP } });
+      map.addLayer({ id: 'dens-line', type: 'line', source: 'dens', paint: { 'line-color': densC, 'line-opacity': DENS_LINE_OP, 'line-width': 0.8 } });
+      /* Zonas: ya no se dibujan. La capa queda invisible solo para poder tocarlas y abrir su ficha;
+         el nombre y el conteo van en su rótulo. */
+      map.addLayer({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': muted, 'fill-opacity': 0 } });
+      /* Lo que se delimita es el evento en curso (y la zona elegida en el lateral): un borde armado con
+         sus hexágonos, sobre la misma grilla que el resto del mapa. */
+      map.addSource('area', { type: 'geojson', data: fc([]) });
+      map.addLayer({ id: 'area-line', type: 'line', source: 'area', paint: {
+        'line-color': ink, 'line-width': ['match', ['get', 'k'], 'sel', 2.5, 1.6],
         'line-opacity': ['case', ['get', 'dim'], 0.35, 1],
-        'line-dasharray': ['case', ['get', 'nodata'], ['literal', [2, 2]], ['literal', [1, 0]]],
-      } });
+        'line-dasharray': ['match', ['get', 'k'], 'evento', ['literal', [3, 2]], ['literal', [1, 0]]] } });
       // Campo de visión de cada cámara: hacia dónde mira, con qué ángulo y hasta dónde llega.
       map.addLayer({ id: 'cones-fill', type: 'fill', source: 'cones', minzoom: 15, paint: { 'fill-color': ink, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 15, 0.04, 17, 0.09] } });
       map.addLayer({ id: 'cones-line', type: 'line', source: 'cones', minzoom: 15, paint: { 'line-color': ink, 'line-opacity': 0.28, 'line-width': 1 } });
@@ -338,7 +339,7 @@ export function MapView(p: Props) {
     const selAlert = P.focusSel?.k === 'alerta' ? P.alerts?.find((x) => x.id === P.focusSel!.id) ?? null : null;
     const selZone = P.focusSel?.k === 'zona' ? P.focusSel.id : selAlert?.zoneId ?? null;
     const L: MapLayers = { people: true, zones: true, cameras: false, units: false, alerts: true, fov: false, hex: null, cover: false, ...P.layers };
-    (map.getSource('dens') as GeoJSONSource).setData(fc(L.people ? densityHexes(P.zones, st)
+    (map.getSource('dens') as GeoJSONSource).setData(fc(L.people ? peopleField(P.zones, st, P.cameras ?? [])
       .map(({ cell, w }) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: { w } })) : []));
     // Hexágonos H3, siempre del mismo tamaño
     if (L.hex) {
@@ -360,6 +361,16 @@ export function MapView(p: Props) {
       type: 'Feature', geometry: { type: 'Polygon', coordinates: [z.ring] },
       properties: { id: z.id, sev: P.severityOf?.(z.id) ? 'alerta' : 'none', sel: P.selectedZone === z.id || !!P.highlightZones?.includes(z.id), dim: (!!P.highlightZones && !P.highlightZones.includes(z.id) && P.selectedZone !== z.id) || (!!selZone && z.id !== selZone) || (!!P.focusSel && !selZone), nodata: !!P.zoneStatus && (st[z.id]?.coverage ?? 'sin_datos') !== 'medida' },
     })) : []));
+    // Áreas delimitadas: cada evento en curso (sus zonas juntas) y la zona elegida
+    const area: GeoJSON.Feature[] = [];
+    if (L.zones) {
+      const events = new Map<string, Zone[]>();
+      for (const z of P.zones) { const ev = P.eventOf?.(z.id); if (ev) events.set(ev.name, [...(events.get(ev.name) ?? []), z]); }
+      for (const zs of events.values()) area.push({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: areaOutline(zs) }, properties: { k: 'evento', dim: !!selZone && !zs.some((z) => z.id === selZone) } });
+      const sel = P.zones.filter((z) => z.id === selZone || z.id === P.selectedZone || P.highlightZones?.includes(z.id));
+      if (sel.length) area.push({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: areaOutline(sel) }, properties: { k: 'sel', dim: false } });
+    }
+    (map.getSource('area') as GeoJSONSource).setData(fc(area));
     // Agrupación al alejar el zoom (cámaras, unidades y alertas por separado). Se calcula en pantalla:
     // lo que cae en la misma celda se junta. Desde UNGROUP en adelante todo va suelto.
     const zoom = map.getZoom(), detailZ = zoom >= SHOW_DETAIL, cell = zoom >= UNGROUP ? 0 : zoom >= 15.6 ? 30 : zoom >= 14.4 ? 40 : 56;
@@ -408,7 +419,7 @@ export function MapView(p: Props) {
     const R = P.route && P.route.length > 1 ? P.route : null; const focus = !!R;
     map.setPaintProperty('focus-dim', 'fill-opacity', focus ? 0.55 : 0);
     for (const id of ['dens-fill', 'dens-line', 'hex-fill', 'hex-line', 'covhex-fill', 'covhex-line', 'zones-fill', 'cameras', 'cameras-hit', 'cones-fill', 'cones-line', 'cone-hi-fill', 'cone-hi-line']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', focus ? 'none' : 'visible');
-    map.setPaintProperty('zones-line', 'line-opacity', focus ? 0.22 : ['case', ['get', 'dim'], 0.35, 1]);
+    map.setPaintProperty('area-line', 'line-opacity', focus ? 0.22 : ['case', ['get', 'dim'], 0.35, 1]);
     const rkey = R ? JSON.stringify(R.map((s) => [s.lon, s.lat])) : '';
     if (rkey !== anim.current.key) { anim.current.key = rkey; if (R) playRoute(R); else stopRoute(); }
     (map.getSource('routeGhost') as GeoJSONSource).setData(fc(R ? [{ type: 'Feature', geometry: { type: 'LineString', coordinates: streetRoute(R.map((s) => [s.lon, s.lat])).path }, properties: {} }] : []));
@@ -517,8 +528,8 @@ export function MapView(p: Props) {
     // Atenuar todo lo que no es lo seleccionado en el lateral
     // Personas, relleno y contorno: atenuados mientras hay algo seleccionado en el lateral
     const dim = P.focusSel && !focus ? 0.4 : 1;
-    if (map.getLayer('dens-fill')) map.setPaintProperty('dens-fill', 'fill-opacity', ['*', dim, ['interpolate', ['linear'], ['get', 'w'], 0, 0.08, 0.3, 0.3, 0.8, 0.45, 1, 0.55]]);
-    if (map.getLayer('dens-line')) map.setPaintProperty('dens-line', 'line-opacity', ['*', dim, ['interpolate', ['linear'], ['get', 'w'], 0, 0.2, 1, 0.75]]);
+    if (map.getLayer('dens-fill')) map.setPaintProperty('dens-fill', 'fill-opacity', ['*', dim, DENS_FILL_OP]);
+    if (map.getLayer('dens-line')) map.setPaintProperty('dens-line', 'line-opacity', ['*', dim, DENS_LINE_OP]);
     for (const [key, h] of markers.current) {
       const keep = !P.focusSel || focus || key === 'a' + (selAlert?.id ?? '') || (selZone && key === 'z' + selZone) || key === 'pin' || key.startsWith('sig') || key.startsWith('csel') || /^r[as]?\d/.test(key);
       h.el.classList.toggle('is-dim', !keep && key !== 'a' + P.hoverAlert);

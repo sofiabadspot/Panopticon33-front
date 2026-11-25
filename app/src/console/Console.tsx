@@ -161,7 +161,7 @@ function Layout() {
   /* Capas del mapa. Cada chip lleva el MISMO ícono que ese elemento tiene en el mapa, así el chip es a la vez
      el filtro y la referencia (no hay leyenda aparte). */
   const LAYER_ICON: Record<string, ReactNode> = {
-    // Personas: hexágonos de gris (poca gente) a rojo (llena), igual que en el mapa
+    // Personas: hexágonos de amarillo (poca gente) a rojo (mucha), igual que en el mapa
     people: <svg className="li-hex dens" viewBox="0 0 30 20" aria-hidden><path className="lo" d="M6 3l5 2.9v5.8L6 14.6 1 11.7V5.9z" /><path className="mid" d="M15 8.4l5 2.9v5.8l-5 2.9-5-2.9v-5.8z" /><path className="hi" d="M24 3l5 2.9v5.8l-5 2.9-5-2.9V5.9z" /></svg>,
     zones: <svg className="li-zone" viewBox="0 0 20 20" aria-hidden><path d="M3 7l6-4 8 3-1 9-9 2z" /></svg>,
     alerts: <AlertMark kind="placa_en_lista" size={18} still />,
@@ -171,8 +171,8 @@ function Layout() {
   };
   type ChipKey = 'people' | 'zones' | 'alerts' | 'units' | 'cover';
   const chips: [ChipKey, string, string, boolean?][] = [
-    ['people', 'Personas', inv ? 'En vivo: no se muestra en modo histórico' : 'Cuánto se llena cada hexágono: gris poca gente, amarillo se va llenando, rojo lleno', !!inv],
-    ['zones', 'Zonas', 'Lugares vigilados. En rojo si tienen una alerta esperando decisión. Contorno punteado: sin cámaras que midan'],
+    ['people', 'Personas', inv ? 'En vivo: no se muestra en modo histórico' : 'Dónde hay gente en todo el mapa: amarillo poca, rojo mucha. Sin hexágono: ninguna cámara mide ahí', !!inv],
+    ['zones', 'Zonas', 'Nombre y conteo de los lugares vigilados. El borde punteado marca el evento en curso'],
     ['alerts', 'Alertas', inv ? 'Alertas de la ventana del hecho' : 'Alertas que esperan una decisión'],
     ['units', 'Unidades', inv ? 'En vivo: no se muestra en modo histórico' : 'Unidades policiales (MAIC)', !policeSource || !!inv],
     // Cámaras y su campo de visión van juntos: ver el grupo más abajo

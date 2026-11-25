@@ -5,17 +5,17 @@
    Las zonas no se reemplazan: una alerta sigue siendo sobre "Plaza Salvador del Mundo".
 
    En producción esto lo calcula el backend (mismas celdas H3). Hoy usa los datos simulados. */
-import { cellToBoundary, cellToLatLng, gridDisk, latLngToCell, polygonToCells } from 'h3-js';
-import type { Alert, LngLat, Unit, Zone, ZoneStatus } from './types';
+import { cellToBoundary, cellToLatLng, cellsToMultiPolygon, gridDisk, latLngToCell, polygonToCells } from 'h3-js';
+import type { Alert, Camera, LngLat, Unit, Zone, ZoneStatus } from './types';
 
 export type HexMetric = 'patrullas' | 'personas' | 'alertas';
 export type ZoneCoverage = 'cubierta' | 'cerca' | 'sin_cobertura';
 
-/** Resolución H3 de todo el mapa, fija: res 11, ~25 m de lado (~2.100 m²), unos 43 m entre centros.
-    Más fina que una cuadra, para ver dentro de una plaza dónde se junta la gente. */
-export const HEX_RES = 11;
+/** Resolución H3 de todo el mapa, fija: res 10, ~65 m de lado (~1,5 ha), unos 115 m entre centros.
+    Fina para ver una plaza y todavía legible con la ciudad entera en pantalla. */
+export const HEX_RES = 10;
 /** Distancia entre centros de hexágonos vecinos a HEX_RES (m), para pasar un radio a anillos. */
-const HEX_STEP_M = 43;
+const HEX_STEP_M = 115;
 
 /** Velocidad media de una unidad en calle (km/h) y factor calle/línea recta, para estimar la llegada. */
 const SPEED = { Patrulla: 30, Motorizada: 35, 'A pie': 5 } as const;
@@ -48,17 +48,46 @@ export function hexCounts(metric: HexMetric, res: number, d: { units: Unit[] | n
   return m;
 }
 
-/** Cuánta gente hay en cada hexágono, como fracción de lo que soporta su zona (0–1): la ocupación de la
-    zona en cada una de sus celdas, o la densidad (personas/m²) sobre 5 si no hay aforo. Si dos zonas
-    comparten una celda, manda la más llena. Reemplaza al mapa de calor. */
-export function densityHexes(zones: Zone[], status: Record<string, ZoneStatus>): { cell: string; w: number }[] {
-  const m = new Map<string, number>();
+/* ---------- Personas en todo el mapa ----------
+   Un campo continuo, no un relleno por zona: cada medición se reparte alrededor de donde se tomó y
+   se apaga con la distancia (campana). Donde se juntan varias se combinan sin pasar de 1
+   (1 − Π(1 − aporte)), para que muchas cámaras de una misma calle no la vuelvan roja. Así la gente se ve como
+   una mancha que se desvanece hacia los bordes, sobre la grilla de todo el mapa, sin límites de zona.
+   · Zona medida: su ocupación (o densidad/5), repartida en un radio que crece con su superficie.
+   · Cámara peatonal o mixta que funciona: la gente que ve en la calle. SIMULADO: las cámaras todavía
+     no informan conteo; en producción lo manda el backend por celda H3.
+   Donde ninguna cámara mide no hay hexágono: "sin datos" nunca se muestra como cero. */
+const FIELD_MIN = 0.04;
+const camSeed = (id: string) => { let h = 7; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 9973; return h / 9973; };
+export function peopleField(zones: Zone[], status: Record<string, ZoneStatus>, cameras: Camera[]): { cell: string; w: number }[] {
+  const src: { lat: number; lon: number; a: number; sigma: number }[] = [];
   for (const z of zones) {
-    const s = status[z.id]; if (!s || s.densityPerM2 == null) continue;
-    const w = Math.max(0.04, Math.min(1, s.occupancy ?? s.densityPerM2 / 5));
-    for (const c of cellsOf(z, HEX_RES)) m.set(c, Math.max(m.get(c) ?? 0, w));
+    const s = status[z.id]; if (!s || s.count == null) continue;
+    const a = Math.max(0.05, Math.min(0.97, s.occupancy ?? (s.densityPerM2 ?? 0) / 5));
+    src.push({ lat: z.lat, lon: z.lon, a, sigma: Math.max(220, Math.sqrt(z.areaM2) * 1.4) });
   }
-  return [...m].map(([cell, w]) => ({ cell, w }));
+  for (const c of cameras) {
+    if (c.kind === 'vehicular' || c.status === 'caida' || c.status === 'fuera_de_preset') continue;
+    src.push({ lat: c.lat, lon: c.lon, a: 0.05 + 0.15 * camSeed(c.id), sigma: 340 });
+  }
+  const empty = new Map<string, number>(); // Π(1 − aporte) por celda
+  for (const s of src) {
+    const k = Math.ceil((2.6 * s.sigma) / HEX_STEP_M);
+    for (const cell of gridDisk(latLngToCell(s.lat, s.lon, HEX_RES), k)) {
+      const [lat, lon] = cellToLatLng(cell); const d = meters([s.lon, s.lat], [lon, lat]);
+      const g = s.a * Math.exp(-(d * d) / (2 * s.sigma * s.sigma));
+      if (g > 0.005) empty.set(cell, (empty.get(cell) ?? 1) * (1 - g));
+    }
+  }
+  return [...empty].map(([cell, e]) => ({ cell, w: 1 - e })).filter(({ w }) => w >= FIELD_MIN);
+}
+
+/** Contorno de un área armada con hexágonos (un evento, una zona elegida): las celdas de sus zonas y un
+    anillo alrededor, unidas en un solo borde. Coordenadas GeoJSON ([lon, lat]). */
+export function areaOutline(zones: Zone[]): LngLat[][][] {
+  const cells = new Set<string>();
+  for (const z of zones) for (const c of cellsOf(z, HEX_RES)) for (const n of gridDisk(c, 1)) cells.add(n);
+  return cells.size ? (cellsToMultiPolygon([...cells], true) as LngLat[][][]) : [];
 }
 
 /** Contorno de un hexágono para el mapa ([lon, lat], cerrado). */

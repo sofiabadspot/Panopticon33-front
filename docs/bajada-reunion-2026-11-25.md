@@ -13,8 +13,8 @@ Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
 **Para el viernes (P0)**
 
 1. [x] Commitear el buscador del panel de alertas (2.5)
-2. [x] Hexágonos H3 más chicos y de tamaño fijo, que no cambien con el zoom (1.2). Quedó res 11, ~25 m de lado (`HEX_RES` en `coverage.ts`)
-3. [x] Sacar el mapa de calor y mostrar la densidad por hexágono (1.1, 1.4). Cada hexágono toma la ocupación de su zona, de gris a amarillo y rojo
+2. [x] Hexágonos H3 más chicos y de tamaño fijo, que no cambien con el zoom (1.2). Quedó res 10, ~65 m de lado (`HEX_RES` en `coverage.ts`)
+3. [x] Sacar el mapa de calor y mostrar la densidad por hexágono (1.1, 1.4). La gente es un campo continuo sobre la grilla de todo el mapa, de amarillo a rojo, que se desvanece hacia los bordes (como el ejemplo de Uber en Bogotá). Las zonas ya no dibujan contorno: se delimita el evento en curso con un borde de hexágonos
 4. [ ] Escala de colores de cobertura policial por hexágono, haya o no evento (1.3). Ojo: hoy la cobertura del hexágono (tiempo de llegada) y la de la zona (unidades adentro) pueden no coincidir: Redondel Olímpico dice "Sin cobertura" con todos sus hexágonos en verde
 5. [ ] Separar lenguajes: alertas como íconos, cobertura como color del hexágono (2.1)
 6. [ ] Elegir la iconografía de criticidad: Propuesta A o B, y cómo se marca el nivel (2.3)

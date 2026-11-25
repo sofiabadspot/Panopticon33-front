@@ -1177,7 +1177,7 @@ body:has(.isheet) { overflow: auto; }
 .li-hex.cov .ok { fill: var(--status-positive-tint); stroke: var(--status-positive); }
 .li-hex.cov .near { fill: var(--status-alert-tint); stroke: var(--status-alert); }
 .li-hex.cov .no { fill: var(--status-negative-tint); stroke: var(--status-negative); }
-.li-hex.dens .lo { fill: color-mix(in srgb, var(--ink) 8%, transparent); stroke: color-mix(in srgb, var(--ink) 30%, transparent); }
+.li-hex.dens .lo { fill: color-mix(in srgb, var(--status-alert) 12%, transparent); stroke: color-mix(in srgb, var(--status-alert) 45%, transparent); }
 .li-hex.dens .mid { fill: var(--status-alert-tint); stroke: var(--status-alert); }
 .li-hex.dens .hi { fill: var(--status-negative-tint); stroke: var(--status-negative); }
 .li-cover { display: inline-flex; gap: 2px; flex: none; }
