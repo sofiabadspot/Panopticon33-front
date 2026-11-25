@@ -2,7 +2,7 @@
    confirmar abre los refuerzos (cuántas unidades y cuáles: las más cercanas o elegidas a mano) y los
    manda desde acá, sin Maic; descartar pide un motivo de una lista corta. A Maic le llega el evento
    por el backend. Tras decidir, la ficha ofrece pasar a la siguiente alerta por revisar. */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { audit, AVAIL_LABEL, confirmAlert, discardAlert, forOperator, nearestFree, openAlert, readsOf, sightingsOf, suggestedUnits, unitOptions, useApi } from '../../api';
 import { ago, dateTime, dec1, fmt, fmtCrowd, hhmm, pct } from '../../api/format';
 import { DISCARD_REASONS, DISPATCH_LABEL, KIND_LABEL, KIND_PHRASE } from '../../api/labels';
@@ -10,7 +10,7 @@ import type { Alert, PlateRead, Zone } from '../../api/types';
 import { useSession } from '../../shell/session';
 import { Unattended } from '../../ui/Unattended';
 import { Evidence, Icon, Sparkline, StatusChip, useNow, useToast } from '../../ui/kit';
-import { ImageViewer, Inspectable } from '../../ui/ImageInspect';
+import { useInspect } from '../../ui/ImageInspect';
 import type { Evidence as Ev } from '../../api/types';
 import { byUrgency } from '../../views/shared';
 import { useConsole } from '../ctx';
@@ -106,6 +106,8 @@ export function AlertSheet({ id }: { id: string }) {
   const zone = zones.find((z) => z.id === a.zoneId);
   const cam = cameras.find((x) => x.id === a.cameraId);
   const zs = zone ? status[zone.id] : null;
+  // Eligiendo refuerzos: la ficha muestra ese paso (el mapa queda libre al lado), con volver a la alerta.
+  if (canDecide && composing) return <Reinforcements a={a} onConfirm={confirm} onCancel={() => setComposing(false)} />;
 
   return (
     <>
@@ -169,7 +171,6 @@ export function AlertSheet({ id }: { id: string }) {
       </div>
 
       <div className="pf">
-        {canDecide && composing && <Reinforcements a={a} onConfirm={confirm} onCancel={() => setComposing(false)} />}
         {canDecide && !discarding && !composing && <>
           <button className="btn positive" style={{ flex: 1 }} onClick={startConfirm}><Icon name="check" />Confirmar{suggestedUnits(a) > 0 ? ' y enviar refuerzos' : ''}<span className="kbd" style={{ color: 'inherit', borderColor: 'currentColor' }}>C</span></button>
           <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />Descartar<span className="kbd">D</span></button>
@@ -190,12 +191,13 @@ export function AlertSheet({ id }: { id: string }) {
   );
 }
 
-/* Refuerzos: al confirmar, el operador elige cuántas unidades manda y cuáles.
-   · "Las más cercanas" (por defecto): solo la cantidad, sugerida para el tipo de alerta, y una línea con
-     cuáles van y en cuánto llegan. Toma primero las disponibles; si no alcanzan, las ocupadas.
-   · "Elegir": el listado con un buscador, para elegir a mano. Cada unidad dice qué está haciendo:
-     disponible, ocupada (se está haciendo cargo de algo), asignada (ya va a otro lugar), sin reporte…
-     Las que no se pueden mandar se ven apagadas. Las que ya están en el lugar van en una línea aparte. */
+/* Refuerzos: un paso de la misma ficha al confirmar (no un modal: el mapa queda libre para ver dónde
+   están las unidades). Volver lleva de nuevo a la alerta.
+   · "Las más cercanas" (por defecto): cuántas unidades (sugeridas para el tipo de alerta) y, debajo, las
+     que van, como fichas con su tiempo de llegada. Toma primero las disponibles; si no alcanzan, las ocupadas.
+   · "Elegir": el listado con un buscador, de altura fija (se desplaza adentro, no empuja nada). Cada unidad
+     dice qué está haciendo: disponible, ocupada (se está haciendo cargo de algo), asignada (ya va a otro
+     lugar), sin reporte… Las que no se pueden mandar se ven apagadas. */
 function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids: string[]) => void; onCancel: () => void }) {
   const units$ = useApi((s) => s.units);
   const all = useMemo(() => unitOptions(a), [a, units$]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -207,7 +209,7 @@ function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids:
   const [picked, setPicked] = useState<string[]>([]);
   const [q, setQ] = useState('');
   const nearest = useMemo(() => nearestFree(a, n), [a, n, units$]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Solo las que siguen libres: otra persona puede haber mandado una mientras el panel estaba abierto.
+  // Solo las que siguen libres: otra persona puede haber mandado una mientras el modal estaba abierto.
   const chosen = mode === 'cercanas' ? nearest : picked.filter((id) => free.some((o) => o.unit.id === id));
   const byId = (id: string) => opts.find((o) => o.unit.id === id);
   const toggle = (id: string) => setPicked((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]));
@@ -216,33 +218,31 @@ function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids:
     const w = norm(q.trim()).split(/\s+/).filter(Boolean);
     return opts.filter((o) => !w.length || w.every((x) => norm([o.unit.id, o.unit.type, AVAIL_LABEL[o.avail], o.detail ?? ''].join(' ')).includes(x)));
   }, [opts, q]);
-  const units = (k: number) => `${k} ${k === 1 ? 'unidad' : 'unidades'}`;
-  const away = (o: { dist: number; eta: number }) => `${o.dist < 1000 ? `${Math.round(o.dist / 10) * 10} m` : `${(o.dist / 1000).toFixed(1)} km`} · ${Math.max(1, Math.round(o.eta))} min`;
+  const min = (o: { eta: number }) => `${Math.max(1, Math.round(o.eta))} min`;
   const busy = chosen.map(byId).filter((o) => o?.avail === 'ocupada');
-  return (
-    <section className="rf" aria-label="Refuerzos">
-      <div className="rf-hd">
-        <b>Refuerzos</b>
-        <div className="seg" role="group" aria-label="Qué unidades">
-          <button className={mode === 'cercanas' ? 'on' : ''} aria-pressed={mode === 'cercanas'} onClick={() => setMode('cercanas')}>Las más cercanas</button>
-          <button className={mode === 'elegir' ? 'on' : ''} aria-pressed={mode === 'elegir'} onClick={() => { setMode('elegir'); setPicked(nearest); }}>Elegir</button>
-        </div>
+  const k = chosen.length;
+  return (<>
+    <SheetHead kicker={<><span className="mono">{a.id}</span>·<span>{KIND_LABEL[a.kind]}</span></>} title="Enviar refuerzos" sub={KIND_PHRASE[a.kind]} />
+    <div className="pb rf-pane">
+      <button className="linklike rf-back" onClick={onCancel}><Icon name="arrow_back" />Volver a la alerta</button>
+      <div className="seg rf-seg" role="group" aria-label="Qué unidades">
+        <button className={mode === 'cercanas' ? 'on' : ''} aria-pressed={mode === 'cercanas'} onClick={() => setMode('cercanas')}>Las más cercanas</button>
+        <button className={mode === 'elegir' ? 'on' : ''} aria-pressed={mode === 'elegir'} onClick={() => { setMode('elegir'); setPicked(nearest); }}>Elegir</button>
       </div>
-      {here.length > 0 && <p className="rf-here"><Icon name="location_on" />Ya {here.length === 1 ? 'hay 1 unidad' : `hay ${here.length} unidades`} en el lugar: {here.map((o) => o.unit.id).join(', ')}</p>}
-      {mode === 'cercanas' && <>
+      {mode === 'cercanas' ? <>
         <div className="rf-count">
-          <span>Cuántas</span>
-          <button className="btn secondary xs" aria-label="Una menos" disabled={n <= 1} onClick={() => setN(n - 1)}><Icon name="remove" /></button>
-          <b className="mono" aria-live="polite">{n}</b>
-          <button className="btn secondary xs" aria-label="Una más" disabled={n >= free.length} onClick={() => setN(n + 1)}><Icon name="add" /></button>
-          <small>Sugeridas para {KIND_LABEL[a.kind].toLowerCase()}: {suggestedUnits(a)}</small>
+          <button className="rf-step" aria-label="Una menos" disabled={n <= 1} onClick={() => setN(n - 1)}><Icon name="remove" /></button>
+          <div><b className="mono" aria-live="polite">{n}</b><span>{n === 1 ? 'unidad' : 'unidades'}</span></div>
+          <button className="rf-step" aria-label="Una más" disabled={n >= free.length} onClick={() => setN(n + 1)}><Icon name="add" /></button>
         </div>
-        {chosen.length > 0
-          ? <p className="rf-who">Van {chosen.map((id) => { const o = byId(id); return o ? `${id} (${Math.max(1, Math.round(o.eta))} min)` : id; }).join(' · ')}</p>
-          : <p className="rf-who">No hay unidades para mandar.</p>}
-      </>}
-      {mode === 'elegir' && <>
-        <input type="search" className="fld sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar unidad, tipo o estado" aria-label="Buscar unidades" />
+        <p className="rf-hint">Sugeridas para {KIND_LABEL[a.kind].toLowerCase()}: {suggestedUnits(a)}</p>
+        {k > 0
+          ? <ul className="rf-chips" aria-label="Van">{chosen.map((id) => { const o = byId(id)!; return (
+              <li key={id} className={o.avail === 'ocupada' ? 'busy' : ''}><UnitHex type={o.unit.type} size={18} /><span className="mono">{id}</span><small>{min(o)}</small></li>
+            ); })}</ul>
+          : <p className="rf-hint">No hay unidades para mandar.</p>}
+      </> : <>
+        <input type="search" className="fld" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar unidad, tipo o estado" aria-label="Buscar unidades" autoFocus />
         <ul className="rf-list">
           {shown.map((o) => {
             const on = chosen.includes(o.unit.id);
@@ -251,9 +251,9 @@ function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids:
                 <label className={`rf-u ${on ? 'on' : ''} ${o.free ? '' : 'off'}`}>
                   <input type="checkbox" checked={on} disabled={!o.free} onChange={() => toggle(o.unit.id)} />
                   <UnitHex type={o.unit.type} size={18} />
-                  <span className="rf-id mono">{o.unit.id}</span>
-                  <span className="rf-st"><span className={`av av-${o.avail}`}>{AVAIL_LABEL[o.avail]}</span>{o.unit.type}{o.detail ? ` · ${o.detail}` : ''}</span>
-                  <span className="rf-eta mono">{away(o)}</span>
+                  <span className="rf-id"><b className="mono">{o.unit.id}</b><small>{o.unit.type}{o.detail ? ` · ${o.detail}` : ''}</small></span>
+                  <span className={`av av-${o.avail}`}>{AVAIL_LABEL[o.avail]}</span>
+                  <span className="rf-eta mono">{min(o)}</span>
                 </label>
               </li>
             );
@@ -261,14 +261,14 @@ function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids:
           {!shown.length && <li className="empty">Ninguna unidad coincide con «{q}».</li>}
         </ul>
       </>}
-      {busy.length > 0 && <p className="rf-warn"><Icon name="info" />{busy.map((o) => `${o!.unit.id} ${o!.detail ?? 'está ocupada'}`).join(' · ')}: deja{busy.length > 1 ? 'n' : ''} lo que hace{busy.length > 1 ? 'n' : ''} para ir.</p>}
-      <div className="rf-ft">
-        <button className="btn positive" style={{ flex: 1 }} disabled={!chosen.length} onClick={() => onConfirm(chosen)}><Icon name="send" />Confirmar y enviar {units(chosen.length)}</button>
-        <button className="btn secondary" onClick={() => onConfirm([])}>Sin refuerzos</button>
-        <button className="btn ghost" onClick={onCancel}>Cancelar</button>
-      </div>
-    </section>
-  );
+      {busy.length > 0 && <p className="rf-warn"><Icon name="info" />{busy.length === 1 ? `${busy[0]!.unit.id} está ocupada: deja lo que hace para ir.` : `${busy.map((o) => o!.unit.id).join(', ')} están ocupadas: dejan lo que hacen para ir.`}</p>}
+      {here.length > 0 && <p className="rf-hint">{here.length === 1 ? '1 unidad ya está' : `${here.length} unidades ya están`} en el lugar.</p>}
+    </div>
+    <div className="pf">
+      <button className="btn positive" style={{ flex: 1 }} disabled={!k} onClick={() => onConfirm(chosen)}><Icon name="send" />Confirmar y enviar {k} {k === 1 ? 'unidad' : 'unidades'}</button>
+      <button className="btn secondary" onClick={() => onConfirm([])}>Sin refuerzos</button>
+    </div>
+  </>);
 }
 
 /* Despacho: qué pasó con la alerta confirmada, paso a paso, a medida que llegan las unidades.
@@ -528,20 +528,6 @@ const VEHICLE_EV: Ev = { type: 'pendiente', caption: 'Foto del vehículo' };
 const PLATE_EV: Ev = { type: 'pendiente', caption: 'Recorte de la placa' };
 
 /** Miniaturas con lupa y giro, y el visor ampliado sobre el mapa (uno a la vez; el giro se comparte). */
-function useInspect(sub: string) {
-  const [rot, setRot] = useState<Record<string, number>>({});
-  const [open, setOpen] = useState<{ key: string; ev: Ev; title: string } | null>(null);
-  const setR = (key: string, deg: number) => setRot((r) => ({ ...r, [key]: deg }));
-  const thumb = (key: string, ev: Ev, title: string, tag?: ReactNode) => (
-    <Inspectable key={key} ev={ev} title={title} tag={tag} rotation={rot[key] ?? 0}
-      onRotate={() => setR(key, ((rot[key] ?? 0) + 90) % 360)} onExpand={() => setOpen({ key, ev, title })} />
-  );
-  const viewer = open && (
-    <ImageViewer ev={open.ev} title={open.title} sub={sub} rotation={rot[open.key] ?? 0} onRotate={(d) => setR(open.key, d)} onClose={() => setOpen(null)} />
-  );
-  return { thumb, viewer };
-}
-
 /* Alerta ya gestionada: arriba de todo, un sello de "resuelta" con quién, cuándo y cómo terminó.
    Confirmada: check verde (y cómo van los refuerzos). Descartada: check gris con el motivo. */
 function Resolved({ a }: { a: Alert }) {

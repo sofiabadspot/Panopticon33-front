@@ -177,3 +177,18 @@ function ClickIcon() {
 function ScrollIcon() {
   return <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="4" y="1.5" width="8" height="13" rx="4" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M8 4v3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>;
 }
+
+/** Miniaturas ampliables de una ficha y su visor: cada miniatura recuerda su giro; una sola abierta a la vez. */
+export function useInspect(sub: string) {
+  const [rot, setRot] = useState<Record<string, number>>({});
+  const [open, setOpen] = useState<{ key: string; ev: Ev; title: string } | null>(null);
+  const setR = (key: string, deg: number) => setRot((r) => ({ ...r, [key]: deg }));
+  const thumb = (key: string, ev: Ev, title: string, tag?: ReactNode) => (
+    <Inspectable key={key} ev={ev} title={title} tag={tag} rotation={rot[key] ?? 0}
+      onRotate={() => setR(key, ((rot[key] ?? 0) + 90) % 360)} onExpand={() => setOpen({ key, ev, title })} />
+  );
+  const viewer = open && (
+    <ImageViewer ev={open.ev} title={open.title} sub={sub} rotation={rot[open.key] ?? 0} onRotate={(d) => setR(open.key, d)} onClose={() => setOpen(null)} />
+  );
+  return { thumb, viewer };
+}

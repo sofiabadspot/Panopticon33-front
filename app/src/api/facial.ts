@@ -26,11 +26,24 @@ export const FACIAL_LISTS: Record<FacialList, { name: string; prefix: string }> 
 
 /** Una vez que un punto de control vio a la persona: dónde, cuándo, con qué puntaje y la captura. */
 export interface FacialDetection { at: number; cameraId: string; place: string; lat: number; lon: number; capture: string; score: number }
+/** Una foto de la persona en la lista: de dónde sale, de cuándo y cuánto se parece a la captura (0–1). */
+export interface ListPhoto { src: string; caption: string; year: string; score: number }
+/** Fuentes contra las que se puede verificar la identidad. Las del Gobierno llegan directo (no por Maic). */
+export const FACIAL_SOURCES: { name: string; state: 'conectada' | 'por_conectar' }[] = [
+  { name: 'Lista de la PNC', state: 'conectada' }, { name: 'DUI (RNPN)', state: 'conectada' },
+  { name: 'Aduanas', state: 'por_conectar' }, { name: 'Interpol', state: 'por_conectar' }, { name: 'PDI', state: 'por_conectar' }, { name: 'Fiscalía', state: 'por_conectar' },
+];
 export interface FacialMatch {
   id: string; spotbox: string;
   list: FacialList; listRef: string; reason: string; orderUntil: string | null;
-  /** Todas las fotos de la persona en la lista (no solo una). */
-  listPhotos: string[];
+  /** Datos mínimos de la persona en la lista (identificador, fotos y nombre). El documento va enmascarado. */
+  name: string; docId: string;
+  /** Todas las fotos de la persona en la lista (no solo una), cada una con cuánto se parece a la captura. */
+  listPhotos: ListPhoto[];
+  /** Señas particulares registradas en la lista, para comparar con lo que se ve en la captura. */
+  marks: string[];
+  /** Lo que se ve en la captura (ropa, accesorios, rasgos visibles). */
+  observed: string[];
   /** Reconstrucción 3D del perfil: ya existe y se afina con cada detección confirmada. */
   profile3d: { detections: number; updatedAt: number };
   scene: string;
@@ -52,17 +65,23 @@ const det = (k: number, at: number, score: number, capture = '/media/demo/face.j
 
 const seedMatches = (): FacialMatch[] => [
   { id: 'FC-7301', spotbox: 'SPOTBOX-PC-03', list: 'buscadas', listRef: 'LB-0291', reason: 'Orden de captura vigente', orderUntil: '15 ene 2027',
-    listPhotos: ['/media/demo/portrait.jpg', '/media/demo/id.jpg'], profile3d: { detections: 14, updatedAt: NOW - 2 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
+    name: 'Persona de ejemplo A', docId: 'DUI ••••••-3', marks: ['Estatura 1,74 m', 'Tatuaje en el antebrazo izquierdo', 'Cicatriz sobre la ceja derecha'], observed: ['Gorra oscura', 'Chaqueta gris', 'Barba corta'],
+    listPhotos: [{ src: '/media/demo/portrait.jpg', caption: 'Ficha policial', year: '2025', score: 0.96 }, { src: '/media/demo/id.jpg', caption: 'Foto del DUI', year: '2021', score: 0.91 }],
+    profile3d: { detections: 14, updatedAt: NOW - 2 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
     detections: [det(2, NOW - 19 * MIN, 0.88), det(5, NOW - 11 * MIN, 0.91), det(0, NOW - 3 * MIN, 0.96)],
     status: 'por_revisar', agent: 'Agente PNC-224 (punto de control)',
     timeline: [{ at: NOW - 19 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 88 %)' }, { at: NOW - 11 * MIN, label: 'Nueva detección (91 %)' }, { at: NOW - 3 * MIN, label: 'Nueva detección (96 %)' }] },
   { id: 'FC-7302', spotbox: 'SPOTBOX-PC-05', list: 'investigacion', listRef: 'LI-1187', reason: 'Seguimiento por investigación de extorsión', orderUntil: null,
-    listPhotos: ['/media/demo/id.jpg'], profile3d: { detections: 6, updatedAt: NOW - 9 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
+    name: 'Persona de ejemplo B', docId: 'DUI ••••••-8', marks: ['Estatura 1,68 m', 'Lunar en la mejilla izquierda'], observed: ['Camisa blanca', 'Lentes oscuros en la mano'],
+    listPhotos: [{ src: '/media/demo/id.jpg', caption: 'Foto del DUI', year: '2023', score: 0.89 }],
+    profile3d: { detections: 6, updatedAt: NOW - 9 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
     detections: [det(7, NOW - 9 * MIN, 0.89)],
     status: 'por_revisar', agent: 'Agente PNC-118 (punto de control)',
     timeline: [{ at: NOW - 9 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 89 %)' }] },
   { id: 'FC-7298', spotbox: 'SPOTBOX-PC-03', list: 'desaparecidas', listRef: 'LD-0044', reason: 'Denuncia de desaparición', orderUntil: null,
-    listPhotos: ['/media/demo/portrait.jpg'], profile3d: { detections: 3, updatedAt: NOW - 30 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
+    name: 'Persona de ejemplo C', docId: 'DUI ••••••-1', marks: ['Estatura 1,60 m'], observed: ['Mochila roja'],
+    listPhotos: [{ src: '/media/demo/portrait.jpg', caption: 'Foto aportada por la familia', year: '2026', score: 0.86 }],
+    profile3d: { detections: 3, updatedAt: NOW - 30 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
     detections: [det(3, NOW - 52 * MIN, 0.86)],
     status: 'descartada', reviewedBy: 'José Portillo', discardReason: 'No es la misma persona', agent: 'Agente PNC-224 (punto de control)',
     timeline: [{ at: NOW - 52 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 86 %)' }, { at: NOW - 50 * MIN, label: 'Descartada: No es la misma persona', by: 'José Portillo' }] },

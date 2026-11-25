@@ -7,9 +7,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { audit } from '../../api';
 import { ago, dateTime, hhmm, pct } from '../../api/format';
-import { FACIAL_DISCARD, FACIAL_LISTS, confirmFacial, discardFacial, lastDetection, scoreOf, useFacial, type FacialList, type FacialMatch } from '../../api/facial';
+import { FACIAL_DISCARD, FACIAL_LISTS, FACIAL_SOURCES, confirmFacial, discardFacial, lastDetection, scoreOf, useFacial, type FacialList, type FacialMatch } from '../../api/facial';
 import { useSession } from '../../shell/session';
 import { FaceCloud } from '../../ui/FaceCloud';
+import { useInspect } from '../../ui/ImageInspect';
 import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
 import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
@@ -77,12 +78,16 @@ export function FacialSheet({ id }: { id: string }) {
   const now = useNow(5000);
   const m = useFacial().find((x) => x.id === id);
   const [discarding, setDiscarding] = useState(false);
+  /* Comparar: la captura junto a una foto de la lista (la que más se parece, o la que elija el operador).
+     Toda imagen se amplía con un clic (zoom, mover, girar) en el visor sobre el mapa. */
+  const [cmp, setCmp] = useState(0);
+  const insp = useInspect(m ? `${m.listRef} · ${lastDetection(m).cameraId} · ${dateTime(lastDetection(m).at)}` : '');
 
   /* Recorrido de la persona: cada detección en el mapa, en orden, con su captura. Queda en la bitácora. */
   const [trace, setTrace] = useState(false);
   // Al abrir la coincidencia, el recorrido (o el punto, si hay una sola detección) arranca solo. Queda en la bitácora.
   useEffect(() => {
-    setDiscarding(false); setTrace(!!m);
+    setDiscarding(false); setTrace(!!m); setCmp(0);
     if (m) audit(user, 'Ver recorrido de persona', m.listRef, 'Al abrir la coincidencia');
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -103,27 +108,51 @@ export function FacialSheet({ id }: { id: string }) {
   const d = lastDetection(m);
   const L = FACIAL_LISTS[m.list];
   const toggleTrace = () => { if (!trace) audit(user, 'Ver recorrido de persona', m.listRef, `${m.detections.length} detecciones en el mapa`); setTrace(!trace); };
-  const fig = (body: React.ReactNode, cap: string, sub?: string) => (
-    <figure style={{ margin: 0 }}>
-      <div className="evidence" style={{ aspectRatio: '3 / 4' }}>{body}</div>
-      <figcaption className="caption" style={{ marginTop: 6, textAlign: 'center' }}>{cap}{sub && <><br /><span className="muted">{sub}</span></>}</figcaption>
-    </figure>
-  );
+  const photos = [...m.listPhotos].sort((x, y) => y.score - x.score);
+  const ph = photos[Math.min(cmp, photos.length - 1)];
   return (
     <>
       <SheetHead kicker={<><span className="mono">{m.id}</span>·<span>{ago(d.at, now)}</span></>} title={<>Coincidencia {pct(scoreOf(m))}</>} sub={`${L.name} · ${m.listRef} · ${d.place}`}
         aside={statusChip(m)} />
+      {insp.viewer}
       <div className="pb">
         <div className="callout"><Icon name="info" /><span className="grow">Una coincidencia no es una identificación. Tú tienes la última palabra: confirma solo si es la persona.</span></div>
-        <div className="grid cols-2" style={{ gap: 8 }}>
-          {fig(<img src={d.capture} alt="Captura de la detección más reciente" />, 'Captura', `${d.cameraId} · ${hhmm(d.at)}`)}
-          {fig(<FaceCloud seed={[...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7)} label={`Reconstrucción 3D del perfil ${m.listRef}`} />, 'Reconstrucción 3D', `Afinada con ${m.profile3d.detections} detecciones`)}
+        <section className="fc-compare" aria-label="Comparar la captura con la lista">
+          <div className="fc-pair">
+            <figure>
+              {insp.thumb('captura', { type: 'imagen', src: d.capture, caption: 'Captura de la detección' }, 'Captura', <span className="chip"><Icon name="videocam" />{d.cameraId}</span>)}
+              <figcaption className="caption">Captura · {hhmm(d.at)}</figcaption>
+            </figure>
+            <figure>
+              {insp.thumb('lista-' + ph.src, { type: 'imagen', src: ph.src, caption: ph.caption }, `${ph.caption} (${ph.year})`, <span className="chip">{pct(ph.score)}</span>)}
+              <figcaption className="caption">{ph.caption} · {ph.year}</figcaption>
+            </figure>
+          </div>
+          {photos.length > 1 && (
+            <div className="fc-strip" role="group" aria-label={`Fotos en la lista (${photos.length})`}>
+              {photos.map((x, i) => (
+                <button key={x.src + i} className={i === cmp ? 'on' : ''} aria-pressed={i === cmp} onClick={() => setCmp(i)} title={`Comparar con ${x.caption.toLowerCase()} (${x.year})`}>
+                  <img src={x.src} alt="" /><span>{x.caption}</span><b className="mono">{pct(x.score)}</b>
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="caption">Clic en una imagen para ampliarla.{photos.length > 1 ? ` La lista tiene ${photos.length} fotos: elige con cuál comparar.` : ''}</p>
+        </section>
+        <div className="box">
+          <div className="bh"><h3>Reconstrucción 3D</h3><span className="sub">Afinada con {m.profile3d.detections} detecciones</span></div>
+          <div className="bb fc-3d"><FaceCloud seed={[...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7)} label={`Reconstrucción 3D del perfil ${m.listRef}`} /></div>
         </div>
         <div className="box">
-          <div className="bh"><h3>Fotos en la lista</h3><span className="sub">{m.listPhotos.length}</span></div>
-          <div className="bb fc-photos">{m.listPhotos.map((src, i) => <img key={i} src={src} alt={`Foto ${i + 1} de ${m.listRef} en la lista`} />)}</div>
+          <div className="bh"><h3>Señas para confirmar</h3></div>
+          <div className="bb fc-marks">
+            <div><h4>En la lista</h4><ul>{m.marks.map((x) => <li key={x}>{x}</li>)}</ul></div>
+            <div><h4>En la captura</h4><ul>{m.observed.map((x) => <li key={x}>{x}</li>)}</ul></div>
+          </div>
         </div>
         <div className="box"><div className="bb" style={{ paddingTop: 12 }}><dl className="details">
+          <dt>Nombre</dt><dd>{m.name}</dd>
+          <dt>Documento</dt><dd className="mono">{m.docId}</dd>
           <dt>Lista</dt><dd>{L.name} · <span className="mono">{m.listRef}</span></dd>
           <dt>Motivo</dt><dd>{m.reason}</dd>
           {m.orderUntil && <><dt>Vigencia de la orden</dt><dd>hasta el {m.orderUntil}</dd></>}
@@ -131,6 +160,12 @@ export function FacialSheet({ id }: { id: string }) {
           <dt>Procesado en</dt><dd className="mono">{m.spotbox}</dd>
           <dt>Agente</dt><dd>{m.agent}</dd>
         </dl></div></div>
+        <div className="box">
+          <div className="bh"><h3>Fuentes para verificar</h3></div>
+          <ul className="bb fc-src">
+            {FACIAL_SOURCES.map((s) => <li key={s.name}><span>{s.name}</span><span className={`chip ${s.state === 'conectada' ? 'ok' : 'outline'}`}>{s.state === 'conectada' ? 'Conectada' : 'Por conectar'}</span></li>)}
+          </ul>
+        </div>
         <div className="box flush">
           <div className="bh"><h3>Detecciones</h3><span className="sub">{m.detections.length}</span>
             <button className="btn secondary sm" style={{ marginLeft: 'auto' }} onClick={toggleTrace}><Icon name={trace ? 'visibility_off' : 'route'} />{trace ? 'Ocultar recorrido' : m.detections.length > 1 ? 'Ver recorrido en el mapa' : 'Ver en el mapa'}</button>
