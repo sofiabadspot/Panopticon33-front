@@ -5,7 +5,7 @@
 import { type ReactNode, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { dateShort, hhmm, pct } from '../../api/format';
-import { FACIAL_LISTS, TRAIT_GROUPS, lastDetection, type FacialMatch, type Proof, type ProofKind, type TraitGroup } from '../../api/facial';
+import { FACIAL_LISTS, scoreMeaning, TRAIT_GROUPS, lastDetection, type FacialMatch, type Proof, type ProofKind, type TraitGroup } from '../../api/facial';
 import { Artifact, type Card } from './EvidenceWall';
 import { PersonMap } from './PersonMap';
 import { Icon, useNow } from '../../ui/kit';
@@ -219,8 +219,9 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
           <h1>{m.name}</h1>
           <span className="ds-reason">{m.reason}{m.orderUntil ? ` · vigente hasta el ${m.orderUntil}` : ''}</span>
         </div>
-        <div className="ds-score" style={{ '--p': `${Math.round(best * 100)}` } as CSSProperties} aria-label={`Mejor coincidencia de hoy ${pct(best)}`}>
-          <b className="mono">{Math.round(best * 100)}<small>%</small></b><span>mejor de hoy</span>
+        <div className="ds-score" aria-label={`Mejor coincidencia de hoy ${pct(best)}, ${scoreMeaning(best).band.toLowerCase()}`}>
+          <span><b className="mono">{pct(best)}</b><span className={`chip ${scoreMeaning(best).band === 'Alta' ? 'ok' : scoreMeaning(best).band === 'Baja' ? 'media' : ''}`}>{scoreMeaning(best).band}</span></span>
+          <small>mejor coincidencia de hoy</small>
         </div>
         <div className="ds-act">
           {canDecide && <>
