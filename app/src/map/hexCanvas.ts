@@ -62,7 +62,8 @@ export const unmeasured = (d: Pick<HexData, 'zones' | 'status'>) => d.zones.filt
 export interface HexColors { positive: string; alert: string; negative: string }
 const rgb = (hex: string) => { const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map((x) => x + x).join('') : h.slice(0, 6), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 /** Opacidad de personas y alertas según el valor: casi nada en el borde de la mancha, más al centro. */
-const fade = (w: number) => { const P: [number, number][] = [[0, 0], [0.12, 0.12], [0.3, 0.3], [0.7, 0.5], [1, 0.62]]; for (let i = 1; i < P.length; i++) if (w <= P[i][0]) { const [a, oa] = P[i - 1], [b, ob] = P[i]; return oa + ((w - a) / (b - a)) * (ob - oa); } return 0.62; };
+/* Sube rápido al principio: con poca opacidad el amarillo se mezcla con el mapa oscuro y se ve gris. */
+const fade = (w: number) => { const P: [number, number][] = [[0, 0], [0.04, 0.16], [0.15, 0.34], [0.4, 0.46], [0.7, 0.56], [1, 0.66]]; for (let i = 1; i < P.length; i++) if (w <= P[i][0]) { const [a, oa] = P[i - 1], [b, ob] = P[i]; return oa + ((w - a) / (b - a)) * (ob - oa); } return 0.66; };
 /** Color de una celda según la lectura y su valor (ver hexValues).
     · Personas y alertas: amarillo (poco) → rojo (mucho), desvaneciéndose hacia el borde.
     · Cobertura: verde (llega en FAST_MIN o menos), amarillo (hasta NEAR_MIN), rojo (más), parejo. */

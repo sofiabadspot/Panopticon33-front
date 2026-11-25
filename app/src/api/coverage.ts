@@ -72,7 +72,7 @@ const camSeed = (id: string) => { let h = 7; for (const ch of id) h = (h * 31 + 
     comerciales, mercados, avenidas) hasta que el backend mande personas por celda de toda la ciudad. */
 const CITY: Source[] = (() => {
   let s = 20261125; const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-  return Array.from({ length: 90 }, () => ({ lon: -89.31 + r() * 0.22, lat: 13.62 + r() * 0.16, a: 0.03 + 0.3 * r() ** 2.5, sigma: 300 + 800 * r() }));
+  return Array.from({ length: 110 }, () => ({ lon: -89.31 + r() * 0.22, lat: 13.62 + r() * 0.16, a: 0.08 + 0.42 * r() ** 1.6, sigma: 400 + 900 * r() }));
 })();
 /** Cámara peatonal o mixta que funciona: la gente que ve en la calle. SIMULADO: las cámaras todavía
     no informan conteo. */
