@@ -9,7 +9,7 @@
    · Si el 911 confirma la identidad, se genera la alerta y se avisa al agente del punto de control; a
      Maic le llega el evento por el backend, sin que el operador haga nada. Si no, la descarta con un motivo.
 
-   Datos de ejemplo ficticios (media/demo, aportados por SPOTVISION).
+   Datos de ejemplo ficticios y sin imágenes: las capturas y fotos se muestran como lugar reservado.
    Endpoints previstos: GET /v1/checkpoints/matches · POST /v1/checkpoints/matches/{id}/confirm · /discard */
 import { useSyncExternalStore } from 'react';
 import { audit, snapshot, syncFaceAlerts } from './index';
@@ -78,7 +78,7 @@ export const scoreOf = (m: FacialMatch) => lastDetection(m).score;
 const NOW = Date.now(), MIN = 60_000, DAY = 24 * 60 * MIN;
 /** Cámaras del sector donde hay puntos de control (las peatonales y mixtas que funcionan). */
 const spots = () => snapshot().cameras.filter((c) => c.kind !== 'vehicular' && c.status === 'operativa');
-const det = (k: number, at: number, score: number, capture = '/media/demo/face.jpg'): FacialDetection => {
+const det = (k: number, at: number, score: number, capture = ''): FacialDetection => {
   const cams = spots(); const c = cams[k % cams.length];
   return { at, cameraId: c.id, place: c.street, lat: c.lat, lon: c.lon, capture, score };
 };
@@ -122,8 +122,8 @@ const rawMatches = (): FacialMatch[] => [
       { at: NOW - 2 * DAY, label: 'Otra vez con la persona sin identificar', place: 'Plaza Salvador del Mundo', src: 'CAM-014', links: ['l1', 'p2'] },
       { at: NOW - 19 * MIN, label: 'Baja del pickup frente al punto de control', place: 'Punto de control', src: 'SPOTBOX-PC-03', links: ['v1'] },
     ],
-    listPhotos: [{ src: '/media/demo/portrait.jpg', caption: 'Ficha policial', year: '2025', score: 0.96 }, { src: '/media/demo/id.jpg', caption: 'Foto del DUI', year: '2021', score: 0.91 }],
-    profile3d: { detections: 14, updatedAt: NOW - 2 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
+    listPhotos: [{ src: '', caption: 'Ficha policial', year: '2025', score: 0.96 }, { src: '', caption: 'Foto del DUI', year: '2021', score: 0.91 }],
+    profile3d: { detections: 14, updatedAt: NOW - 2 * 24 * 60 * MIN }, scene: '',
     detections: [det(4, NOW - 190 * MIN, 0.79), det(6, NOW - 105 * MIN, 0.84), det(2, NOW - 19 * MIN, 0.88), det(5, NOW - 11 * MIN, 0.91), det(0, NOW - 3 * MIN, 0.96)],
     status: 'por_revisar', agent: 'Agente PNC-224 (punto de control)',
     timeline: [{ at: NOW - 190 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 79 %)' }, { at: NOW - 105 * MIN, label: 'Nueva detección (84 %)' }, { at: NOW - 19 * MIN, label: 'Nueva detección (88 %)' }, { at: NOW - 11 * MIN, label: 'Nueva detección (91 %)' }, { at: NOW - 3 * MIN, label: 'Nueva detección (96 %)' }] },
@@ -147,8 +147,8 @@ const rawMatches = (): FacialMatch[] => [
       { at: NOW - 4 * DAY, label: 'Detectada junto a LI-1102', place: 'Calle el Progreso', src: 'CAM-022', links: ['l1', 'p1'] },
       { at: NOW - 1 * DAY, label: 'Detectada', place: 'Calle el Progreso', src: 'CAM-023', links: ['l1'] },
     ],
-    listPhotos: [{ src: '/media/demo/id.jpg', caption: 'Foto del DUI', year: '2023', score: 0.89 }],
-    profile3d: { detections: 6, updatedAt: NOW - 9 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
+    listPhotos: [{ src: '', caption: 'Foto del DUI', year: '2023', score: 0.89 }],
+    profile3d: { detections: 6, updatedAt: NOW - 9 * 24 * 60 * MIN }, scene: '',
     detections: [det(7, NOW - 9 * MIN, 0.89)],
     status: 'por_revisar', agent: 'Agente PNC-118 (punto de control)',
     timeline: [{ at: NOW - 9 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 89 %)' }] },
@@ -165,8 +165,8 @@ const rawMatches = (): FacialMatch[] => [
       { at: NOW - 4 * DAY, label: 'La familia la ve por última vez', place: 'Avenida Olímpica', src: 'Denuncia', links: ['l1'] },
       { at: NOW - 3 * DAY, label: 'Denuncia de desaparición', src: 'PNC', links: ['c1'] },
     ],
-    listPhotos: [{ src: '/media/demo/portrait.jpg', caption: 'Foto aportada por la familia', year: '2026', score: 0.86 }],
-    profile3d: { detections: 3, updatedAt: NOW - 30 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
+    listPhotos: [{ src: '', caption: 'Foto aportada por la familia', year: '2026', score: 0.86 }],
+    profile3d: { detections: 3, updatedAt: NOW - 30 * 24 * 60 * MIN }, scene: '',
     detections: [det(3, NOW - 52 * MIN, 0.86)],
     status: 'descartada', reviewedBy: 'José Portillo', discardReason: 'No es la misma persona', agent: 'Agente PNC-224 (punto de control)',
     timeline: [{ at: NOW - 52 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 86 %)' }, { at: NOW - 50 * MIN, label: 'Descartada: No es la misma persona', by: 'José Portillo' }] },
@@ -194,7 +194,7 @@ function toAlert(m: FacialMatch): Alert {
   return placeAlert({
     id: m.id, kind: 'persona_en_lista', severity: SEV[m.list], createdAt: first.at, updatedAt: d.at, zoneId: null, cameraId: d.cameraId, lat: d.lat, lon: d.lon,
     rule: { id: 'R-FACIAL', name: `Persona en lista · ${FACIAL_LISTS[m.list].name}`, threshold: 'Puntaje ≥ 85 %', measured: `Puntaje ${Math.round(d.score * 100)} %`, persistence: 'Inmediata' },
-    observations: m.detections.length, evidence: { type: 'imagen', src: d.capture, caption: 'Captura del punto de control' },
+    observations: m.detections.length, evidence: { type: 'pendiente', caption: 'Captura del punto de control' },
     review: m.status, reviewedBy: m.reviewedBy, discardReason: m.discardReason, dispatch: null, timeline: m.timeline,
   }, snapshot().zones);
 }

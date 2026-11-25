@@ -11,7 +11,7 @@ import { FACIAL_DISCARD, FACIAL_LISTS, FACIAL_SOURCES, confirmFacial, discardFac
 import { useSession } from '../../shell/session';
 import { FaceCloud } from '../../ui/FaceCloud';
 import { useInspect } from '../../ui/ImageInspect';
-import { FacialDossier, Traits } from './FacialDossier';
+import { FacialDossier, Shot, Traits } from './FacialDossier';
 import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
 import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
@@ -59,7 +59,7 @@ export function FacialPanel() {
           return (
             <li key={m.id}>
               <button className={`item ${c.sheet?.k === 'facial' && c.sheet.id === m.id ? 'sel' : ''} ${m.status === 'descartada' ? 'done' : ''}`} style={{ gridTemplateColumns: '44px 1fr auto' }} onClick={() => c.open({ k: 'facial', id: m.id })}>
-                <img src={d.capture} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }} />
+                <span className="fc-ph" style={{ width: 44, height: 44 }}><Shot /></span>
                 <div><div className="t">Coincidencia {pct(d.score)}</div><div className="s">{FACIAL_LISTS[m.list].name} · {m.listRef}</div><div className="s">{d.place}{m.detections.length > 1 ? ` · ${m.detections.length} detecciones` : ''}</div></div>
                 <div className="r"><span>{ago(d.at, now)}</span>{statusChip(m)}</div>
               </button>
@@ -96,7 +96,7 @@ export function FacialSheet({ id }: { id: string }) {
   useEffect(() => {
     if (!trace || !m) return;
     const stops: RouteStop[] = m.detections.map((d, i) => ({ lat: d.lat, lon: d.lon, label: String(i + 1), time: hhmm(d.at), title: `${dateTime(d.at)} · ${d.cameraId} · ${d.place}`,
-      snap: { camera: d.cameraId, street: d.place, evidence: { type: 'imagen', src: d.capture, caption: 'Captura de la detección' }, confidence: d.score } }));
+      snap: { camera: d.cameraId, street: d.place, evidence: { type: 'pendiente', caption: 'Captura de la detección' }, confidence: d.score } }));
     // Con una sola detección no hay recorrido: se marca el punto y el mapa va hacia él.
     if (stops.length === 1) {
       const s = stops[0];
@@ -124,11 +124,11 @@ export function FacialSheet({ id }: { id: string }) {
         <section className="fc-compare" aria-label="Comparar la captura con la lista">
           <div className="fc-pair">
             <figure>
-              {insp.thumb('captura', { type: 'imagen', src: d.capture, caption: 'Captura de la detección' }, 'Captura', <span className="chip"><Icon name="videocam" />{d.cameraId}</span>)}
+              {insp.thumb('captura', { type: 'pendiente', caption: 'Captura de la detección' }, 'Captura', <span className="chip"><Icon name="videocam" />{d.cameraId}</span>)}
               <figcaption className="caption">Captura · {hhmm(d.at)}</figcaption>
             </figure>
             <figure>
-              {insp.thumb('lista-' + ph.src, { type: 'imagen', src: ph.src, caption: ph.caption }, `${ph.caption} (${ph.year})`, <span className="chip">{pct(ph.score)}</span>)}
+              {insp.thumb('lista-' + ph.src, { type: 'pendiente', caption: ph.caption }, `${ph.caption} (${ph.year})`, <span className="chip">{pct(ph.score)}</span>)}
               <figcaption className="caption">{ph.caption} · {ph.year}</figcaption>
             </figure>
           </div>
@@ -136,7 +136,7 @@ export function FacialSheet({ id }: { id: string }) {
             <div className="fc-strip" role="group" aria-label={`Fotos en la lista (${photos.length})`}>
               {photos.map((x, i) => (
                 <button key={x.src + i} className={i === cmp ? 'on' : ''} aria-pressed={i === cmp} onClick={() => setCmp(i)} title={`Comparar con ${x.caption.toLowerCase()} (${x.year})`}>
-                  <img src={x.src} alt="" /><span>{x.caption}</span><b className="mono">{pct(x.score)}</b>
+                  <span className="fc-ph"><Shot /></span><span>{x.caption}</span><b className="mono">{pct(x.score)}</b>
                 </button>
               ))}
             </div>
@@ -174,14 +174,13 @@ export function FacialSheet({ id }: { id: string }) {
           <ul className="list bb">
             {[...m.detections].reverse().map((x, i) => (
               <li key={x.at}><div className="item" style={{ gridTemplateColumns: '36px 1fr auto', cursor: 'default' }}>
-                <img src={x.capture} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 'var(--radius-xs)' }} />
+                <span className="fc-ph" style={{ width: 36, height: 36 }}><Shot /></span>
                 <div><div className="t mono">{x.cameraId}{i === 0 && <span className="muted"> · la más reciente</span>}</div><div className="s">{x.place}</div></div>
                 <div className="r"><span className="mono">{dateTime(x.at)}</span><span>{pct(x.score)}</span></div>
               </div></li>
             ))}
           </ul>
         </div>
-        <div className="box"><div className="bh"><h3>Contexto de la cámara</h3></div><div className="bb"><img src={m.scene} alt="Escena del punto de control" style={{ width: '100%', borderRadius: 'var(--radius-md)', display: 'block' }} /></div></div>
         <div className="box"><div className="bh"><h3>Estados</h3></div><div className="bb"><ol className="timeline">
           {m.timeline.map((t, i) => <li key={i} className={i === m.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
         </ol></div></div>

@@ -10,12 +10,13 @@
      Al elegir una se ve su ficha: datos, su historia con la persona y con qué otras conexiones coincide.
    · Detecciones, datos y fuentes. El 911 decide desde acá también.
    Esc cierra el expediente (no la ficha). Todo es de ejemplo hasta que lleguen los datos reales. */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { dateShort, dateTime, hhmm, pct } from '../../api/format';
-import { FACIAL_LISTS, FACIAL_SOURCES, TRAIT_GROUPS, lastDetection, type FacialMatch, type LinkKind, type PersonLink, type TraitGroup } from '../../api/facial';
+import { dateTime, hhmm, pct } from '../../api/format';
+import { FACIAL_LISTS, FACIAL_SOURCES, TRAIT_GROUPS, lastDetection, type FacialMatch, type LinkKind, type TraitGroup } from '../../api/facial';
 import { FaceCloud } from '../../ui/FaceCloud';
-import { Icon, useNow } from '../../ui/kit';
+import { FaceTrail } from './FaceTrail';
+import { Icon } from '../../ui/kit';
 
 const KIND: Record<LinkKind, { label: string; one: string; icon: string }> = {
   vehiculo: { label: 'Vehículos', one: 'Vehículo', icon: 'directions_car' },
@@ -24,15 +25,19 @@ const KIND: Record<LinkKind, { label: string; one: string; icon: string }> = {
   caso: { label: 'Casos', one: 'Caso', icon: 'gavel' },
 };
 // Mismo día en hora de El Salvador (no en UTC).
-const dayOf = (t: number) => dateShort(t);
-/** Dos conexiones van juntas si comparten algún hecho de la historia. */
-const together = (m: FacialMatch, a: string, b: string) => m.story.some((e) => e.links.includes(a) && e.links.includes(b));
-const dm = (t: number) => dateShort(t).replace(/\s*de\s*/g, ' ').replace(/\s\d{4}$/, '');
 const strength = (w: number) => (w >= 0.75 ? 'Vínculo fuerte' : w >= 0.5 ? 'Vínculo medio' : 'Vínculo débil');
+
+/** Lugar reservado para una imagen que todavía no hay (el prototipo no usa fotos ficticias). */
+export function Shot({ label }: { label?: string }) {
+  return <span className="shot"><span className="ph-ev"><img src="/assets/logo-spotvision-bn.png" alt="" />{label && <b>{label}</b>}</span></span>;
+}
 
 /** Imagen que se amplía ahí mismo: clic acerca (2,5×) hacia donde está el puntero, mover la recorre,
     la rueda cambia el aumento, otro clic vuelve. */
 function ZoomImg({ src, alt }: { src: string; alt: string }) {
+  return src ? <ZoomReal src={src} alt={alt} /> : <span className="ds-zoom ds-empty"><Shot label={alt} /></span>;
+}
+function ZoomReal({ src, alt }: { src: string; alt: string }) {
   const [z, setZ] = useState(1);
   const [o, setO] = useState({ x: 50, y: 50 });
   const btn = useRef<HTMLButtonElement>(null);
@@ -54,123 +59,81 @@ function ZoomImg({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-/** Conexiones: la persona al centro, de ella salen los cuatro grupos (vehículos, personas, lugares,
-    casos) y de cada grupo lo que tiene vinculado. El grosor de la línea es la fuerza del vínculo; las
-    líneas punteadas unen conexiones que aparecen el mismo día (por ejemplo, el vehículo y el coimputado
-    vistos juntos en el mercado). Elegir un nodo (clic, Enter o Espacio) abre su ficha al costado: datos,
-    su historia con la persona y con qué otras conexiones coincide en fecha. */
+/** Conexiones: la persona al centro y, alrededor, un bloque por grupo (vehículos, personas, lugares,
+    casos) con lo que tiene vinculado adentro, del vínculo más fuerte al más débil. Elegir una conexión
+    muestra sus datos ahí mismo; otra vez la cierra. */
 function Connections({ m, sel, setSel }: { m: FacialMatch; sel: string | null; setSel: (id: string | null) => void }) {
   const order = Object.keys(KIND) as LinkKind[];
-  const kinds = order.filter((k) => m.links.some((l) => l.kind === k));
-  const byWeight = useMemo(() => [...m.links].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || b.weight - a.weight), [m.links]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [hover, setHover] = useState<string | null>(null);
-  // Ubicación: cada grupo en su cuadrante (vehículos arriba a la izquierda, personas arriba a la derecha,
-  // lugares abajo a la izquierda, casos abajo a la derecha); sus conexiones se abren en abanico hacia afuera.
-  const W = 800, H = 330, cx = W / 2, cy = H / 2, PAD = 175;
-  const ANG: Record<LinkKind, number> = { vehiculo: -150, persona: -30, lugar: 150, caso: 30 };
-  const lay = useMemo(() => {
-    const hubs = kinds.map((k) => { const a = (ANG[k] * Math.PI) / 180; return { k, x: cx + Math.cos(a) * 120, y: cy + Math.sin(a) * 78 }; });
-    const leaves: { l: PersonLink; x: number; y: number; hx: number; hy: number; left: boolean }[] = [];
-    hubs.forEach((h) => {
-      const list = byWeight.filter((l) => l.kind === h.k);
-      list.forEach((l, j) => {
-        const a = ((ANG[h.k] + (j - (list.length - 1) / 2) * 26) * Math.PI) / 180;
-        const x = Math.max(PAD, Math.min(W - PAD, cx + Math.cos(a) * 250));
-        const y = Math.max(22, Math.min(H - 22, cy + Math.sin(a) * 135));
-        leaves.push({ l, x, y, hx: h.x, hy: h.y, left: x < cx });
-      });
-    });
-    // Pares que comparten algún hecho de la historia (una vez por par).
-    const pairs: { a: number; b: number }[] = [];
-    leaves.forEach((p, i) => leaves.forEach((q, k) => { if (k > i && together(m, p.l.id, q.l.id)) pairs.push({ a: i, b: k }); }));
-    return { hubs, leaves, pairs };
-  }, [m.links, byWeight]); // eslint-disable-line react-hooks/exhaustive-deps
   const l = sel ? m.links.find((v) => v.id === sel) : undefined;
-  const focus = hover ?? l?.id;
-  const shown = (_k: LinkKind) => true;
-  const short = (s: string) => (s.length > 25 ? s.slice(0, 24) + '…' : s);
+  // Ubicación fija: vehículos arriba a la izquierda, personas arriba a la derecha, lugares abajo a la
+  // izquierda, casos abajo a la derecha. La línea de cada bloque sale de la persona.
+  const POS: Record<LinkKind, [number, number]> = { vehiculo: [22, 26], persona: [78, 26], lugar: [22, 74], caso: [78, 74] };
   return (
-    <div className="cx-main">
-        <svg className="cx-graph" viewBox={`0 0 ${W} ${H}`} role="group" aria-label={`Conexiones de ${m.listRef}`}>
-          <defs><clipPath id={`ds-face-${m.id}`}><circle cx={cx} cy={cy} r="28" /></clipPath></defs>
-          {lay.pairs.map(({ a, b }) => {
-            const p = lay.leaves[a], q = lay.leaves[b];
-            const on = focus === p.l.id || focus === q.l.id;
-            if (!on) return null;
-            const mx = (p.x + q.x) / 2 + (cy - (p.y + q.y) / 2) * 0.25, my = (p.y + q.y) / 2 + ((p.x + q.x) / 2 - cx) * -0.08;
-            return <path key={`x${a}-${b}`} d={`M${p.x} ${p.y} Q${mx} ${my} ${q.x} ${q.y}`} className={`cx-co ${shown(p.l.kind) && shown(q.l.kind) ? '' : 'dim'}`} />;
-          })}
-          {lay.hubs.map((h) => <line key={'h' + h.k} x1={cx} y1={cy} x2={h.x} y2={h.y} className={`cx-trunk ${l?.kind === h.k ? 'on' : ''} ${shown(h.k) ? '' : 'dim'}`} />)}
-          {lay.leaves.map((n) => (
-            <line key={'e' + n.l.id} x1={n.hx} y1={n.hy} x2={n.x} y2={n.y} style={{ strokeWidth: 0.8 + n.l.weight * 2.6 }}
-              className={`cx-edge ${focus === n.l.id ? 'on' : ''} ${shown(n.l.kind) ? '' : 'dim'}`} />
-          ))}
-          <circle cx={cx} cy={cy} r="40" className="cx-pulse" />
-          <circle cx={cx} cy={cy} r="34" className="cx-ring" />
-          {m.listPhotos[0] && <image href={m.listPhotos[0].src} x={cx - 28} y={cy - 28} width="56" height="56" preserveAspectRatio="xMidYMid slice" clipPath={`url(#ds-face-${m.id})`} aria-hidden />}
-          {lay.hubs.map((h) => (
-            <g key={'g' + h.k} className={`cx-hub ${shown(h.k) ? '' : 'dim'}`} transform={`translate(${h.x} ${h.y})`} aria-hidden>
-              <circle r="13" />
-              <foreignObject x="-8" y="-8" width="16" height="16"><Icon name={KIND[h.k].icon} /></foreignObject>
-              <text y={h.y < cy ? -19 : 27} textAnchor="middle">{KIND[h.k].label.toUpperCase()}</text>
-            </g>
-          ))}
-          <g role="list">{lay.leaves.map((n) => {
-            const on = l?.id === n.l.id;
-            const act = () => setSel(on ? null : n.l.id);
-            return (
-              <g key={'n' + n.l.id} role="listitem" transform={`translate(${n.x} ${n.y})`}
-                className={`cx-node ${on ? 'sel' : ''} ${hover === n.l.id ? 'on' : ''} ${shown(n.l.kind) ? '' : 'dim'}`}>
-                <g role="button" tabIndex={shown(n.l.kind) ? 0 : -1} aria-pressed={on} aria-label={`${KIND[n.l.kind].one}: ${n.l.label}, ${n.l.sub}. ${strength(n.l.weight)}.`}
-                  onClick={act} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(); } }}
-                  onMouseEnter={() => setHover(n.l.id)} onMouseLeave={() => setHover(null)} onFocus={() => setHover(n.l.id)} onBlur={() => setHover(null)}>
-                  <circle r="20" className="cx-hit" />
-                  <circle r={10 + n.l.weight * 6} className="cx-dotc" />
-                  <foreignObject x="-8" y="-8" width="16" height="16"><Icon name={KIND[n.l.kind].icon} /></foreignObject>
-                  <text className="cx-lbl" textAnchor={n.left ? 'end' : 'start'} x={n.left ? -24 : 24} dy="-1">{short(n.l.label)}</text>
-                  <text className="cx-lbl2" textAnchor={n.left ? 'end' : 'start'} x={n.left ? -24 : 24} dy="12">{n.l.sub.length > 34 ? n.l.sub.slice(0, 33) + '…' : n.l.sub}</text>
-                </g>
-              </g>
-            );
-          })}</g>
-        </svg>
-        <p className="ds-hint">Toca una conexión: en la historia se marcan sus hechos. La línea punteada la une con las que estuvieron en el mismo hecho.</p>
+    <div className="cn">
+      <svg className="cn-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+        {order.map((k) => <line key={k} x1="50" y1="50" x2={POS[k][0]} y2={POS[k][1]} className={l?.kind === k ? 'on' : ''} />)}
+      </svg>
+      <div className="cn-me">
+        <span className="cn-face"><Icon name="person" /></span>
+        <b>{m.name}</b>
+        <small className="mono">{m.listRef} · {m.links.length} vínculos</small>
       </div>
+      {order.map((k) => {
+        const list = m.links.filter((v) => v.kind === k).sort((a, b) => b.weight - a.weight);
+        return (
+          <section key={k} className={`cn-g g-${k} ${l?.kind === k ? 'on' : ''}`} aria-label={`${KIND[k].label}: ${list.length}`}>
+            <h3><Icon name={KIND[k].icon} />{KIND[k].label}<span className="mono">{list.length}</span></h3>
+            {list.length ? list.map((v) => (
+              <button key={v.id} className={`cn-item ${v.id === sel ? 'on' : ''}`} aria-pressed={v.id === sel} onClick={() => setSel(v.id === sel ? null : v.id)}
+                title={`${strength(v.weight)} · ${v.events.length} ${v.events.length === 1 ? 'hecho' : 'hechos'}`}>
+                <span className="cn-w" aria-hidden><i style={{ height: `${v.weight * 100}%` }} /></span>
+                <span><b>{v.label}</b><small>{v.sub}</small>
+                  {v.id === sel && <dl className="cn-facts">{v.facts.map(([k, val]) => <Fragment key={k}><dt>{k}</dt><dd>{val}</dd></Fragment>)}</dl>}
+                </span>
+              </button>
+            )) : <p className="cn-none">Sin vínculos</p>}
+          </section>
+        );
+      })}
+    </div>
   );
 }
 
-/** La historia de la persona en orden de fecha. Cada hecho dice qué involucra; si hay una conexión
-    elegida, se marcan sus hechos y el resto queda atenuado. Tocar una etiqueta elige esa conexión. */
-function History({ m, now, sel, setSel }: { m: FacialMatch; now: number; sel: string | null; setSel: (id: string | null) => void }) {
-  const l = sel ? m.links.find((v) => v.id === sel) : undefined;
+/** Metadatos de la persona en un solo lugar y con un solo formato: identidad, señas (lo que dice la
+    lista y lo que se ve en la captura) y fuentes. */
+function Meta({ m }: { m: FacialMatch }) {
+  const L = FACIAL_LISTS[m.list];
+  const groups = (Object.keys(TRAIT_GROUPS) as TraitGroup[]).filter((g) => m.traits.some((x) => x.group === g));
   return (
-    <>
-      {l && (
-        <div className="hs-sel">
-          <Icon name={KIND[l.kind].icon} /><span><b>{l.label}</b> · {l.sub}</span>
-          <button className="iconbtn" aria-label="Ver toda la historia" onClick={() => setSel(null)}><Icon name="close" /></button>
-        </div>
-      )}
-      <ol className="hs">
-        {m.story.map((e, i) => {
-          const on = !!l && e.links.includes(l.id);
-          return (
-            <li key={i} className={l ? (on ? 'on' : 'off') : ''}>
-              <span className="hs-d mono">{dayOf(e.at) === dayOf(now) ? `hoy ${hhmm(e.at)}` : dm(e.at)}</span>
-              <div>
-                <b>{e.label}</b>
-                {(e.place || e.src) && <small>{[e.place, e.src].filter(Boolean).join(' · ')}</small>}
-                <span className="hs-tags">
-                  {e.links.map((id) => m.links.find((v) => v.id === id)).filter((v): v is PersonLink => !!v).map((v) => (
-                    <button key={v.id} className={v.id === sel ? 'on' : ''} aria-pressed={v.id === sel} onClick={() => setSel(v.id === sel ? null : v.id)}><Icon name={KIND[v.kind].icon} />{v.label}</button>
-                  ))}
-                </span>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    </>
+    <div className="md">
+      <h3>Identidad</h3>
+      <dl>
+        <dt>Nombre</dt><dd>{m.name}</dd>
+        <dt>Documento</dt><dd className="mono">{m.docId}</dd>
+        <dt>Lista</dt><dd>{L.name} · <span className="mono">{m.listRef}</span></dd>
+        <dt>Motivo</dt><dd>{m.reason}{m.orderUntil ? ` · hasta el ${m.orderUntil}` : ''}</dd>
+        <dt>Procesado en</dt><dd className="mono">{m.spotbox}</dd>
+        <dt>Agente</dt><dd>{m.agent}</dd>
+      </dl>
+      {groups.map((g) => (
+        <Fragment key={g}>
+          <h3>{TRAIT_GROUPS[g]}</h3>
+          <dl>
+            {m.traits.filter((x) => x.group === g).map((x, i) => (
+              <Fragment key={i}>
+                <dt>{x.label}</dt>
+                <dd>
+                  {x.list && <span><i>Lista</i>{x.list}</span>}
+                  <span><i>Captura</i>{x.seen ?? <em>no se ve{x.note ? ` · ${x.note}` : ''}</em>}</span>
+                </dd>
+              </Fragment>
+            ))}
+          </dl>
+        </Fragment>
+      ))}
+      <h3>Fuentes</h3>
+      <dl>{FACIAL_SOURCES.map((s) => <Fragment key={s.name}><dt>{s.name}</dt><dd className={s.state === 'conectada' ? 'ok' : 'muted'}>{s.state === 'conectada' ? 'Conectada' : 'Por conectar'}</dd></Fragment>)}</dl>
+    </div>
   );
 }
 
@@ -207,19 +170,23 @@ export function Traits({ m }: { m: FacialMatch }) {
 export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
   m: FacialMatch; canDecide: boolean; onConfirm: () => void; onDiscard: () => void; onClose: () => void;
 }) {
-  const now = useNow(10000);
   const L = FACIAL_LISTS[m.list];
   const photos = useMemo(() => [...m.listPhotos].sort((a, b) => b.score - a.score), [m.listPhotos]);
-  const [ph, setPh] = useState(0);
-  const photo = photos[Math.min(ph, photos.length - 1)];
-  const [det, setDet] = useState(m.detections.length - 1);
   const [sel, setSel] = useState<string | null>(null);
-  const d = m.detections[Math.min(det, m.detections.length - 1)] ?? lastDetection(m);
+  // Todas las imágenes juntas: primero las fotos de la lista, después las capturas de hoy en orden.
+  const imgs = useMemo(() => [
+    ...photos.map((x) => ({ src: x.src, kind: 'lista' as const, title: x.caption, sub: `${x.year} · ${pct(x.score)}` })),
+    ...m.detections.map((x) => ({ src: x.capture, kind: 'captura' as const, title: `${hhmm(x.at)} · ${x.cameraId}`, sub: `${x.place} · ${pct(x.score)}` })),
+  ], [photos, m.detections]);
+  const [big, setBig] = useState<number | null>(null);
+  const bigRef = useRef(big); bigRef.current = big;
+  const best = m.detections.length ? Math.max(...m.detections.map((x) => x.score)) : lastDetection(m).score;
   const [auto, setAuto] = useState(true);
   const [marks3d, setMarks3d] = useState(true);
   const [scan, setScan] = useState(true);
   const [reset, setReset] = useState(0);
   const seed = [...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7);
+  const imgsRef = useRef(imgs.length); imgsRef.current = imgs.length;
   const box = useRef<HTMLDivElement>(null);
   const close = useRef(onClose); close.current = onClose;
   // Al abrir toma el foco (una sola vez); Esc lo cierra sin cerrar nada más; Tab queda adentro; al
@@ -228,7 +195,8 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
     const back = document.activeElement as HTMLElement | null;
     box.current?.focus();
     const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); close.current(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); if (bigRef.current != null) setBig(null); else close.current(); return; }
+      if (bigRef.current != null && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); const n = imgsRef.current; setBig((b) => (b == null ? b : (b + (e.key === 'ArrowRight' ? 1 : n - 1)) % n)); return; }
       if (e.key !== 'Tab' || !box.current) return;
       const f = [...box.current.querySelectorAll<HTMLElement>('button:not([disabled]), [tabindex="0"], canvas[tabindex]')].filter((x) => x.offsetParent !== null || x instanceof SVGElement);
       if (!f.length) return;
@@ -248,8 +216,8 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
           <h1>{m.name}</h1>
           <span className="ds-reason">{m.reason}{m.orderUntil ? ` · vigente hasta el ${m.orderUntil}` : ''} · <span className="mono">{m.docId}</span></span>
         </div>
-        <div className="ds-score" style={{ '--p': `${Math.round(d.score * 100)}` } as CSSProperties} aria-label={`Coincidencia ${pct(d.score)}`}>
-          <b className="mono">{Math.round(d.score * 100)}<small>%</small></b><span>coincidencia</span>
+        <div className="ds-score" style={{ '--p': `${Math.round(best * 100)}` } as CSSProperties} aria-label={`Mejor coincidencia de hoy ${pct(best)}`}>
+          <b className="mono">{Math.round(best * 100)}<small>%</small></b><span>mejor de hoy</span>
         </div>
         <div className="ds-act">
           {canDecide && <>
@@ -261,20 +229,17 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
       </header>
 
       <div className="ds-grid">
-        <section className="ds-panel ds-compare" aria-label="Comparar">
-          <h2>Comparar <span className="ds-sub">hoy {m.detections.length} {m.detections.length === 1 ? 'detección' : 'detecciones'} · elige cuál</span></h2>
-          <div className="ds-today" role="group" aria-label="Detecciones de hoy">
-            {m.detections.map((x, i) => <button key={x.at} className={i === det ? 'on' : ''} aria-pressed={i === det} onClick={() => setDet(i)}><b className="mono">{hhmm(x.at)}</b> {x.cameraId} · <span className="mono">{pct(x.score)}</span></button>)}
+        <section className="ds-panel ds-compare" aria-label="Imágenes">
+          <h2>Imágenes <span className="ds-sub">{photos.length} de la lista · {m.detections.length} de hoy · toca una para verla grande</span></h2>
+          <div className="gl">
+            {imgs.map((x, i) => (
+              <button key={x.src + i} className={`gl-t ${x.kind}`} onClick={() => setBig(i)} aria-label={`Ver grande: ${x.kind === 'lista' ? 'foto de la lista' : 'captura'} ${x.title}`}>
+                {x.src ? <img src={x.src} alt="" /> : <Shot />}
+                <span className="gl-tag mono">{x.kind === 'lista' ? 'Lista' : 'Hoy'}</span>
+                <span className="gl-cap"><b>{x.title}</b><small>{x.sub}</small></span>
+              </button>
+            ))}
           </div>
-          <div className="ds-pair">
-            <figure><ZoomImg src={d.capture} alt="Captura" /><figcaption><b>Captura {hhmm(d.at)}</b> · {d.cameraId} · {d.place}</figcaption></figure>
-            {photo ? <figure><ZoomImg src={photo.src} alt={photo.caption} /><figcaption><b>{photo.caption}</b> · {photo.year} · <span className="mono">{pct(photo.score)}</span></figcaption></figure>
-              : <figure><div className="ds-zoom ds-nophoto">Sin fotos en la lista</div><figcaption>&nbsp;</figcaption></figure>}
-          </div>
-          <div className="ds-strip" role="group" aria-label="Fotos en la lista">
-            {photos.map((x, i) => <button key={x.src + i} className={i === ph ? 'on' : ''} aria-pressed={i === ph} onClick={() => setPh(i)}><img src={x.src} alt="" /><span>{x.caption}<b className="mono">{pct(x.score)}</b></span></button>)}
-          </div>
-          <p className="ds-hint">Clic en una imagen para ampliarla; la rueda acerca más.</p>
         </section>
 
         <section className="ds-panel ds-3d" aria-label="Reconstrucción 3D">
@@ -292,21 +257,9 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
           <p className="ds-hint">Arrastrá para girar · rueda para acercar · flechas para girar · 0 vuelve.</p>
         </section>
 
-        <section className="ds-panel ds-side" aria-label="Para confirmar">
-          <h2>Señas para confirmar</h2>
-          <Traits m={m} />
-          <h2 className="ds-h2b">Datos</h2>
-          <dl className="ds-dl">
-            <dt>Nombre</dt><dd>{m.name}</dd>
-            <dt>Documento</dt><dd className="mono">{m.docId}</dd>
-            <dt>Lista</dt><dd>{L.name} · <span className="mono">{m.listRef}</span></dd>
-            <dt>Procesado en</dt><dd className="mono">{m.spotbox}</dd>
-            <dt>Agente</dt><dd>{m.agent}</dd>
-          </dl>
-          <div className="ds-src">
-            <span className="ds-k">Fuentes</span>
-            {FACIAL_SOURCES.map((s) => <span key={s.name} className={`ds-srcitem ${s.state}`}><i />{s.name}</span>)}
-          </div>
+        <section className="ds-panel ds-side" aria-label="Metadatos">
+          <h2>Metadatos</h2>
+          <Meta m={m} />
         </section>
 
         <section className="ds-panel ds-links" aria-label="Conexiones">
@@ -314,11 +267,35 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
           <Connections m={m} sel={sel} setSel={setSel} />
         </section>
 
-        <section className="ds-panel ds-hist" aria-label="Historia">
-          <h2>Historia <span className="ds-sub">{m.story.length} hechos, del más viejo al de hoy</span></h2>
-          <History m={m} now={now} sel={sel} setSel={setSel} />
+        <section className="ds-panel ds-hist" aria-label="Recorrido de hoy">
+          <h2>Recorrido de hoy <span className="ds-sub">{m.detections.length} capturas en el mapa, en orden de hora · toca una para verla grande</span></h2>
+          <FaceTrail dets={m.detections} onOpen={(i) => setBig(photos.length + i)} />
         </section>
       </div>
+
+      {big != null && imgs[big] && (() => {
+        const x = imgs[big];
+        const ref = x.kind === 'captura' ? imgs[0] : null;
+        return (
+          <div className="lb" role="group" aria-label="Imagen ampliada">
+            <div className="lb-hd">
+              <span className="mono">{big + 1} / {imgs.length}</span>
+              <b>{x.kind === 'lista' ? 'Foto de la lista' : 'Captura de hoy'} · {x.title}</b>
+              <span className="lb-sub">{x.sub}</span>
+              <button className="iconbtn" aria-label="Cerrar la imagen (Esc)" onClick={() => setBig(null)}><Icon name="close" /></button>
+            </div>
+            <div className={`lb-body ${ref ? 'two' : ''}`}>
+              <figure><ZoomImg key={x.src + big} src={x.src} alt={x.title} /><figcaption>{x.kind === 'lista' ? 'Lista' : 'Captura'}</figcaption></figure>
+              {ref && <figure><ZoomImg src={ref.src} alt={ref.title} /><figcaption>Para comparar: {ref.title} (lista)</figcaption></figure>}
+            </div>
+            <div className="lb-nav">
+              <button className="btn secondary sm" onClick={() => setBig((big + imgs.length - 1) % imgs.length)}><Icon name="chevron_left" />Anterior</button>
+              <div className="lb-strip">{imgs.map((y, i) => <button key={y.src + i} className={i === big ? 'on' : ''} aria-label={y.title} aria-pressed={i === big} onClick={() => setBig(i)}>{y.src ? <img src={y.src} alt="" /> : <Shot />}</button>)}</div>
+              <button className="btn secondary sm" onClick={() => setBig((big + 1) % imgs.length)}>Siguiente<Icon name="chevron_right" /></button>
+            </div>
+          </div>
+        );
+      })()}
     </div>,
     document.body,
   );

@@ -106,7 +106,7 @@ const UNGROUP = 17;
 const ZONE_GROUP = 16.4;
 void CAM_REACH;
 
-function baseStyle(): StyleSpecification {
+export function baseStyle(): StyleSpecification {
   const G = geo as unknown as Record<string, GeoJSON.FeatureCollection>;
   return {
     version: 8,
