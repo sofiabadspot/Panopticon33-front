@@ -82,7 +82,7 @@ function Zones() {
               <tr key={z.id} className="click" onClick={() => c.focus(z.ring, 'z' + z.id)}>
                 <td>{z.name}<div className="dim mono" style={{ fontSize: 'var(--fs-xs)' }}>{z.id}</div></td>
                 <td className="r mono">{fmt(z.areaM2)} m²</td><td className="r mono">{fmt(z.capacity)}</td><td className="r mono">{z.cameras.length}</td>
-                <td>{status[z.id]?.coverage === 'medida' ? <span className="chip ok">Medida</span> : <span className="chip nodata">Sin cobertura</span>}</td>
+                <td>{status[z.id]?.coverage === 'medida' ? <span className="chip ok">Medida</span> : <span className="chip nodata">Sin medición</span>}</td>
               </tr>
             ))}
           </tbody>

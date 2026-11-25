@@ -46,7 +46,7 @@ export function ZoneSheet({ id }: { id: string }) {
         aside={<>{s && <CoverageChip coverage={s.coverage} />}{ev && <button className="chip outline" onClick={() => c.open({ k: 'evento', id: ev.id })}><Icon name="flag" />{ev.name.split(' · ')[0]} · hasta {hhmm(ev.end)}</button>}</>}
       />
       <div className="pb">
-        {nd && <div className="callout"><Icon name="visibility_off" /><span className="grow"><b>{s?.coverage === 'sin_cobertura' ? 'Sin cobertura.' : 'Sin datos.'}</b> {s?.coverage === 'sin_cobertura' ? 'La cámara PTZ está fuera de su preset: se detectan personas pero la zona no se mide.' : 'Ninguna cámara de la zona envía video.'} No significa que esté vacía.</span></div>}
+        {nd && <div className="callout"><Icon name="visibility_off" /><span className="grow"><b>{s?.coverage === 'sin_cobertura' ? 'Sin medición.' : 'Sin datos.'}</b> {s?.coverage === 'sin_cobertura' ? 'La cámara PTZ está fuera de su preset: se detectan personas pero la zona no se mide.' : 'Ninguna cámara de la zona envía video.'} No significa que esté vacía.</span></div>}
         <div className="kpis" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
           <div className={`kpi ${nd ? 'nodata' : ''}`}><div className="v">{nd ? 'Sin medición' : fmtCrowd(s.count!)}</div><div className="l">Personas</div>{!nd && <div className="x">entre {fmtCrowd(s.low!)} y {fmtCrowd(s.high!)}</div>}</div>
           <div className={`kpi ${nd ? 'nodata' : s.occupancy! * 100 > occMax ? 'alert' : ''}`}>

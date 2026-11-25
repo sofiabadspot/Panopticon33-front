@@ -43,7 +43,7 @@ export const CAMERA_LABEL: Record<CameraStatus, string> = { operativa: 'Operativ
 
 export const UNIT_LABEL: Record<UnitStatus, string> = { disponible: 'Disponible', en_servicio: 'En servicio', sin_reporte: 'Sin reporte reciente', desconocida: 'Sin identificar' };
 
-export const COVERAGE_LABEL: Record<Coverage, string> = { medida: 'Medida', sin_cobertura: 'Sin cobertura', sin_datos: 'Sin datos' };
+export const COVERAGE_LABEL: Record<Coverage, string> = { medida: 'Medida', sin_cobertura: 'Sin medición', sin_datos: 'Sin datos' };
 
 /** Motivos de descarte: lista corta, un clic. Alimentan el ajuste de umbrales. */
 export const DISCARD_REASONS = [

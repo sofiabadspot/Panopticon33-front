@@ -68,7 +68,7 @@ export function StatusPanel() {
                       <div className="t">{sev && <span className={`sev ${sev}`} aria-label={sev === 'critica' ? 'Crítica' : 'Media'} />}{z.name}</div>
                       <div className={`cap ${nd ? 'nodata' : ''}`} aria-hidden>{!nd && <i className={sev ?? ''} style={{ width: `${Math.min(100, s.occupancy! * 100)}%` }} />}</div>
                     </div>
-                    <div className="r">{nd ? <span className="chip nodata">Sin cobertura</span> : <><b className="mono" style={{ color: 'var(--ink)', fontSize: 'var(--fs-md)', fontWeight: 500 }}>{fmtCrowd(s.count!)}</b><span>{pct(s.occupancy!)}</span></>}</div>
+                    <div className="r">{nd ? <span className="chip nodata">Sin medición</span> : <><b className="mono" style={{ color: 'var(--ink)', fontSize: 'var(--fs-md)', fontWeight: 500 }}>{fmtCrowd(s.count!)}</b><span>{pct(s.occupancy!)}</span></>}</div>
                   </button>
                 </li>
               );

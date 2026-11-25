@@ -13,7 +13,8 @@ export interface Zone {
   capacity: number; ring: LngLat[]; cameras: string[];
 }
 
-/** Estado de medición de una zona. "sin_cobertura" y "sin_datos" nunca se muestran como cero. */
+/** Estado de medición de una zona (las cámaras, no la policía). "sin_cobertura" se muestra "Sin medición": la palabra
+    "cobertura" queda para la cobertura policial. "sin_cobertura" y "sin_datos" nunca se muestran como cero. */
 export type Coverage = 'medida' | 'sin_cobertura' | 'sin_datos';
 
 export interface ZoneStatus {

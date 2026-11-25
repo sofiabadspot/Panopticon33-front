@@ -60,7 +60,7 @@ export function EventSheet({ id }: { id: string }) {
             {ez.map((z) => { const s = status[z.id]; const nd = !s || s.count == null; const sev = sevOf(z.id); return (
               <li key={z.id}><button className="item" style={{ gridTemplateColumns: '1fr auto' }} onClick={() => c.open({ k: 'zona', id: z.id })}>
                 <div><div className="t">{sev && <span className={`sev ${sev}`} />}{z.name}</div><div className={`cap ${nd ? 'nodata' : ''}`}>{!nd && <i className={sev ?? ''} style={{ width: `${Math.min(100, s.occupancy! * 100 / 1.5)}%` }} />}<span className="mark" style={{ left: `${occ / 1.5}%` }} /></div></div>
-                <div className="r">{nd ? <span className="chip nodata">Sin cobertura</span> : <><b className="mono" style={{ color: 'var(--ink)', fontWeight: 500 }}>{fmtCrowd(s.count!)}</b><span>{pct(s.occupancy!)}{s.perOfficer != null && ` · ${fmt(s.perOfficer)}/pol.`}</span></>}</div>
+                <div className="r">{nd ? <span className="chip nodata">Sin medición</span> : <><b className="mono" style={{ color: 'var(--ink)', fontWeight: 500 }}>{fmtCrowd(s.count!)}</b><span>{pct(s.occupancy!)}{s.perOfficer != null && ` · ${fmt(s.perOfficer)}/pol.`}</span></>}</div>
               </button></li>
             ); })}
           </ul>

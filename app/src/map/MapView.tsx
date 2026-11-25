@@ -505,15 +505,17 @@ export function MapView(p: Props) {
     if (P.region && !detail && !focus) add('region', [P.region.lon, P.region.lat], <span className="mk-region"><b>{P.region.title}</b><span>{P.region.sub}</span></span>, P.region.onClick, 'bottom', P.region.title);
     if (detail && L.zones && !P.compact) for (const z of P.zones) {
       const dimZ = !!P.highlightZones && !P.highlightZones.includes(z.id) && P.selectedZone !== z.id;
-      const s = st[z.id]; const sev = P.severityOf?.(z.id) ? 'critica' : null;
+      // El rótulo de la zona es neutro: que tenga una alerta lo dice el ícono de la alerta, no un color
+      // (en el mapa, los íconos son alertas y los colores son lo que miden los hexágonos).
+      const s = st[z.id];
       // Sin `zoneStatus` el mapa no mide (placas, formularios): solo el nombre, nunca "Sin datos".
       if (!P.zoneStatus) { add('z' + z.id, [z.lon, z.lat], <span className={`mk-zone ${dimZ ? 'dimz' : ''}`}>{z.name}</span>, P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'center', `Zona ${z.name}`); continue; }
       const nodata = !s || s.count == null;
       const ev = P.eventOf?.(z.id);
       add('z' + z.id, [z.lon, z.lat], (
         // Rótulo "parado" sobre la zona, como las alertas: chico, con un asta y un anillo en el piso.
-        <span className={`mk-zone ${sev ?? ''} ${nodata ? 'nodata' : ''} ${ev ? 'ev' : ''} ${P.selectedZone === z.id || P.highlightZones?.includes(z.id) ? 'sel' : ''} ${dimZ ? 'dimz' : ''}`}>
-          <span className="zl" title={ev ? `Evento en curso: ${ev.name}` : undefined}>{ev && <Icon name="flag" className="zev" />}<span className="zn">{z.name}</span><b>{nodata ? (s?.coverage === 'sin_cobertura' ? 'Sin cobertura' : 'Sin datos') : fmtCrowd(s.count!)}</b></span>
+        <span className={`mk-zone ${nodata ? 'nodata' : ''} ${ev ? 'ev' : ''} ${P.selectedZone === z.id || P.highlightZones?.includes(z.id) ? 'sel' : ''} ${dimZ ? 'dimz' : ''}`}>
+          <span className="zl" title={ev ? `Evento en curso: ${ev.name}` : undefined}>{ev && <Icon name="flag" className="zev" />}<span className="zn">{z.name}</span><b>{nodata ? (s?.coverage === 'sin_cobertura' ? 'Sin medición' : 'Sin datos') : fmtCrowd(s.count!)}</b></span>
           <u className="zstem" aria-hidden />
         </span>
       ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'bottom', `Zona ${z.name}${ev ? ` · evento en curso hasta ${hhmm(ev.end)}` : ''}`);
