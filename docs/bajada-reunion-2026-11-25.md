@@ -6,6 +6,19 @@ Sofía Abad y Gerardo López revisaron la consola beta, 14:14–14:44 UTC. Notas
 
 Prioridades: **P0** entra el viernes · **P1** después del viernes · **P2** idea a futuro.
 
+## Cambio de rumbo: reunión con el Gobierno (25/11, tarde)
+
+Reunión "Seguimiento Panopticon 33 · Gobierno de El Salvador". Cambia lo que se decidió sobre Maic a la mañana:
+
+- **No hay "Enviar a Maic" en la interfaz.** Los eventos le llegan a Maic por el backend, ya formateados (modo a definir con José).
+- **La plataforma asigna las unidades**, no Maic: el operador 911 o el mando define cuántos policías van a cada lugar y a cuáles. Todo el despacho se hace acá.
+- El 911 confirma los eventos (p. ej. que un rostro es el del DUI) y filtra lo que pasa.
+- Hexágonos visibles estilo Bogotá aprobados; hay que proponer una versión que deje legibles los nombres de las calles para el ministro.
+- El prototipo de Julio es solo visión; el diseño funcional es de Sofía y Gerardo. Se congela el alcance de esta primera versión.
+- Se arranca con omnipresencia, placas y reconocimiento facial; después, detección de armas. Fuera de alcance: tránsito.
+
+Tareas nuevas de Sofía (de esa reunión): ver la sección "Después de la reunión con el Gobierno" más abajo.
+
 ## Orden de trabajo
 
 Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
@@ -43,6 +56,17 @@ Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
 26. [ ] Enrolamiento: cómo se agrega una persona a cada lista (4.9)
 27. [ ] Escalar a un operador o supervisor, sin asignar unidades (6.2)
 28. [ ] Escalamiento automático a MAIC por condiciones, vía Jules (6.3)
+
+**Después de la reunión con el Gobierno (25/11 tarde)**
+
+31. [ ] Despacho desde la plataforma, sin Maic: confirmar y enviar refuerzos (cuántos y cuáles) desde la alerta (reemplaza 6.1, 6.2 y 6.3)
+32. [ ] "¿Quién llega?": elegir qué patrullas mandar (las más cercanas o elegirlas) y ver las no activas
+33. [ ] Reconocimiento facial: confirmar sin "enviar a Maic"; sumar integraciones de Aduanas, Interpol, PDI y Fiscalía
+34. [ ] Tipos de alerta y criticidad con formas, no solo color (retoma 6 y 7)
+35. [ ] Drones y helicópteros como objetos que se mueven en el mapa, junto a las patrullas
+36. [ ] Vista "cinematográfica" del centro de control y de reconocimiento facial, con la marca Spot Vision
+37. [ ] Administración: cargar listas de rostros y de placas, de a una o en lote
+38. [ ] Hexágonos visibles que dejen leer los nombres de las calles
 
 **A futuro (P2)**
 
