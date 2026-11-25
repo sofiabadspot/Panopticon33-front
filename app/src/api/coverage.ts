@@ -2,7 +2,7 @@
    · El DATO vive en celdas de un solo tamaño (HEX_RES), que no cambia: eventos, cobertura de un punto,
      lo que se cuente por celda. Es la escala fija con la que se comparan los lugares entre sí.
    · Lo que se VE es un degradé: el mapa pinta hexágonos tan chicos que en pantalla miden pocos
-     píxeles (displayRes, según el zoom), sin borde, y se leen como un mapa de calor. De cerca se nota
+     píxeles (una grilla por franja de zoom, HEX_TIERS), sin borde, y se leen como un mapa de calor. De cerca se nota
      la textura hexagonal.
    Una sola capa, con tres lecturas a elegir: personas, cobertura o alertas.
 
@@ -41,44 +41,37 @@ function cellsOf(z: Zone, res: number) {
 }
 
 /* ---------- Lo que se ve: hexágonos chicos en degradé ----------
-   Rinde porque separa lo que casi no cambia de lo que sí:
-   · la GRILLA (qué celdas, dónde están, su contorno) depende solo de lo que se ve y del zoom. Se arma
-     con margen alrededor de la pantalla y se reusa mientras uno se mueve dentro de ese margen;
-   · el VALOR de cada celda depende de los datos. Lo fijo (gente de fondo de la ciudad, cámaras) se
-     calcula una vez por grilla; en cada actualización solo se suma lo que cambia (las zonas). */
-/** Lado medio del hexágono por resolución H3 (m). */
-const EDGE_M: Record<number, number> = { 7: 1220, 8: 461, 9: 174, 10: 66, 11: 25, 12: 9.4 };
-/** Metros por píxel en San Salvador (latitud ~13,7°) a cada zoom. */
-const mPerPx = (zoom: number) => 151900 / 2 ** zoom;
-/** Celdas como mucho en la grilla (pantalla y margen): más y el mapa se pone lento. */
-const MAX_CELLS = 9000;
-/** Lado del hexágono en pantalla (px): chico para que se lea como degradé. */
-const EDGE_PX = 5;
+   Para que el mapa no parpadee al moverlo, la geometría NO cambia nunca: hay tres grillas fijas,
+   cada una para una franja de zoom, que se cargan una sola vez. Lo que cambia con los datos es solo
+   el color de cada celda (feature-state en el mapa). Así, desplazar o hacer zoom no reprocesa nada.
+   · res 9  (~175 m), zoom < 13: toda el área metropolitana;
+   · res 10 (~65 m),  zoom 13–15,5: toda el área metropolitana;
+   · res 11 (~25 m),  zoom ≥ 15,5: el sector y ~2,5 km alrededor (más fino en toda la ciudad serían
+     cientos de miles de celdas). */
 export interface Bounds { w: number; s: number; e: number; n: number }
-const areaOf = (b: Bounds) => meters([b.w, b.s], [b.e, b.s]) * meters([b.w, b.s], [b.w, b.n]);
-/** Resolución para dibujar: el hexágono mide unos EDGE_PX de lado en pantalla (de res 8 a 12),
-    o menos fina si así la grilla tendría demasiadas celdas. */
-export function displayRes(zoom: number, b: Bounds) {
-  const want = EDGE_PX * mPerPx(zoom);
-  let res = 8; for (let r = 8; r <= 12; r++) if (Math.abs(Math.log(EDGE_M[r] / want)) < Math.abs(Math.log(EDGE_M[res] / want))) res = r;
-  while (res > 8 && areaOf(b) / (2.6 * EDGE_M[res] ** 2) > MAX_CELLS) res--;
-  return res;
+export interface HexTier { res: number; minzoom: number; maxzoom: number; area: 'ciudad' | 'sector' }
+export const HEX_TIERS: HexTier[] = [
+  { res: 9, minzoom: 0, maxzoom: 13, area: 'ciudad' },
+  { res: 10, minzoom: 13, maxzoom: 15.5, area: 'ciudad' },
+  { res: 11, minzoom: 15.5, maxzoom: 24, area: 'sector' },
+];
+/** Área metropolitana de San Salvador (donde está la gente de fondo simulada). */
+export const CITY_BOUNDS: Bounds = { w: -89.32, s: 13.61, e: -89.08, n: 13.79 };
+/** El sector: sus zonas y `pad` grados alrededor (~2,5 km). */
+export function sectorBounds(zones: Zone[], pad = 0.023): Bounds {
+  const lons = zones.flatMap((z) => z.ring.map((q) => q[0])), lats = zones.flatMap((z) => z.ring.map((q) => q[1]));
+  return { w: Math.min(...lons) - pad, s: Math.min(...lats) - pad, e: Math.max(...lons) + pad, n: Math.max(...lats) + pad };
 }
-/** Lo que se ve, agrandado `pad` veces su tamaño hacia cada lado. */
-export const padBounds = (b: Bounds, pad = 0.3): Bounds => { const dx = (b.e - b.w) * pad, dy = (b.n - b.s) * pad; return { w: b.w - dx, s: b.s - dy, e: b.e + dx, n: b.n + dy }; };
-export const inside = (a: Bounds, b: Bounds) => a.w >= b.w && a.e <= b.e && a.s >= b.s && a.n <= b.n;
 
-/** Grilla de celdas para dibujar: sus centros se calculan al armarla; el contorno, la primera vez
-    que la celda se pinta (ringOf), porque muchas nunca se pintan. */
-export interface HexGrid { res: number; b: Bounds; cells: string[]; lat: Float64Array; lon: Float64Array; rings: (LngLat[] | undefined)[];
+/** Grilla de celdas con sus centros. */
+export interface HexGrid { res: number; b: Bounds; cells: string[]; lat: Float64Array; lon: Float64Array;
   /** Aporte de lo fijo por celda, Π(1 − aporte), por firma de cámaras. */ base: Map<string, Float64Array> }
 export function hexGrid(b: Bounds, res: number): HexGrid {
   const cells = polygonToCells([[[b.s, b.w], [b.s, b.e], [b.n, b.e], [b.n, b.w], [b.s, b.w]]], res);
   const lat = new Float64Array(cells.length), lon = new Float64Array(cells.length);
   cells.forEach((c, i) => { const [a, o] = cellToLatLng(c); lat[i] = a; lon[i] = o; });
-  return { res, b, cells, lat, lon, rings: new Array(cells.length), base: new Map() };
+  return { res, b, cells, lat, lon, base: new Map() };
 }
-export const ringOf = (g: HexGrid, i: number) => (g.rings[i] ??= hexRing(g.cells[i]));
 
 /** Fuente de un campo: algo medido en un punto que se reparte alrededor y se apaga con la distancia. */
 interface Source { lat: number; lon: number; a: number; sigma: number }
@@ -130,21 +123,22 @@ const camSig = (cameras: Camera[]) => cameras.map((c) => c.status[0]).join('');
 
 /** Debajo de esto la celda no se dibuja: es el borde de la mancha. */
 const FIELD_MIN = 0.02;
-/** Valor de cada celda de la grilla para la lectura elegida; NaN = no se dibuja.
-    · personas y alertas: 0 nada → 1 mucho (las fuentes se combinan sin pasar de 1: 1 − Π(1 − aporte),
-      para que muchas mediciones juntas no vuelvan todo rojo);
-    · cobertura: los minutos que tarda la unidad más cercana (el mapa los pinta en tres estados con
-      FAST_MIN y NEAR_MIN). Sin unidades que reporten no hay hexágonos: "sin datos" nunca se muestra como cero. */
+/** Valor de cada celda de la grilla para la lectura elegida, ya redondeado a lo que el ojo distingue
+    (así, entre una actualización y otra, solo cambian las celdas que cambian de color); -1 = no se dibuja.
+    · personas y alertas: 0 nada → 1 mucho, en pasos de 1/40 (las fuentes se combinan sin pasar de 1:
+      1 − Π(1 − aporte), para que muchas mediciones juntas no vuelvan todo rojo);
+    · cobertura: el estado según la unidad más cercana: 0 llega en FAST_MIN o menos, 1 hasta NEAR_MIN,
+      2 más. Sin unidades que reporten no hay hexágonos: "sin datos" nunca se muestra como cero. */
 export function hexValues(metric: HexMetric, g: HexGrid, d: HexData): Float64Array {
   const n = g.cells.length, out = new Float64Array(n);
   if (metric === 'cobertura') {
     const us = (d.units ?? []).filter(reporting);
-    if (!us.length) return out.fill(NaN);
+    if (!us.length) return out.fill(-1);
     const pace = us.map((u) => ({ lat: u.lat, lon: u.lon, kx: Math.cos((u.lat * Math.PI) / 180) * 111320, mpm: ((SPEED[u.type] * 1000) / 60) / STREET }));
     for (let i = 0; i < n; i++) {
       let best = Infinity;
       for (const u of pace) { const t = Math.hypot((g.lon[i] - u.lon) * u.kx, (g.lat[i] - u.lat) * 111320) / u.mpm; if (t < best) best = t; }
-      out[i] = best;
+      out[i] = best <= FAST_MIN ? 0 : best <= NEAR_MIN ? 1 : 2;
     }
     return out;
   }
@@ -154,7 +148,7 @@ export function hexValues(metric: HexMetric, g: HexGrid, d: HexData): Float64Arr
     if (!base) { base = new Float64Array(n).fill(1); addSources(g, CITY, base); addSources(g, camSources(d.cameras), base); g.base.clear(); g.base.set(k, base); }
     empty.set(base); addSources(g, zoneSources(d.zones, d.status), empty);
   } else addSources(g, alertSources(d.alerts), empty);
-  for (let i = 0; i < n; i++) { const w = 1 - empty[i]; out[i] = w >= FIELD_MIN ? w : NaN; }
+  for (let i = 0; i < n; i++) { const w = 1 - empty[i]; out[i] = w >= FIELD_MIN ? Math.round(w * 40) / 40 : -1; }
   return out;
 }
 
