@@ -15,8 +15,8 @@ Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
 1. [x] Commitear el buscador del panel de alertas (2.5)
 2. [x] Hexágonos H3 de tamaño fijo (1.2). El dato vive en celdas fijas de res 10, ~65 m (`HEX_RES` en `coverage.ts`). Lo que se ve son hexágonos de pocos píxeles según el zoom, sin borde, que se leen como un degradé: el hexágono es la forma de tomar el dato, no algo que el usuario tenga que leer
 3. [x] Sacar el mapa de calor y mostrar la densidad por hexágono (1.1, 1.4). La gente es un campo continuo sobre toda la ciudad (el fondo de la ciudad es SIMULADO), de amarillo a rojo. Las zonas ya no dibujan contorno: se delimita el evento en curso con un borde de hexágonos
-4. [~] Escala de colores de cobertura policial por hexágono, haya o no evento (1.3). Ya existe como lectura "Cobertura" de los hexágonos (verde ≤2 min, amarillo ≤4, rojo más), en toda la ciudad. Falta validarla con Gerardo y que coincida con el estado de la zona: hoy Redondel Olímpico dice "Sin cobertura" con sus hexágonos en verde
-5. [ ] Separar lenguajes: alertas como íconos, cobertura como color del hexágono (2.1)
+4. [x] Escala de colores de cobertura policial por hexágono, haya o no evento (1.3). Lectura "Cobertura" de los hexágonos (verde ≤2 min, amarillo ≤4, rojo más), en toda la ciudad. La contradicción con las zonas era de palabras: su "Sin cobertura" quería decir que ninguna cámara las mide, y ahora dice "Sin medición". Falta validar la escala con Gerardo
+5. [x] Separar lenguajes: alertas como íconos, cobertura como color del hexágono (2.1). Las zonas ya no se pintan y su rótulo no se pone rojo con una alerta: en el mapa, los íconos son alertas y los colores, lo que miden los hexágonos
 6. [ ] Elegir la iconografía de criticidad: Propuesta A o B, y cómo se marca el nivel (2.3)
 7. [ ] Mostrar la criticidad en los íconos de alerta del mapa y de la lista (2.2)
 8. [ ] Una sola alerta por placa: cada nueva lectura actualiza la alerta existente (2.4, 3.2)
