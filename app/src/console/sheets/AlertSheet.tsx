@@ -3,9 +3,9 @@
    manda desde acá, sin Maic; descartar pide un motivo de una lista corta. A Maic le llega el evento
    por el backend. Tras decidir, la ficha ofrece pasar a la siguiente alerta por revisar. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { audit, confirmAlert, discardAlert, forOperator, openAlert, readsOf, sightingsOf, suggestedUnits, unitOptions, useApi } from '../../api';
+import { audit, AVAIL_LABEL, confirmAlert, discardAlert, forOperator, nearestFree, openAlert, readsOf, sightingsOf, suggestedUnits, unitOptions, useApi } from '../../api';
 import { ago, dateTime, dec1, fmt, fmtCrowd, hhmm, pct } from '../../api/format';
-import { DISCARD_REASONS, DISPATCH_LABEL, KIND_LABEL, KIND_PHRASE, UNIT_LABEL } from '../../api/labels';
+import { DISCARD_REASONS, DISPATCH_LABEL, KIND_LABEL, KIND_PHRASE } from '../../api/labels';
 import type { Alert, PlateRead, Zone } from '../../api/types';
 import { useSession } from '../../shell/session';
 import { Unattended } from '../../ui/Unattended';
@@ -190,36 +190,46 @@ export function AlertSheet({ id }: { id: string }) {
   );
 }
 
-/* Refuerzos: al confirmar, el operador elige cuántas unidades manda y cuáles. Por defecto, las más
-   cercanas que se pueden mandar, en la cantidad sugerida para el tipo de alerta. En "Elegir" marca a mano.
-   La lista muestra también las unidades que no se pueden mandar (sin reporte, estado desconocido o ya
-   yendo a otro lugar), apagadas y con el porqué. */
+/* Refuerzos: al confirmar, el operador elige cuántas unidades manda y cuáles.
+   · "Las más cercanas" (por defecto): solo la cantidad, sugerida para el tipo de alerta, y una línea con
+     cuáles van y en cuánto llegan. Toma primero las disponibles; si no alcanzan, las ocupadas.
+   · "Elegir": el listado con un buscador, para elegir a mano. Cada unidad dice qué está haciendo:
+     disponible, ocupada (se está haciendo cargo de algo), asignada (ya va a otro lugar), sin reporte…
+     Las que no se pueden mandar se ven apagadas. Las que ya están en el lugar van en una línea aparte. */
 function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids: string[]) => void; onCancel: () => void }) {
   const units$ = useApi((s) => s.units);
-  const all = useMemo(() => unitOptions(a).sort((x, y) => x.eta - y.eta), [a, units$]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Las que ya están en el lugar no son refuerzo: van en una línea aparte, no en la lista.
-  const here = all.filter((o) => o.why === 'Ya está en el lugar');
-  const opts = all.filter((o) => o.why !== 'Ya está en el lugar');
+  const all = useMemo(() => unitOptions(a), [a, units$]); // eslint-disable-line react-hooks/exhaustive-deps
+  const here = all.filter((o) => o.avail === 'en_lugar');
+  const opts = all.filter((o) => o.avail !== 'en_lugar');
   const free = opts.filter((o) => o.free);
   const [mode, setMode] = useState<'cercanas' | 'elegir'>('cercanas');
   const [n, setN] = useState(() => Math.min(suggestedUnits(a), free.length));
   const [picked, setPicked] = useState<string[]>([]);
+  const [q, setQ] = useState('');
+  const nearest = useMemo(() => nearestFree(a, n), [a, n, units$]); // eslint-disable-line react-hooks/exhaustive-deps
   // Solo las que siguen libres: otra persona puede haber mandado una mientras el panel estaba abierto.
-  const chosen = mode === 'cercanas' ? free.slice(0, n).map((o) => o.unit.id) : picked.filter((id) => free.some((o) => o.unit.id === id));
-  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
-  // Las 10 que llegan antes, y siempre las elegidas (aunque lleguen después).
-  const shown = opts.filter((o, i) => i < 10 || chosen.includes(o.unit.id));
+  const chosen = mode === 'cercanas' ? nearest : picked.filter((id) => free.some((o) => o.unit.id === id));
+  const byId = (id: string) => opts.find((o) => o.unit.id === id);
+  const toggle = (id: string) => setPicked((x) => (x.includes(id) ? x.filter((y) => y !== id) : [...x, id]));
+  const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const shown = useMemo(() => {
+    const w = norm(q.trim()).split(/\s+/).filter(Boolean);
+    return opts.filter((o) => !w.length || w.every((x) => norm([o.unit.id, o.unit.type, AVAIL_LABEL[o.avail], o.detail ?? ''].join(' ')).includes(x)));
+  }, [opts, q]);
   const units = (k: number) => `${k} ${k === 1 ? 'unidad' : 'unidades'}`;
+  const away = (o: { dist: number; eta: number }) => `${o.dist < 1000 ? `${Math.round(o.dist / 10) * 10} m` : `${(o.dist / 1000).toFixed(1)} km`} · ${Math.max(1, Math.round(o.eta))} min`;
+  const busy = chosen.map(byId).filter((o) => o?.avail === 'ocupada');
   return (
     <section className="rf" aria-label="Refuerzos">
       <div className="rf-hd">
         <b>Refuerzos</b>
         <div className="seg" role="group" aria-label="Qué unidades">
           <button className={mode === 'cercanas' ? 'on' : ''} aria-pressed={mode === 'cercanas'} onClick={() => setMode('cercanas')}>Las más cercanas</button>
-          <button className={mode === 'elegir' ? 'on' : ''} aria-pressed={mode === 'elegir'} onClick={() => { setMode('elegir'); setPicked(chosen); }}>Elegir</button>
+          <button className={mode === 'elegir' ? 'on' : ''} aria-pressed={mode === 'elegir'} onClick={() => { setMode('elegir'); setPicked(nearest); }}>Elegir</button>
         </div>
       </div>
-      {mode === 'cercanas' && (
+      {here.length > 0 && <p className="rf-here"><Icon name="location_on" />Ya {here.length === 1 ? 'hay 1 unidad' : `hay ${here.length} unidades`} en el lugar: {here.map((o) => o.unit.id).join(', ')}</p>}
+      {mode === 'cercanas' && <>
         <div className="rf-count">
           <span>Cuántas</span>
           <button className="btn secondary xs" aria-label="Una menos" disabled={n <= 1} onClick={() => setN(n - 1)}><Icon name="remove" /></button>
@@ -227,24 +237,31 @@ function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids:
           <button className="btn secondary xs" aria-label="Una más" disabled={n >= free.length} onClick={() => setN(n + 1)}><Icon name="add" /></button>
           <small>Sugeridas para {KIND_LABEL[a.kind].toLowerCase()}: {suggestedUnits(a)}</small>
         </div>
-      )}
-      {here.length > 0 && <p className="rf-here"><Icon name="location_on" />Ya {here.length === 1 ? 'hay 1 unidad' : `hay ${here.length} unidades`} en el lugar: {here.map((o) => o.unit.id).join(', ')}</p>}
-      <ul className="rf-list">
-        {shown.map((o) => {
-          const on = chosen.includes(o.unit.id);
-          return (
-            <li key={o.unit.id}>
-              <label className={`rf-u ${on ? 'on' : ''} ${o.free ? '' : 'off'}`}>
-                <input type="checkbox" checked={on} disabled={!o.free || mode === 'cercanas'} onChange={() => toggle(o.unit.id)} />
-                <UnitHex type={o.unit.type} size={18} />
-                <span className="rf-id mono">{o.unit.id}</span>
-                <span className="rf-st">{o.unit.type} · {o.why ?? UNIT_LABEL[o.unit.status]}</span>
-                <span className="rf-eta mono">{o.dist < 1000 ? `${Math.round(o.dist / 10) * 10} m` : `${(o.dist / 1000).toFixed(1)} km`} · {Math.max(1, Math.round(o.eta))} min</span>
-              </label>
-            </li>
-          );
-        })}
-      </ul>
+        {chosen.length > 0
+          ? <p className="rf-who">Van {chosen.map((id) => { const o = byId(id); return o ? `${id} (${Math.max(1, Math.round(o.eta))} min)` : id; }).join(' · ')}</p>
+          : <p className="rf-who">No hay unidades para mandar.</p>}
+      </>}
+      {mode === 'elegir' && <>
+        <input type="search" className="fld sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar unidad, tipo o estado" aria-label="Buscar unidades" />
+        <ul className="rf-list">
+          {shown.map((o) => {
+            const on = chosen.includes(o.unit.id);
+            return (
+              <li key={o.unit.id}>
+                <label className={`rf-u ${on ? 'on' : ''} ${o.free ? '' : 'off'}`}>
+                  <input type="checkbox" checked={on} disabled={!o.free} onChange={() => toggle(o.unit.id)} />
+                  <UnitHex type={o.unit.type} size={18} />
+                  <span className="rf-id mono">{o.unit.id}</span>
+                  <span className="rf-st"><span className={`av av-${o.avail}`}>{AVAIL_LABEL[o.avail]}</span>{o.unit.type}{o.detail ? ` · ${o.detail}` : ''}</span>
+                  <span className="rf-eta mono">{away(o)}</span>
+                </label>
+              </li>
+            );
+          })}
+          {!shown.length && <li className="empty">Ninguna unidad coincide con «{q}».</li>}
+        </ul>
+      </>}
+      {busy.length > 0 && <p className="rf-warn"><Icon name="info" />{busy.map((o) => `${o!.unit.id} ${o!.detail ?? 'está ocupada'}`).join(' · ')}: deja{busy.length > 1 ? 'n' : ''} lo que hace{busy.length > 1 ? 'n' : ''} para ir.</p>}
       <div className="rf-ft">
         <button className="btn positive" style={{ flex: 1 }} disabled={!chosen.length} onClick={() => onConfirm(chosen)}><Icon name="send" />Confirmar y enviar {units(chosen.length)}</button>
         <button className="btn secondary" onClick={() => onConfirm([])}>Sin refuerzos</button>

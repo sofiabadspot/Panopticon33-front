@@ -1721,3 +1721,12 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .mc2-list li input[type="checkbox"] { margin: 0; }
 .mc2-list li:has(> input) { grid-template-columns: auto 24px minmax(0, 1fr) auto; }
 .rf-here { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: var(--fs-xs); color: var(--ink-muted); }
+
+/* Refuerzos: quiénes van (modo "Las más cercanas"), aviso de ocupadas y el estado de cada unidad. */
+.rf-who { margin: 0; font-size: var(--fs-sm); color: var(--ink-muted); }
+.rf-warn { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: var(--fs-xs); color: var(--status-alert-text, var(--status-alert)); }
+.rf-st { display: flex; align-items: center; gap: 6px; }
+.av { flex: none; padding: 0 6px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); font-size: var(--fs-2xs); line-height: 16px; color: var(--ink-muted); }
+.av-disponible { color: var(--status-positive); border-color: color-mix(in srgb, var(--status-positive) 45%, transparent); }
+.av-ocupada { color: var(--status-alert); border-color: color-mix(in srgb, var(--status-alert) 45%, transparent); }
+.av-asignada { color: var(--ink); }

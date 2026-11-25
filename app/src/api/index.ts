@@ -281,20 +281,34 @@ export function suggestedUnits(a: Alert) {
 }
 /** Distancia a la que una unidad ya cuenta como presente en el lugar (m). */
 const ALREADY_M = 150;
-/** Una unidad para mandar a un punto: cuánto tarda y si se puede elegir (si no, por qué). */
-export interface UnitOption { unit: Unit; eta: number; dist: number; free: boolean; why?: string }
-/** Todas las unidades, de la que llega antes a la que llega después. Las no activas (sin reporte o con
-    estado desconocido) y las que ya van a otro lugar aparecen, pero no se pueden elegir. */
+/** Qué está haciendo una unidad, visto desde quien manda refuerzos.
+    · disponible: libre, sin tarea.
+    · ocupada: se está haciendo cargo de algo (cuida su zona). Se puede mandar, pero deja lo que hace.
+    · asignada: ya va a otro lugar. No se puede mandar.
+    · en_lugar: ya está donde hace falta (a menos de ALREADY_M). No es refuerzo.
+    · sin_reporte / desconocida: no se sabe dónde está o qué hace. No se puede mandar. */
+export type UnitAvail = 'disponible' | 'ocupada' | 'asignada' | 'en_lugar' | 'sin_reporte' | 'desconocida';
+export const AVAIL_LABEL: Record<UnitAvail, string> = { disponible: 'Disponible', ocupada: 'Ocupada', asignada: 'Asignada', en_lugar: 'Ya en el lugar', sin_reporte: 'Sin reporte', desconocida: 'Estado desconocido' };
+/** Una unidad para mandar a un punto: cuánto tarda, qué está haciendo y si se puede elegir. */
+export interface UnitOption { unit: Unit; eta: number; dist: number; avail: UnitAvail; free: boolean;
+  /** Detalle del estado: la zona que cuida, adónde va. */ detail?: string;
+  /** Por qué no se puede elegir. */ why?: string }
+/** Todas las unidades, de la que llega antes a la que llega después, con su estado. */
 export function unitOptions(p: { lat: number; lon: number }): UnitOption[] {
   return state.units.map((unit) => {
     const dist = metersBetween(unit, p), eta = etaMin(unit, [p.lon, p.lat]);
-    // A menos de ALREADY_M ya está en el lugar: un refuerzo tiene que venir de afuera.
-    const why = unit.status === 'sin_reporte' ? 'Sin reporte' : unit.status === 'desconocida' ? 'Estado desconocido' : unit.enRoute ? `Va a otro lugar (${unit.enRoute.label})` : dist < ALREADY_M ? 'Ya está en el lugar' : undefined;
-    return { unit, eta, dist, free: !why, why };
-  }).sort((a, b) => Number(b.free) - Number(a.free) || a.eta - b.eta);
+    const avail: UnitAvail = unit.status === 'sin_reporte' ? 'sin_reporte' : unit.status === 'desconocida' ? 'desconocida' : unit.enRoute ? 'asignada' : dist < ALREADY_M ? 'en_lugar' : unit.status === 'en_servicio' ? 'ocupada' : 'disponible';
+    const zone = unit.zoneId ? state.zones.find((z) => z.id === unit.zoneId)?.name : undefined;
+    const detail = avail === 'asignada' ? unit.enRoute!.label : avail === 'ocupada' ? (zone ? `cuida ${zone}` : 'en servicio') : undefined;
+    const free = avail === 'disponible' || avail === 'ocupada';
+    return { unit, eta, dist, avail, free, detail, why: free ? undefined : AVAIL_LABEL[avail] };
+  }).sort((a, b) => a.eta - b.eta);
 }
-/** Las `n` más cercanas que se pueden mandar. */
-export const nearestFree = (p: { lat: number; lon: number }, n: number) => unitOptions(p).filter((o) => o.free).slice(0, n).map((o) => o.unit.id);
+/** Las `n` más cercanas que se pueden mandar: primero las disponibles; si no alcanzan, las ocupadas. */
+export const nearestFree = (p: { lat: number; lon: number }, n: number) => {
+  const o = unitOptions(p);
+  return [...o.filter((x) => x.avail === 'disponible'), ...o.filter((x) => x.avail === 'ocupada')].slice(0, n).map((x) => x.unit.id);
+};
 /** Manda unidades a una alerta (siguen a la alerta si se mueve) o a un punto. */
 function sendUnits(ids: string[], target: { lat: number; lon: number; label: string; alertId?: string }) {
   if (!ids.length) return;
