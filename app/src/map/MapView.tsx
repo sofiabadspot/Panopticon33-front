@@ -65,7 +65,9 @@ interface Props {
   onZoom?: (z: number) => void;
   severityOf?: (zoneId: string) => 'critica' | 'media' | null;
   /** Evento en curso en la zona (una zona puede ser parte de un evento con varias zonas). */
-  eventOf?: (zoneId: string) => { name: string; end: number } | null;
+  eventOf?: (zoneId: string) => { id: string; name: string; end: number } | null;
+  /** Clic en el rótulo de un evento: abre su ficha. */
+  onEventClick?: (id: string) => void;
   compact?: boolean;
   /** Base de Google pedida; si no está disponible queda la base local. */
   base?: GoogleBase;
@@ -428,7 +430,7 @@ export function MapView(p: Props) {
     })) : []));
     // Áreas delimitadas: cada evento en curso (sus zonas juntas) y la zona elegida
     const area: GeoJSON.Feature[] = [], areaCells: GeoJSON.Feature[] = [];
-    const eventAreas: { name: string; end: number; top: LngLat; dim: boolean }[] = [];
+    const eventAreas: { id: string; name: string; end: number; top: LngLat; dim: boolean }[] = [];
     // Las celdas se dibujan al tamaño de la grilla que se ve a este zoom, para que el área calce con los hexágonos.
     const zNow = map.getZoom(), gridRes = (HEX_TIERS.find((tr) => zNow >= tr.minzoom && zNow < tr.maxzoom) ?? HEX_TIERS[0]).res;
     const addArea = (data: string[], k: 'evento' | 'sel', dim: boolean) => {
@@ -441,12 +443,12 @@ export function MapView(p: Props) {
       return shape.flat(2).reduce((a, q) => (q[1] > a[1] ? q : a)); // el punto más al norte, para el rótulo
     };
     if (L.events) {
-      const events = new Map<string, { end: number; zones: Zone[] }>();
-      for (const z of P.zones) { const ev = P.eventOf?.(z.id); if (ev) events.set(ev.name, { end: ev.end, zones: [...(events.get(ev.name)?.zones ?? []), z] }); }
+      const events = new Map<string, { id: string; end: number; zones: Zone[] }>();
+      for (const z of P.zones) { const ev = P.eventOf?.(z.id); if (ev) events.set(ev.name, { id: ev.id, end: ev.end, zones: [...(events.get(ev.name)?.zones ?? []), z] }); }
       for (const [name, e] of events) {
         const dim = !!selZone && !e.zones.some((z) => z.id === selZone);
         const top = addArea(zoneHexes(e.zones), 'evento', dim);
-        if (top) eventAreas.push({ name, end: e.end, top, dim });
+        if (top) eventAreas.push({ id: e.id, name, end: e.end, top, dim });
       }
     }
     if (L.zones) {
@@ -538,32 +540,51 @@ export function MapView(p: Props) {
     };
     const detail = map.getZoom() >= SHOW_DETAIL && !focus;
     if (P.region && !detail && !focus) add('region', [P.region.lon, P.region.lat], <span className="mk-region"><b>{P.region.title}</b><span>{P.region.sub}</span></span>, P.region.onClick, 'bottom', P.region.title);
+    const zonesShown: Zone[] = [];
     if (detail && L.zones && !P.compact && map.getZoom() >= ZONE_LABEL_Z) for (const z of P.zones) {
       const dimZ = !!P.highlightZones && !P.highlightZones.includes(z.id) && P.selectedZone !== z.id;
       // El rótulo de la zona es neutro: que tenga una alerta lo dice el ícono de la alerta, no un color
       // (en el mapa, los íconos son alertas y los colores son lo que miden los hexágonos).
       const s = st[z.id];
       // Sin `zoneStatus` el mapa no mide (placas, formularios): solo el nombre, nunca "Sin datos".
-      if (!P.zoneStatus) { add('z' + z.id, [z.lon, z.lat], <span className={`mk-zone ${dimZ ? 'dimz' : ''}`}>{z.name}</span>, P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'center', `Zona ${z.name}`); continue; }
+      if (!P.zoneStatus) { zonesShown.push(z); add('z' + z.id, [z.lon, z.lat], <span className={`mk-zone ${dimZ ? 'dimz' : ''}`}><i className="zdot" aria-hidden /><span className="zl"><span className="zn">{z.name}</span></span></span>, P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'center', `Zona ${z.name}`); continue; }
       const nodata = !s || s.count == null;
       const ev = P.eventOf?.(z.id);
+      zonesShown.push(z);
       add('z' + z.id, [z.lon, z.lat], (
-        // Rótulo "parado" sobre la zona, como las alertas: chico, con un asta y un anillo en el piso.
-        // El evento no se repite en cada zona: tiene su propio rótulo sobre su área.
+        // Rótulo mínimo: un punto en el centro de la zona y su nombre chico. El conteo (o por qué no hay)
+        // aparece al pasar el mouse o con la zona elegida. El evento no se repite en cada zona: tiene su
+        // propio rótulo sobre su área.
         <span className={`mk-zone ${nodata ? 'nodata' : ''} ${P.selectedZone === z.id || P.highlightZones?.includes(z.id) ? 'sel' : ''} ${dimZ ? 'dimz' : ''}`}>
+          <i className="zdot" aria-hidden />
           <span className="zl"><span className="zn">{z.name}</span><b>{nodata ? (s?.coverage === 'sin_cobertura' ? 'Sin medición' : 'Sin datos') : fmtCrowd(s.count!)}</b></span>
-          <u className="zstem" aria-hidden />
         </span>
-      ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'bottom', `Zona ${z.name}${ev ? ` · evento en curso hasta ${hhmm(ev.end)}` : ''}`);
+      ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'center', `Zona ${z.name}: ${nodata ? (s?.coverage === 'sin_cobertura' ? 'sin medición' : 'sin datos') : fmtCrowd(s.count!) + ' personas'}${ev ? ` · evento en curso hasta ${hhmm(ev.end)}` : ''}`);
     }
     // Rótulo del evento: arriba de su área (en el punto más al norte), con su nombre y hasta qué hora dura.
     if (!focus && !P.compact && map.getZoom() >= EVENT_LABEL_Z) for (const e of eventAreas) {
       add('ev' + e.name, e.top, (
-        <span className={`mk-event ${e.dim ? 'dimz' : ''}`}>
+        <span className={`mk-event ${e.dim ? 'dimz' : ''} ${P.onEventClick ? 'link' : ''}`}>
           <span className="el"><Icon name="flag" className="eflag" /><span className="en">{e.name}</span><em>Evento en curso · hasta {hhmm(e.end)}</em></span>
           <u className="estem" aria-hidden />
         </span>
-      ), undefined, 'bottom', `Evento en curso: ${e.name}, hasta ${hhmm(e.end)}`);
+      ), P.onEventClick ? () => P.onEventClick!(e.id) : undefined, 'bottom', `Evento en curso: ${e.name}, hasta ${hhmm(e.end)}${P.onEventClick ? '. Abrir ficha' : ''}`);
+    }
+    // Nombres de zona que se pisan con otro rótulo: el de la zona elegida siempre queda; después, los de
+    // las zonas con más gente. Los que no entran quedan como punto hasta que hay lugar (al acercarse).
+    // El rótulo del evento va primero, como obstáculo.
+    {
+      const taken: { x0: number; x1: number; y0: number; y1: number }[] = [];
+      const hits = (b: (typeof taken)[number]) => taken.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
+      if (!focus && !P.compact && map.getZoom() >= EVENT_LABEL_Z) for (const e of eventAreas) { const q = map.project(e.top), w = Math.max(e.name.length * 6.6, 150) + 36; taken.push({ x0: q.x - w / 2, x1: q.x + w / 2, y0: q.y - 52, y1: q.y }); }
+      const isSel = (z: Zone) => P.selectedZone === z.id || selZone === z.id || !!P.highlightZones?.includes(z.id);
+      const order = [...zonesShown].sort((a, b) => Number(isSel(b)) - Number(isSel(a)) || (st[b.id]?.count ?? -1) - (st[a.id]?.count ?? -1));
+      for (const z of order) {
+        const q = map.project([z.lon, z.lat]), b = { x0: q.x - 6, x1: q.x + 16 + z.name.length * 5.8, y0: q.y - 9, y1: q.y + 9 };
+        const solo = !isSel(z) && hits(b);
+        markers.current.get('z' + z.id)?.el.classList.toggle('z-solo', solo);
+        if (!solo) taken.push(b);
+      }
     }
     const zoomTo = (c: LngLat) => () => map.easeTo({ center: c, zoom: Math.min(17.2, zoom + 1.8), duration: 700 });
     const groupMk = (cat: GroupCat, g: { key: string; items: { id: string }[]; c: LngLat }) =>

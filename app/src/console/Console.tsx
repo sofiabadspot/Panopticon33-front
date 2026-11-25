@@ -111,7 +111,7 @@ function Layout() {
   // Zona → evento en curso que la incluye (un evento puede abarcar varias zonas)
   const eventOf = useMemo(() => {
     const live = events.filter((e) => eventStatus(e, now) === 'en_curso');
-    return (zoneId: string) => { const e = live.find((x) => x.zoneIds.includes(zoneId)); return e ? { name: e.name, end: e.end } : null; };
+    return (zoneId: string) => { const e = live.find((x) => x.zoneIds.includes(zoneId)); return e ? { id: e.id, name: e.name, end: e.end } : null; };
   }, [events, Math.floor(now / 60000)]); // eslint-disable-line react-hooks/exhaustive-deps
   const sectorPts = useMemo(() => zones.flatMap((z) => z.ring).concat(cameras.map((x) => [x.lon, x.lat] as LngLat)), [zones, cameras]);
   const [fit, setFit] = useState<{ points: LngLat[]; key: string }>({ points: sectorPts, key: 'sector' });
@@ -281,6 +281,7 @@ function Layout() {
             base={base} onBaseStatus={setBaseStatus} onPointer={setPointer}
             region={{ lat: SECTOR.lat, lon: SECTOR.lon, title: SECTOR.name, sub: `${zones.length} zonas · ${cameras.length} cámaras`, onClick: () => setFit({ points: sectorPts, key: 'sector' + Date.now() }) }}
             onZoneClick={c.overlay.onZoneClick ?? ((id) => c.open({ k: 'zona', id }))}
+            onEventClick={(id) => c.open({ k: 'evento', id })}
             onAlertClick={(id) => c.open({ k: 'alerta', id })}
             onCameraClick={(id) => c.open({ k: 'camara', id })}
             onMapClick={measuring ? (p) => setMeasureAt(p) : c.overlay.onMapClick} onEmptyClick={() => { if (c.sheet) c.close(); }}

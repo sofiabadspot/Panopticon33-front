@@ -794,15 +794,22 @@ body:has(.isheet) { overflow: auto; }
 
 /* Zona: rótulo chico "parado" sobre la zona, como las alertas (asta + anillo en el piso).
    Nombre en mono y la cifra; corchetes en dos esquinas con el color del estado. */
-.mk-zone { --c: var(--ink-subtle); display: grid; justify-items: center; cursor: pointer; }
-.mk-zone .zl { position: relative; display: inline-flex; align-items: baseline; gap: 7px; padding: 3px 7px; background: var(--hud-bg); border: 1px solid var(--hud-line); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); white-space: nowrap; box-shadow: 0 2px 8px #0008; }
-.mk-zone .zl::before, .mk-zone .zl::after { content: ''; position: absolute; width: 6px; height: 6px; border: 0 solid var(--c); pointer-events: none; }
-.mk-zone .zl::before { left: -1px; top: -1px; border-left-width: 1.5px; border-top-width: 1.5px; }
-.mk-zone .zl::after { right: -1px; bottom: -1px; border-right-width: 1.5px; border-bottom-width: 1.5px; }
-.mk-zone .zn { font: var(--type-hud-label); letter-spacing: var(--type-hud-tracking); text-transform: uppercase; color: var(--ink-muted); }
-.mk-zone b { font: 500 var(--fs-sm) var(--font-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
-.mk-zone .zstem { position: relative; display: block; width: 1px; height: 22px; background: linear-gradient(var(--c), transparent 130%); }
-.mk-zone .zstem::after { content: ''; position: absolute; left: 50%; bottom: -3px; width: 10px; height: 4px; margin-left: -5px; border-radius: 50%; border: 1px solid var(--c); }
+/* Rótulo de zona. Mínimo por defecto, para no tapar el mapa: un punto en el centro de la zona y su nombre
+   chico con halo, como los nombres del mapa. Al pasar el mouse o con la zona elegida, el rótulo completo
+   (fondo HUD, esquinas, conteo). Si el nombre choca con otro rótulo, queda solo el punto (.z-solo, en
+   el contenedor del marcador) hasta que hay lugar. */
+.mk-zone { --c: var(--ink-muted); position: relative; display: block; width: 8px; height: 8px; cursor: pointer; }
+.mk-zone .zdot { position: absolute; inset: 0; border-radius: 50%; background: var(--ink-muted); box-shadow: 0 0 0 2px rgb(0 0 0 / .65); }
+.mk-zone .zl { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: baseline; gap: 7px; padding: 2px 0; white-space: nowrap; }
+.mk-zone .zn { font: 500 var(--fs-2xs) var(--font-sans); letter-spacing: .02em; color: var(--ink-muted); text-shadow: 0 0 3px #000, 0 0 2px #000, 0 0 1px #000; }
+.mk-zone b { display: none; font: 500 var(--fs-sm) var(--font-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.z-solo .mk-zone .zl { display: none; }
+.mk-zone:hover .zl, .mk-zone.sel .zl, .z-solo .mk-zone:hover .zl, .z-solo .mk-zone.sel .zl { display: inline-flex; padding: 3px 7px; background: var(--hud-bg); border: 1px solid var(--hud-line); box-shadow: 0 2px 8px #0008; }
+.mk-zone:hover .zl::before, .mk-zone:hover .zl::after, .mk-zone.sel .zl::before, .mk-zone.sel .zl::after { content: ''; position: absolute; width: 6px; height: 6px; border: 0 solid var(--c); pointer-events: none; }
+.mk-zone:hover .zl::before, .mk-zone.sel .zl::before { left: -1px; top: -1px; border-left-width: 1.5px; border-top-width: 1.5px; }
+.mk-zone:hover .zl::after, .mk-zone.sel .zl::after { right: -1px; bottom: -1px; border-right-width: 1.5px; border-bottom-width: 1.5px; }
+.mk-zone:hover b, .mk-zone.sel b { display: inline; }
+.maplibregl-marker:has(> .mk-zone:hover), .maplibregl-marker:has(> .mk-zone.sel) { z-index: 4; }
 .mk-zone.media { --c: var(--status-alert); }
 /* Ficha de evento: cuándo empieza o termina */
 .ev-when { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: var(--fs-sm); color: var(--ink-muted); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-xs); }
@@ -813,6 +820,10 @@ body:has(.isheet) { overflow: auto; }
 /* Rótulo de un evento en curso, sobre su área: como el de una zona (fondo HUD, esquinas) pero con la
    bandera, el nombre y hasta qué hora dura. Es el que nombra el área delimitada. */
 .mk-event { --c: var(--ink-muted); display: grid; justify-items: center; pointer-events: none; }
+/* Con ficha: el rótulo se puede tocar (solo la caja, no el asta) y se marca al pasar el mouse. */
+.mk-event.link .el { pointer-events: auto; cursor: pointer; }
+.mk-event.link .el:hover { border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
+.mk-event.link .el:hover .en { text-decoration: underline; text-underline-offset: 2px; }
 .mk-event .el { position: relative; display: grid; grid-template-columns: auto auto; column-gap: 6px; align-items: center; padding: 4px 9px 5px 7px; background: var(--hud-bg); border: 1px solid var(--hud-line); white-space: nowrap; }
 .mk-event .el::before, .mk-event .el::after { content: ''; position: absolute; width: 7px; height: 7px; border: 0 solid var(--c); pointer-events: none; }
 .mk-event .el::before { left: -1px; top: -1px; border-left-width: 1.5px; border-top-width: 1.5px; }
@@ -824,10 +835,8 @@ body:has(.isheet) { overflow: auto; }
 .mk-event.dimz { opacity: .45; }
 .lchip .li-event { font-size: 16px; color: var(--status-positive); }
 .lchip:not(.on) .li-event { opacity: .45; filter: grayscale(.6); }
-.mk-zone.critica { --c: var(--status-negative); }
-.mk-zone.critica b { color: var(--status-negative-text); }
-.mk-zone.nodata .zl { border-style: dashed; }
 .mk-zone.nodata b { font: 400 var(--fs-2xs) var(--font-sans); color: var(--ink-muted); }
+.mk-zone.nodata .zdot { background: transparent; border: 1px dashed var(--ink-muted); }
 .mk-zone:hover .zl, .mk-zone.sel .zl { border-color: color-mix(in srgb, var(--ink) 27%, transparent); }
 .mk-zone:hover .zn, .mk-zone.sel .zn { color: var(--ink); }
 
