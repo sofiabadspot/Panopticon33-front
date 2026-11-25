@@ -3,16 +3,17 @@
    desaparecidas). Una sola por persona: las detecciones nuevas se suman a la misma.
    Ficha: para decidir rápido si es la persona. Arriba el puntaje; después el video, todas las imágenes
    juntas (capturas de hoy y fotos de la lista), una línea de recorrido, última ubicación y riesgo, y
-   pedir la verificación en terreno. Los metadatos (señas, motivo, estados) van plegados al final. La 3D
+   pedir la verificación en terreno. Después los metadatos (datos de la lista y señas registradas) y los estados. La 3D
    y las conexiones quedan en el expediente.
    El operador 911 tiene el veredicto final. Nunca es una identificación automática. */
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { audit } from '../../api';
+import { cameraClip } from '../../api/video';
 import { ago, dateTime, hhmm, pct } from '../../api/format';
 import { FACIAL_DISCARD, FACIAL_LISTS, bestDetection, confirmFacial, discardFacial, lastDetection, requestFieldCheck, scoreMeaning, useFacial, type FacialDetection, type FacialList, type FacialMatch } from '../../api/facial';
 import { useSession } from '../../shell/session';
 import { useInspect } from '../../ui/ImageInspect';
-import { FacialDossier, Shot, Traits } from './FacialDossier';
+import { FacialDossier, Shot } from './FacialDossier';
 import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
 import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
@@ -102,16 +103,17 @@ export function FacialSheet({ id }: { id: string }) {
   const [discarding, setDiscarding] = useState(false);
   /* Comparar: la captura junto a una foto de la lista (la que más se parece, o la que elija el operador).
      Toda imagen se amplía con un clic (zoom, mover, girar) en el visor sobre el mapa. */
-  const [more, setMore] = useState(false);
   /** Expediente a pantalla completa: todo junto, con la 3D para girar, señas para marcar y conexiones. */
   const [dossier, setDossier] = useState(false);
+  /** El recuadro de video muestra la grabación de la captura o la cámara en vivo, sin salir de la ficha. */
+  const [live, setLive] = useState(false);
   const insp = useInspect(m ? `${m.listRef} · ${bestDetection(m).cameraId} · ${dateTime(bestDetection(m).at)}` : '');
 
   /* Recorrido de la persona: cada detección en el mapa, en orden, con su captura. Queda en la bitácora. */
   const [trace, setTrace] = useState(false);
   // Al abrir la coincidencia, el recorrido (o el punto, si hay una sola detección) arranca solo. Queda en la bitácora.
   useEffect(() => {
-    setDiscarding(false); setTrace(!!m); setMore(false); setDossier(false);
+    setDiscarding(false); setTrace(!!m); setDossier(false); setLive(false);
     // Una sola vez por coincidencia en la sesión (volver desde la cámara no repite el registro).
     if (m && !traced.has(m.id)) { traced.add(m.id); audit(user, 'Ver recorrido de persona', m.listRef, 'Al abrir la coincidencia'); }
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -139,6 +141,7 @@ export function FacialSheet({ id }: { id: string }) {
   const meaning = scoreMeaning(best.score);
   const cams = new Set(m.detections.map((x) => x.cameraId)).size;
   const trip = tripCheck(m.detections);
+  const liveClip = cameraClip(d.cameraId);
   return (
     <>
       <SheetHead kicker={<><span className="mono">{m.id}</span>·<span>{ago(d.at, now)}</span></>} title={<>Coincidencia {pct(best.score)} <span className={`chip ${meaning.band === 'Alta' ? 'ok' : meaning.band === 'Baja' ? 'media' : ''}`}>{meaning.band}</span></>} sub={`${m.name} · ${m.reason}`}
@@ -146,9 +149,17 @@ export function FacialSheet({ id }: { id: string }) {
       {insp.viewer}
       <div className="pb">
         {/* Video primero: el andar y los gestos son lo que más ayuda a decidir. */}
+        {/* Grabación de la mejor captura o la cámara en vivo donde la vieron por última vez, ahí mismo. */}
         <div className="fc-video">
-          <span className="fc-ph"><Shot label={`Video · ${hhmm(best.at)} · ${best.cameraId}`} /></span>
-          <button className="btn secondary sm" onClick={() => c.open({ k: 'camara', id: d.cameraId })}><Icon name="videocam" />En vivo · {d.cameraId}</button>
+          <div className="seg fc-vseg" role="group" aria-label="Video">
+            <button aria-pressed={!live} className={!live ? 'on' : ''} onClick={() => setLive(false)}>Grabación · {hhmm(best.at)} · {best.cameraId}</button>
+            <button aria-pressed={live} className={live ? 'on' : ''} onClick={() => { if (!live) audit(user, 'Ver cámara en vivo', d.cameraId, m.listRef); setLive(true); }}><span className="live-dot" aria-hidden />En vivo · {d.cameraId}</button>
+          </div>
+          <span className="fc-ph">
+            {live
+              ? (liveClip ? <video src={liveClip.src} poster={liveClip.poster} muted loop autoPlay playsInline controls aria-label={`En vivo, ${d.cameraId}`} /> : <Shot label={`En vivo · ${d.cameraId} · sin señal de video`} />)
+              : <Shot label={`Grabación · ${hhmm(best.at)} · ${best.cameraId} (5 s antes y después)`} />}
+          </span>
         </div>
 
         {/* Todas las imágenes juntas: las capturas de hoy y las fotos de la lista. */}
@@ -169,24 +180,26 @@ export function FacialSheet({ id }: { id: string }) {
           ? <p className="fc-asked"><Icon name="schedule" />El agente está verificando el documento ({ago(m.fieldCheck.at, now)}).</p>
           : role === 'operator_911' && <button className="btn secondary fc-check" onClick={() => { requestFieldCheck(m.id, user); toast('Pedido enviado al agente: verificar el documento'); }}><Icon name="badge" />Pedir al agente que verifique el documento</button>)}
 
-        {/* Metadatos: plegados. */}
-        <button className="fc-more" aria-expanded={more} onClick={() => setMore(!more)}><Icon name={more ? 'expand_less' : 'expand_more'} />Metadatos</button>
-        {more && (
-          <div className="fc-meta">
+        <div className="box">
+          <div className="bh"><h3>Metadatos</h3></div>
+          <div className="bb">
             <dl className="details">
-              <dt>Persona</dt><dd>{m.name} · <span className="mono">{m.docId}</span></dd>
-              <dt>Motivo</dt><dd>{m.reason}{m.orderUntil ? ` · hasta el ${m.orderUntil}` : ''}</dd>
+              <dt>Persona</dt><dd>{m.name}</dd>
+              <dt>Documento</dt><dd className="mono">{m.docId}</dd>
+              <dt>Motivo</dt><dd>{m.reason}</dd>
+              {m.orderUntil && <><dt>Orden</dt><dd>Vigente hasta el {m.orderUntil}</dd></>}
               <dt>Lista</dt><dd>{L.name} · <span className="mono">{m.listRef}</span></dd>
+              {m.traits.filter((x) => x.list).map((x, i) => <Fragment key={i}><dt>{x.label}</dt><dd>{x.list}</dd></Fragment>)}
               {m.risk.notes.slice(1).map((x) => <Fragment key={x}><dt>Ojo</dt><dd>{x}</dd></Fragment>)}
-              <dt>Cerca</dt><dd>{m.agent}</dd>
+              <dt>Agente cerca</dt><dd>{m.agent}</dd>
               <dt>Procesado en</dt><dd className="mono">{m.spotbox}</dd>
             </dl>
-            <Traits m={m} />
-            <ol className="timeline">
-              {m.timeline.map((t, i) => <li key={i} className={i === m.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
-            </ol>
           </div>
-        )}
+        </div>
+
+        <div className="box"><div className="bh"><h3>Estados</h3></div><div className="bb"><ol className="timeline">
+          {m.timeline.map((t, i) => <li key={i} className={i === m.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
+        </ol></div></div>
       </div>
       {dossier && <FacialDossier m={m} canDecide={role === 'operator_911' && m.status === 'por_revisar'} onClose={() => setDossier(false)}
         onConfirm={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta generada y agente avisado'); setDossier(false); }}
