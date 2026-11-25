@@ -28,6 +28,10 @@ export const FACIAL_LISTS: Record<FacialList, { name: string; prefix: string }> 
 export interface FacialDetection { at: number; cameraId: string; place: string; lat: number; lon: number; capture: string; score: number }
 /** Una foto de la persona en la lista: de dónde sale, de cuándo y cuánto se parece a la captura (0–1). */
 export interface ListPhoto { src: string; caption: string; year: string; score: number }
+/** Algo vinculado a la persona: un vehículo, otra persona, un lugar donde se la ve seguido o un caso.
+    `weight` (0–1): qué tan fuerte es el vínculo (cuántas veces aparecen juntos, por ejemplo). */
+export type LinkKind = 'vehiculo' | 'persona' | 'lugar' | 'caso';
+export interface PersonLink { kind: LinkKind; label: string; sub: string; weight: number }
 /** Fuentes contra las que se puede verificar la identidad. Las del Gobierno llegan directo (no por Maic). */
 export const FACIAL_SOURCES: { name: string; state: 'conectada' | 'por_conectar' }[] = [
   { name: 'Lista de la PNC', state: 'conectada' }, { name: 'DUI (RNPN)', state: 'conectada' },
@@ -44,6 +48,8 @@ export interface FacialMatch {
   marks: string[];
   /** Lo que se ve en la captura (ropa, accesorios, rasgos visibles). */
   observed: string[];
+  /** Conexiones: vehículos, personas, lugares y casos vinculados (de la lista, de las detecciones y del análisis). */
+  links: PersonLink[];
   /** Reconstrucción 3D del perfil: ya existe y se afina con cada detección confirmada. */
   profile3d: { detections: number; updatedAt: number };
   scene: string;
@@ -66,6 +72,15 @@ const det = (k: number, at: number, score: number, capture = '/media/demo/face.j
 const seedMatches = (): FacialMatch[] => [
   { id: 'FC-7301', spotbox: 'SPOTBOX-PC-03', list: 'buscadas', listRef: 'LB-0291', reason: 'Orden de captura vigente', orderUntil: '15 ene 2027',
     name: 'Persona de ejemplo A', docId: 'DUI ••••••-3', marks: ['Estatura 1,74 m', 'Tatuaje en el antebrazo izquierdo', 'Cicatriz sobre la ceja derecha'], observed: ['Gorra oscura', 'Chaqueta gris', 'Barba corta'],
+    links: [
+      { kind: 'vehiculo', label: 'P 512-884', sub: 'Pickup gris · reporte de robo · visto junto 3 veces', weight: 0.9 },
+      { kind: 'persona', label: 'LB-0377', sub: 'Coimputado en el mismo caso', weight: 0.7 },
+      { kind: 'persona', label: 'Persona sin identificar', sub: 'Aparece con él en 2 detecciones', weight: 0.45 },
+      { kind: 'lugar', label: 'Plaza Salvador del Mundo', sub: '5 detecciones en 30 días', weight: 0.8 },
+      { kind: 'lugar', label: 'Mercado Central', sub: '2 detecciones en 30 días', weight: 0.4 },
+      { kind: 'caso', label: 'DEN-2026-114827', sub: 'Robo de vehículo · Fiscalía', weight: 0.85 },
+      { kind: 'caso', label: 'CAP-2026-0291', sub: 'Orden de captura vigente', weight: 1 },
+    ],
     listPhotos: [{ src: '/media/demo/portrait.jpg', caption: 'Ficha policial', year: '2025', score: 0.96 }, { src: '/media/demo/id.jpg', caption: 'Foto del DUI', year: '2021', score: 0.91 }],
     profile3d: { detections: 14, updatedAt: NOW - 2 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
     detections: [det(2, NOW - 19 * MIN, 0.88), det(5, NOW - 11 * MIN, 0.91), det(0, NOW - 3 * MIN, 0.96)],
@@ -73,6 +88,11 @@ const seedMatches = (): FacialMatch[] => [
     timeline: [{ at: NOW - 19 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 88 %)' }, { at: NOW - 11 * MIN, label: 'Nueva detección (91 %)' }, { at: NOW - 3 * MIN, label: 'Nueva detección (96 %)' }] },
   { id: 'FC-7302', spotbox: 'SPOTBOX-PC-05', list: 'investigacion', listRef: 'LI-1187', reason: 'Seguimiento por investigación de extorsión', orderUntil: null,
     name: 'Persona de ejemplo B', docId: 'DUI ••••••-8', marks: ['Estatura 1,68 m', 'Lunar en la mejilla izquierda'], observed: ['Camisa blanca', 'Lentes oscuros en la mano'],
+    links: [
+      { kind: 'persona', label: 'LI-1102', sub: 'Mismo caso de extorsión', weight: 0.75 },
+      { kind: 'lugar', label: 'Calle el Progreso', sub: '3 detecciones en 7 días', weight: 0.6 },
+      { kind: 'caso', label: 'EXT-2026-0412', sub: 'Extorsión · en investigación', weight: 0.9 },
+    ],
     listPhotos: [{ src: '/media/demo/id.jpg', caption: 'Foto del DUI', year: '2023', score: 0.89 }],
     profile3d: { detections: 6, updatedAt: NOW - 9 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
     detections: [det(7, NOW - 9 * MIN, 0.89)],
@@ -80,6 +100,10 @@ const seedMatches = (): FacialMatch[] => [
     timeline: [{ at: NOW - 9 * MIN, label: 'Coincidencia creada en el SpotBox (puntaje 89 %)' }] },
   { id: 'FC-7298', spotbox: 'SPOTBOX-PC-03', list: 'desaparecidas', listRef: 'LD-0044', reason: 'Denuncia de desaparición', orderUntil: null,
     name: 'Persona de ejemplo C', docId: 'DUI ••••••-1', marks: ['Estatura 1,60 m'], observed: ['Mochila roja'],
+    links: [
+      { kind: 'lugar', label: 'Avenida Olímpica', sub: 'Último lugar donde se la vio', weight: 0.7 },
+      { kind: 'caso', label: 'DES-2026-0044', sub: 'Denuncia de desaparición', weight: 1 },
+    ],
     listPhotos: [{ src: '/media/demo/portrait.jpg', caption: 'Foto aportada por la familia', year: '2026', score: 0.86 }],
     profile3d: { detections: 3, updatedAt: NOW - 30 * 24 * 60 * MIN }, scene: '/media/demo/cctv.jpg',
     detections: [det(3, NOW - 52 * MIN, 0.86)],

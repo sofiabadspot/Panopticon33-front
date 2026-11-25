@@ -11,6 +11,7 @@ import { FACIAL_DISCARD, FACIAL_LISTS, FACIAL_SOURCES, confirmFacial, discardFac
 import { useSession } from '../../shell/session';
 import { FaceCloud } from '../../ui/FaceCloud';
 import { useInspect } from '../../ui/ImageInspect';
+import { FacialDossier } from './FacialDossier';
 import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
 import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
@@ -81,13 +82,15 @@ export function FacialSheet({ id }: { id: string }) {
   /* Comparar: la captura junto a una foto de la lista (la que más se parece, o la que elija el operador).
      Toda imagen se amplía con un clic (zoom, mover, girar) en el visor sobre el mapa. */
   const [cmp, setCmp] = useState(0);
+  /** Expediente a pantalla completa: todo junto, con la 3D para girar, señas para marcar y conexiones. */
+  const [dossier, setDossier] = useState(false);
   const insp = useInspect(m ? `${m.listRef} · ${lastDetection(m).cameraId} · ${dateTime(lastDetection(m).at)}` : '');
 
   /* Recorrido de la persona: cada detección en el mapa, en orden, con su captura. Queda en la bitácora. */
   const [trace, setTrace] = useState(false);
   // Al abrir la coincidencia, el recorrido (o el punto, si hay una sola detección) arranca solo. Queda en la bitácora.
   useEffect(() => {
-    setDiscarding(false); setTrace(!!m); setCmp(0);
+    setDiscarding(false); setTrace(!!m); setCmp(0); setDossier(false);
     if (m) audit(user, 'Ver recorrido de persona', m.listRef, 'Al abrir la coincidencia');
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -108,6 +111,7 @@ export function FacialSheet({ id }: { id: string }) {
   const d = lastDetection(m);
   const L = FACIAL_LISTS[m.list];
   const toggleTrace = () => { if (!trace) audit(user, 'Ver recorrido de persona', m.listRef, `${m.detections.length} detecciones en el mapa`); setTrace(!trace); };
+  const openDossier = () => { setDossier(true); audit(user, 'Abrir expediente facial', m.listRef, m.id); };
   const photos = [...m.listPhotos].sort((x, y) => y.score - x.score);
   const ph = photos[Math.min(cmp, photos.length - 1)];
   return (
@@ -117,6 +121,7 @@ export function FacialSheet({ id }: { id: string }) {
       {insp.viewer}
       <div className="pb">
         <div className="callout"><Icon name="info" /><span className="grow">Una coincidencia no es una identificación. Tú tienes la última palabra: confirma solo si es la persona.</span></div>
+        <button className="btn secondary fc-open" onClick={openDossier}><Icon name="open_in_full" />Abrir expediente<span className="fc-open-sub">3D para girar, señas, conexiones</span></button>
         <section className="fc-compare" aria-label="Comparar la captura con la lista">
           <div className="fc-pair">
             <figure>
@@ -141,7 +146,7 @@ export function FacialSheet({ id }: { id: string }) {
         </section>
         <div className="box">
           <div className="bh"><h3>Reconstrucción 3D</h3><span className="sub">Afinada con {m.profile3d.detections} detecciones</span></div>
-          <div className="bb fc-3d"><FaceCloud seed={[...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7)} label={`Reconstrucción 3D del perfil ${m.listRef}`} /></div>
+          <div className="bb fc-3d" role="button" tabIndex={0} title="Abrir el expediente para girarla" onClick={openDossier} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDossier(); } }}><FaceCloud seed={[...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7)} label={`Reconstrucción 3D del perfil ${m.listRef}`} /></div>
         </div>
         <div className="box">
           <div className="bh"><h3>Señas para confirmar</h3></div>
@@ -185,6 +190,9 @@ export function FacialSheet({ id }: { id: string }) {
           {m.timeline.map((t, i) => <li key={i} className={i === m.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
         </ol></div></div>
       </div>
+      {dossier && <FacialDossier m={m} canDecide={role === 'operator_911' && m.status === 'por_revisar'} onClose={() => setDossier(false)}
+        onConfirm={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta generada y agente avisado'); setDossier(false); }}
+        onDiscard={() => { setDossier(false); setDiscarding(true); }} />}
       {role !== 'operator_911' && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: confirma o descarta el operador 911.</span></div>}
       <div className="pf">
         {role === 'operator_911' && m.status === 'por_revisar' && !discarding && <>
