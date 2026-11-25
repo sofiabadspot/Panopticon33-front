@@ -21,12 +21,12 @@ Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
 7. [ ] Mostrar la criticidad en los íconos de alerta del mapa y de la lista (2.2). **En pausa**: depende de la 6
 8. [x] Una sola alerta por placa: cada nueva lectura actualiza la alerta existente (2.4, 3.2). La alerta se mueve a la última lectura, suma la lectura a su recorrido y a su historia, sube en la lista y avisa "Nueva lectura"
 9. [x] "Ver recorrido" de placa con la captura y la cámara en cada punto (3.1). Cada parada muestra su captura, con cámara, hora, calle y certeza; se pueden ocultar desde el HUD
-10. [ ] Facial: sacar el paso "Reconstruir en 3D" (4.3)
-11. [ ] Facial: la ficha muestra captura, todas las fotos de la lista y la reconstrucción 3D (4.2)
-12. [ ] Facial: el operador 911 confirma o descarta la coincidencia (4.1)
-13. [ ] Facial: al confirmar la identidad se genera y se escala la alerta (4.5)
-14. [ ] Facial: filtro del 911 por lista (4.4)
-15. [ ] Facial: una sola alerta por persona, con "Ver recorrido" (4.6)
+10. [x] Facial: sacar el paso "Reconstruir en 3D" (4.3). En la consola beta no existía: estaba en el prototipo de Julio. La ficha muestra la reconstrucción ya hecha
+11. [x] Facial: la ficha muestra captura, todas las fotos de la lista y la reconstrucción 3D (4.2). La reconstrucción es una nube de puntos que gira, "afinada con N detecciones"
+12. [x] Facial: el operador 911 confirma o descarta la coincidencia (4.1). "Es la persona: enviar a Maic" o "No coincide" con motivo
+13. [x] Facial: al confirmar la identidad se genera y se escala la alerta (4.5). Se envía a Maic (a mano, como pide el primer entregable) y se avisa al agente
+14. [x] Facial: filtro del 911 por lista (4.4). Personas buscadas, En investigación, Personas desaparecidas, con cuántas esperan decisión
+15. [x] Facial: una sola alerta por persona, con "Ver recorrido" (4.6). Las detecciones nuevas se suman; el recorrido muestra la captura de cada una
 16. [ ] Vistas por defecto: Operador 911 (alertas y unidades) y Mando (todo) (5.1, 5.2)
 17. [ ] Agendar el seguimiento con Gerardo para el resto de los roles (8)
 

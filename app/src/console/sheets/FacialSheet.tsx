@@ -1,42 +1,72 @@
 /* Verificación facial (fase 3) — operador 911.
-   Panel: coincidencias pendientes de los puntos de control.
-   Ficha: captura, foto de la lista y reconstrucción 3D lado a lado; el operador decide
-   si es probable (avisa al agente) o la descarta. Nunca es una identificación. */
-import { useState } from 'react';
-import { ago, hhmm, pct } from '../../api/format';
-import { FACIAL_DISCARD, discardFacial, notifyAgent, useFacial } from '../../api/facial';
+   Panel: coincidencias de los puntos de control, filtrables por lista (buscadas, en investigación,
+   desaparecidas). Una sola por persona: las detecciones nuevas se suman a la misma.
+   Ficha: la captura más reciente, la reconstrucción 3D del perfil (ya hecha, afinada con cada detección)
+   y todas las fotos de la lista. El operador 911 tiene el veredicto final: confirma que es la persona
+   (se genera la alerta y se envía a Maic) o la descarta. Nunca es una identificación automática. */
+import { useEffect, useMemo, useState } from 'react';
+import { audit } from '../../api';
+import { ago, dateTime, hhmm, pct } from '../../api/format';
+import { FACIAL_DISCARD, FACIAL_LISTS, confirmFacial, discardFacial, lastDetection, scoreOf, useFacial, type FacialList, type FacialMatch } from '../../api/facial';
 import { useSession } from '../../shell/session';
+import { FaceCloud } from '../../ui/FaceCloud';
 import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
+import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
 import { SheetHead } from './SheetHead';
 
-const STATUS: Record<string, string> = { por_revisar: 'Por revisar', agente_avisado: 'Agente avisado', descartada: 'Descartada', confirmada_agente: 'Confirmada por el agente', descartada_agente: 'Descartada por el agente' };
+const STATUS: Record<FacialMatch['status'], string> = { por_revisar: 'Por revisar', confirmada: 'Confirmada', descartada: 'Descartada' };
+const MAIC: Record<NonNullable<FacialMatch['maic']>, string> = { enviada: 'Enviada a Maic', recibida: 'Recibida en Maic' };
+const statusChip = (m: FacialMatch) => m.status === 'confirmada' && m.maic
+  ? <span className={`chip ${m.maic === 'recibida' ? 'received' : 'sending'}`}>{m.maic === 'enviada' && <span className="pulse-dot" aria-hidden />}{MAIC[m.maic]}</span>
+  : <span className={`chip ${m.status === 'por_revisar' ? 'outline' : ''}`}>{STATUS[m.status]}</span>;
 
 function Phase3Notice() {
   return <div className="notice"><Icon name="lock" /><span>Requiere base legal confirmada.</span></div>;
 }
 
+type ListFilter = FacialList | 'todas';
+const LIST_KEY = 'p33.facial.lista';
+const readList = (): ListFilter => { try { const v = localStorage.getItem(LIST_KEY); return v && (v === 'todas' || Object.hasOwn(FACIAL_LISTS, v)) ? (v as ListFilter) : 'todas'; } catch { return 'todas'; } };
+
 export function FacialPanel() {
   const c = useConsole();
   const now = useNow(10000);
-  const matches = useFacial();
+  const all = useFacial();
+  /* Filtro por lista: el operador 911 elige qué listas mira (p. ej. solo personas buscadas). Queda
+     guardado en este navegador. El número es cuántas esperan decisión en cada lista. */
+  const [list, setListRaw] = useState<ListFilter>(readList);
+  const setList = (l: ListFilter) => { setListRaw(l); try { localStorage.setItem(LIST_KEY, l); } catch { /* sin almacenamiento */ } };
+  const pending = (l: ListFilter) => all.filter((m) => m.status === 'por_revisar' && (l === 'todas' || m.list === l)).length;
+  const matches = useMemo(() => all.filter((m) => list === 'todas' || m.list === list)
+    .sort((a, b) => Number(b.status === 'por_revisar') - Number(a.status === 'por_revisar') || lastDetection(b).at - lastDetection(a).at), [all, list]);
   return (
     <>
       <Phase3Notice />
-      <div className="sect">Coincidencias en puntos de control</div>
+      <div className="fbar" role="group" aria-label="Listas">
+        {(['todas', ...Object.keys(FACIAL_LISTS)] as ListFilter[]).map((l) => (
+          <button key={l} aria-pressed={list === l} className={`fchip ${list === l ? 'on' : ''}`} onClick={() => setList(l)}
+            aria-label={`${l === 'todas' ? 'Todas las listas' : FACIAL_LISTS[l].name}: ${pending(l)} por revisar`}>
+            {l === 'todas' ? 'Todas las listas' : FACIAL_LISTS[l].name}<b>{pending(l)}</b>
+          </button>
+        ))}
+      </div>
       {/* Vacía: no hubo coincidencias. Con coincidencias pero ninguna pendiente: se dice antes de la lista. */}
-      {!matches.length && <EmptyState icon="visibility" title="Sin coincidencias">Los puntos de control no encontraron rostros de la lista de personas buscadas. Si aparece una, llega acá con un aviso.</EmptyState>}
+      {!matches.length && <EmptyState icon="visibility" title="Sin coincidencias">{list === 'todas' ? 'Los puntos de control no encontraron rostros de las listas. Si aparece uno, llega acá con un aviso.' : `Nada de ${FACIAL_LISTS[list].name.toLowerCase()}.`}</EmptyState>}
       {matches.length > 0 && !matches.some((m) => m.status === 'por_revisar') && <div className="es-inline"><span className="es-ic" aria-hidden><Icon name="done_all" /></span><span><b>Todo revisado.</b> Ninguna coincidencia espera decisión.</span></div>}
       <ul className="list pb flush">
-        {matches.map((m) => (
-          <li key={m.id}>
-            <button className={`item ${c.sheet?.k === 'facial' && c.sheet.id === m.id ? 'sel' : ''}`} style={{ gridTemplateColumns: '44px 1fr auto' }} onClick={() => c.open({ k: 'facial', id: m.id })}>
-              <img src={m.capture} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }} />
-              <div><div className="t">Coincidencia {pct(m.score)}</div><div className="s">{m.reason} · {m.listRef}</div><div className="s">{m.checkpoint.replace('Punto de control · ', '')}</div></div>
-              <div className="r"><span>{ago(m.at, now)}</span><span className={`chip ${m.status === 'por_revisar' ? 'outline' : m.status === 'descartada' ? '' : 'ok'}`}>{STATUS[m.status]}</span></div>
-            </button>
-          </li>
-        ))}
+        {matches.map((m) => {
+          const d = lastDetection(m);
+          return (
+            <li key={m.id}>
+              <button className={`item ${c.sheet?.k === 'facial' && c.sheet.id === m.id ? 'sel' : ''} ${m.status === 'descartada' ? 'done' : ''}`} style={{ gridTemplateColumns: '44px 1fr auto' }} onClick={() => c.open({ k: 'facial', id: m.id })}>
+                <img src={d.capture} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }} />
+                <div><div className="t">Coincidencia {pct(d.score)}</div><div className="s">{FACIAL_LISTS[m.list].name} · {m.listRef}</div><div className="s">{d.place}{m.detections.length > 1 ? ` · ${m.detections.length} detecciones` : ''}</div></div>
+                <div className="r"><span>{ago(d.at, now)}</span>{statusChip(m)}</div>
+              </button>
+            </li>
+          );
+        })}
       </ul>
       <div className="lfoot">Solo corre en puntos de control habilitados. Los rostros que no coinciden no se guardan.</div>
     </>
@@ -45,34 +75,75 @@ export function FacialPanel() {
 
 export function FacialSheet({ id }: { id: string }) {
   const { user } = useSession();
+  const c = useConsole();
   const toast = useToast();
   const now = useNow(5000);
   const m = useFacial().find((x) => x.id === id);
   const [discarding, setDiscarding] = useState(false);
+
+  /* Recorrido de la persona: cada detección en el mapa, en orden, con su captura. Queda en la bitácora. */
+  const [trace, setTrace] = useState(false);
+  useEffect(() => { setTrace(false); setDiscarding(false); }, [id]);
+  useEffect(() => {
+    if (!trace || !m) return;
+    const stops: RouteStop[] = m.detections.map((d, i) => ({ lat: d.lat, lon: d.lon, label: String(i + 1), time: hhmm(d.at), title: `${dateTime(d.at)} · ${d.cameraId} · ${d.place}`,
+      snap: { camera: d.cameraId, street: d.place, evidence: { type: 'imagen', src: d.capture, caption: 'Captura de la detección' }, confidence: d.score } }));
+    // Con una sola detección no hay recorrido: se marca el punto y el mapa va hacia él.
+    if (stops.length === 1) {
+      const s = stops[0];
+      c.setPin({ lat: s.lat, lon: s.lon, label: s.time ?? '' }); c.focus([[s.lon - 0.0015, s.lat - 0.001], [s.lon + 0.0015, s.lat + 0.001]], 'persona');
+      return () => c.setPin(null);
+    }
+    c.setOverlay({ route: stops, routeLabel: m.listRef, fit: { points: stops.map((s) => [s.lon, s.lat]), key: `persona-${m.id}-${stops.length}` } });
+    return () => c.setOverlay({});
+  }, [trace, m?.id, m?.detections.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!m) return <SheetHead kicker="Verificación facial" title="No encontrada" />;
-  const fig = (src: string | null, cap: string) => (
+  const d = lastDetection(m);
+  const L = FACIAL_LISTS[m.list];
+  const toggleTrace = () => { if (!trace) audit(user, 'Ver recorrido de persona', m.listRef, `${m.detections.length} detecciones en el mapa`); setTrace(!trace); };
+  const fig = (body: React.ReactNode, cap: string, sub?: string) => (
     <figure style={{ margin: 0 }}>
-      <div className="evidence" style={{ aspectRatio: '3 / 4' }}>{src ? <img src={src} alt={cap} /> : <div className="ph-ev"><img src="/assets/logo-spotvision-bn.png" alt="" /><b>{cap}</b><span>Se genera en el SpotBox</span></div>}</div>
-      <figcaption className="caption" style={{ marginTop: 6, textAlign: 'center' }}>{cap}</figcaption>
+      <div className="evidence" style={{ aspectRatio: '3 / 4' }}>{body}</div>
+      <figcaption className="caption" style={{ marginTop: 6, textAlign: 'center' }}>{cap}{sub && <><br /><span className="muted">{sub}</span></>}</figcaption>
     </figure>
   );
   return (
     <>
-      <SheetHead kicker={<><span className="mono">{m.id}</span>·<span>{ago(m.at, now)}</span></>} title={<>Coincidencia {pct(m.score)}</>} sub={m.checkpoint}
-        aside={<><span className="chip outline">{STATUS[m.status]}</span></>} />
+      <SheetHead kicker={<><span className="mono">{m.id}</span>·<span>{ago(d.at, now)}</span></>} title={<>Coincidencia {pct(scoreOf(m))}</>} sub={`${L.name} · ${m.listRef} · ${d.place}`}
+        aside={statusChip(m)} />
       <div className="pb">
-        <div className="callout"><Icon name="info" /><span className="grow">Una coincidencia no es una identificación. La revisan dos personas: tú y el agente en el punto de control.</span></div>
-        <div className="grid cols-3" style={{ gap: 8 }}>
-          {fig(m.capture, 'Captura')}{fig(m.listPhoto, 'Foto de la lista')}{fig(null, 'Reconstrucción 3D')}
+        <div className="callout"><Icon name="info" /><span className="grow">Una coincidencia no es una identificación. Tú tienes la última palabra: confirma solo si es la persona.</span></div>
+        <div className="grid cols-2" style={{ gap: 8 }}>
+          {fig(<img src={d.capture} alt="Captura de la detección más reciente" />, 'Captura', `${d.cameraId} · ${hhmm(d.at)}`)}
+          {fig(<FaceCloud seed={[...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7)} label={`Reconstrucción 3D del perfil ${m.listRef}`} />, 'Reconstrucción 3D', `Afinada con ${m.profile3d.detections} detecciones`)}
+        </div>
+        <div className="box">
+          <div className="bh"><h3>Fotos en la lista</h3><span className="sub">{m.listPhotos.length}</span></div>
+          <div className="bb fc-photos">{m.listPhotos.map((src, i) => <img key={i} src={src} alt={`Foto ${i + 1} de ${m.listRef} en la lista`} />)}</div>
         </div>
         <div className="box"><div className="bb" style={{ paddingTop: 12 }}><dl className="details">
-          <dt>Lista</dt><dd>{m.listName} · <span className="mono">{m.listRef}</span></dd>
+          <dt>Lista</dt><dd>{L.name} · <span className="mono">{m.listRef}</span></dd>
           <dt>Motivo</dt><dd>{m.reason}</dd>
-          <dt>Vigencia de la orden</dt><dd>hasta el {m.orderUntil}</dd>
-          <dt>Certeza</dt><dd className="mono">{pct(m.score)}</dd>
+          {m.orderUntil && <><dt>Vigencia de la orden</dt><dd>hasta el {m.orderUntil}</dd></>}
+          <dt>Certeza</dt><dd className="mono">{pct(d.score)}</dd>
           <dt>Procesado en</dt><dd className="mono">{m.spotbox}</dd>
           <dt>Agente</dt><dd>{m.agent}</dd>
         </dl></div></div>
+        <div className="box flush">
+          <div className="bh"><h3>Detecciones</h3><span className="sub">{m.detections.length}</span>
+            <button className="btn secondary sm" style={{ marginLeft: 'auto' }} onClick={toggleTrace}><Icon name={trace ? 'visibility_off' : 'route'} />{trace ? 'Ocultar recorrido' : m.detections.length > 1 ? 'Ver recorrido en el mapa' : 'Ver en el mapa'}</button>
+          </div>
+          <ul className="list bb">
+            {[...m.detections].reverse().map((x, i) => (
+              <li key={x.at}><div className="item" style={{ gridTemplateColumns: '36px 1fr auto', cursor: 'default' }}>
+                <img src={x.capture} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 'var(--radius-xs)' }} />
+                <div><div className="t mono">{x.cameraId}{i === 0 && <span className="muted"> · la más reciente</span>}</div><div className="s">{x.place}</div></div>
+                <div className="r"><span className="mono">{dateTime(x.at)}</span><span>{pct(x.score)}</span></div>
+              </div></li>
+            ))}
+          </ul>
+        </div>
         <div className="box"><div className="bh"><h3>Contexto de la cámara</h3></div><div className="bb"><img src={m.scene} alt="Escena del punto de control" style={{ width: '100%', borderRadius: 'var(--radius-md)', display: 'block' }} /></div></div>
         <div className="box"><div className="bh"><h3>Estados</h3></div><div className="bb"><ol className="timeline">
           {m.timeline.map((t, i) => <li key={i} className={i === m.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
@@ -80,16 +151,18 @@ export function FacialSheet({ id }: { id: string }) {
       </div>
       <div className="pf">
         {m.status === 'por_revisar' && !discarding && <>
-          <button className="btn positive" style={{ flex: 1 }} onClick={() => { notifyAgent(m.id, user); toast('Agente avisado con foto, motivo y certeza'); }}><Icon name="send" />Probable: avisar al agente</button>
+          <button className="btn positive" style={{ flex: 1 }} onClick={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta enviada a Maic y agente avisado'); }}><Icon name="send" />Es la persona: enviar a Maic</button>
           <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />No coincide</button>
         </>}
         {m.status === 'por_revisar' && discarding && <>
-          <span style={{ fontSize: 'var(--fs-sm)', width: '100%', color: 'var(--ink-muted)' }}>Motivo del descarte</span>
-          {FACIAL_DISCARD.map((r) => <button key={r} className="btn secondary xs" onClick={() => { discardFacial(m.id, r, user); setDiscarding(false); }}>{r}</button>)}
-          <button className="btn ghost xs" onClick={() => setDiscarding(false)}>Cancelar</button>
+          <div role="group" aria-labelledby="fc-discard" style={{ display: 'contents' }}>
+            <span id="fc-discard" style={{ fontSize: 'var(--fs-sm)', width: '100%', color: 'var(--ink-muted)' }}>Motivo del descarte</span>
+            {FACIAL_DISCARD.map((r) => <button key={r} className="btn secondary xs" onClick={() => { discardFacial(m.id, r, user); setDiscarding(false); }}>{r}</button>)}
+            <button className="btn ghost xs" onClick={() => setDiscarding(false)}>Cancelar</button>
+          </div>
         </>}
-        {m.status === 'agente_avisado' && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> El agente verifica en sitio y registra el resultado. Si se confirma, llega a Maic.</span>}
-        {m.status === 'descartada' && <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Descartada. El rostro no se guarda.</span>}
+        {m.status === 'confirmada' && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> Confirmada{m.reviewedBy ? ` por ${m.reviewedBy}` : ''}. {m.maic === 'recibida' ? `Maic recibió la alerta (${m.maicId}).` : 'Enviando a Maic…'} El agente en el punto de control está avisado.</span>}
+        {m.status === 'descartada' && <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Descartada{m.discardReason ? `: ${m.discardReason.toLowerCase()}` : ''}. El rostro no se guarda.</span>}
       </div>
     </>
   );
