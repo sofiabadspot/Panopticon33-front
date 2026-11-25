@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { forOperator, isListStale, useApi } from '../../api';
 import { ago } from '../../api/format';
-import { KIND_PHRASE, REVIEW_LABEL } from '../../api/labels';
+import { KIND_LABEL, KIND_PHRASE, REVIEW_LABEL } from '../../api/labels';
 import type { Alert, ReviewStatus } from '../../api/types';
 import { useSession } from '../../shell/session';
 import { EmptyState, Evidence, Icon, StatusChip, useNow } from '../../ui/kit';
@@ -28,19 +28,30 @@ export function QueuePanel() {
   const lists = useApi((s) => s.lists);
   const units = useApi((s) => s.units);
   const [tab, setTab] = useState<Tab>('por_revisar');
-  const [zone, setZone] = useState('');
+  const [q, setQ] = useState('');
   const alerts = useMemo(() => all.filter(forOperator), [all]);
+  /* Buscador: número de alerta, placa, zona, calle o cámara y tipo. Sin mayúsculas ni tildes;
+     en placas tampoco cuentan espacios ni guiones ("p512884" encuentra "P 512-884"). */
+  const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const tight = (t: string) => norm(t).replace(/[\s-]/g, '');
+  const matches = (a: Alert) => {
+    const n = norm(q.trim()); if (!n) return true;
+    const cam = cameras.find((x) => x.id === a.cameraId);
+    const text = norm([a.id, zones.find((z) => z.id === a.zoneId)?.name, cam?.street, a.cameraId, KIND_LABEL[a.kind], KIND_PHRASE[a.kind], a.maicId].filter(Boolean).join(' · '));
+    const plates = a.plate ? [a.plate.listed, a.plate.read].map(tight) : [];
+    return n.split(/\s+/).every((w) => text.includes(w)) || plates.some((p) => p.includes(tight(n)));
+  };
   const count = (t: Tab) => alerts.filter((a) => t === 'todas' || a.review === t).length;
   /* Las alertas de un mismo vehículo (misma placa en lista, leído en distintos lugares) van juntas,
      unidas por una línea: el grupo se ubica según su alerta más urgente (o más reciente) y adentro
      conserva ese orden. Las demás alertas no se agrupan. */
   const shown = useMemo(() => {
-    const sorted = alerts.filter((a) => (tab === 'todas' || a.review === tab) && (!zone || a.zoneId === zone))
+    const sorted = alerts.filter((a) => (tab === 'todas' || a.review === tab) && matches(a))
       .sort(tab === 'por_revisar' ? byUrgency : (a, b) => b.updatedAt - a.updatedAt);
     const groups = new Map<string, typeof sorted>();
     for (const a of sorted) { const key = groupKey(a); groups.set(key, [...(groups.get(key) ?? []), a]); }
     return [...groups.values()].flat();
-  }, [alerts, tab, zone]);
+  }, [alerts, tab, q, zones, cameras]); // eslint-disable-line react-hooks/exhaustive-deps
   /** Lugar de cada alerta en su grupo: sola, primera, del medio o última. */
   const groupPos = (i: number) => {
     const same = (j: number) => !!shown[j] && !!shown[i].plate && groupKey(shown[j]) === groupKey(shown[i]);
@@ -74,14 +85,11 @@ export function QueuePanel() {
             {t === 'todas' ? 'Todas' : t === 'confirmada' ? 'Confirmadas' : t === 'descartada' ? 'Descartadas' : REVIEW_LABEL[t]}<b>{count(t)}</b>
           </button>
         ))}
-        <select className={`fchip ${zone ? 'on' : ''}`} value={zone} onChange={(e) => setZone(e.target.value)} aria-label="Zona">
-          <option value="">Zona</option>
-          {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
-        </select>
+        <input type="search" className="fld sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar alerta, placa, zona o calle" aria-label="Buscar en las alertas" />
       </div>
       {role !== 'operator_911' && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: confirma o descarta el operador 911.</span></div>}
       <ul className="list pb flush">
-        {shown.length === 0 && <li><QueueEmpty tab={tab} zone={zones.find((z) => z.id === zone)?.name} alerts={alerts} cameras={cameras.length} going={units.filter((u) => u.enRoute).length} onTab={setTab} onClearZone={() => setZone('')} /></li>}
+        {shown.length === 0 && <li><QueueEmpty tab={tab} query={q.trim()} alerts={alerts} cameras={cameras.length} going={units.filter((u) => u.enRoute).length} onTab={setTab} onClearQuery={() => setQ('')} /></li>}
         {shown.map((a, i) => (
           <li key={a.id}>
             <button className={`item ${groupPos(i)} ${a.review === 'por_revisar' ? 'g-open' : ''} ${a.id === openId ? 'sel' : ''} ${a.review === 'descartada' ? 'done' : ''} ${c.hoverAlert === a.id ? 'hov' : ''} ${c.fresh.includes(a.id) ? 'is-new' : ''}`} style={{ gridTemplateColumns: '104px 1fr auto', borderTop: i ? undefined : 0 }}
@@ -114,10 +122,10 @@ export function QueuePanel() {
    · Sin ninguna alerta: el sistema sigue mirando; se dice cuántas cámaras.
    · Todas gestionadas: cuántas se resolvieron y si queda alguna unidad en camino.
    · Con filtros: se ofrece quitarlos. */
-function QueueEmpty({ tab, zone, alerts, cameras, going, onTab, onClearZone }: {
-  tab: Tab; zone?: string; alerts: Alert[]; cameras: number; going: number; onTab: (t: Tab) => void; onClearZone: () => void;
+function QueueEmpty({ tab, query, alerts, cameras, going, onTab, onClearQuery }: {
+  tab: Tab; query?: string; alerts: Alert[]; cameras: number; going: number; onTab: (t: Tab) => void; onClearQuery: () => void;
 }) {
-  if (zone) return <EmptyState icon="filter_list" title={`Nada en ${zone}`} action={<button className="btn secondary sm" onClick={onClearZone}>Ver todas las zonas</button>}>No hay alertas {tab === 'todas' ? '' : 'en esta pestaña '}para esta zona.</EmptyState>;
+  if (query) return <EmptyState icon="search_off" title={`Nada para “${query}”`} action={<button className="btn secondary sm" onClick={onClearQuery}>Borrar búsqueda</button>}>No hay alertas {tab === 'todas' ? '' : 'en esta pestaña '}que coincidan.</EmptyState>;
   if (!alerts.length) return <EmptyState icon="visibility" title="Sin alertas">Panopticon sigue mirando {cameras} cámaras. Cuando una regla se cumpla, la alerta aparece acá y suena un aviso.</EmptyState>;
   if (tab !== 'por_revisar') return <EmptyState icon="history" title={tab === 'confirmada' ? 'Ninguna confirmada todavía' : tab === 'descartada' ? 'Ninguna descartada todavía' : 'Sin alertas'} />;
   const conf = alerts.filter((a) => a.review === 'confirmada').length, desc = alerts.filter((a) => a.review === 'descartada').length;
