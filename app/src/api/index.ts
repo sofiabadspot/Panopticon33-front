@@ -12,7 +12,7 @@ import * as seed from './seed';
 import { normalizePlate } from './format';
 import { KIND_LABEL } from './labels';
 import type {
-  Alert, AuditEntry, Camera, InvPlace, Investigation, MaicLink, MassEvent, PlateRead, Role, Rule, Unit, User, WatchList, Zone, ZoneStatus,
+  Alert, AuditEntry, Camera, InvPlace, Investigation, MaicLink, MassEvent, PlateRead, Role, Rule, Sighting, Unit, User, WatchList, Zone, ZoneStatus,
 } from './types';
 
 const MIN = 60_000;
@@ -166,9 +166,10 @@ function simulate() {
     alerts = alerts.map((a) => (a.review === 'por_revisar' && (a.kind === 'aglomeracion' || a.kind === 'brecha_presencia')
       ? { ...a, observations: a.observations + 1, updatedAt: now } : a));
   }
-  // Demo: llega una alerta de placa nueva a los 48 s y después una por minuto (hasta 4)
-  // (solo con alertas: en los escenarios gestionadas, sin alertas y cargando no llegan nuevas)
-  if ((state.scenario === 'normal' || state.scenario === 'sin_maic') && (tick === 12 || (tick > 12 && tick <= 57 && tick % 15 === 12))) alerts = [newPlateAlert(now), ...alerts];
+  // Demo: una placa en lista pasa por una cámara a los 48 s y después una vez por minuto (hasta 4). Si ya
+  // tiene una alerta abierta, se suma a esa; si no, se crea. (Solo con alertas: en los escenarios
+  // gestionadas, sin alertas y cargando no llegan.)
+  if ((state.scenario === 'normal' || state.scenario === 'sin_maic') && (tick === 12 || (tick > 12 && tick <= 57 && tick % 15 === 12))) alerts = plateSighting(alerts, now);
   const moved = advanceUnits(state.units, now);
   alerts = closeArrived(alerts, moved, now);
   const units = tick % 4 === 0 ? moved.map((u) => (u.status === 'sin_reporte' || u.status === 'desconocida' || u.enRoute ? u
@@ -178,7 +179,30 @@ function simulate() {
 }
 setInterval(simulate, 4000);
 
-/** Cada alerta de la demo lleva su propio número y su propia cámara: si no, la lista las trata como una sola. */
+/** Las lecturas de una alerta de placa (las de antes del cambio no las guardaban: se arma la primera). */
+export function sightingsOf(a: Alert): Sighting[] {
+  if (a.sightings?.length) return a.sightings;
+  const cam = state.cameras.find((c) => c.id === a.cameraId);
+  return [{ at: a.createdAt, cameraId: a.cameraId, street: cam?.street ?? '', lat: a.lat, lon: a.lon, confidence: a.plate?.confidence ?? 0, evidence: a.evidence }];
+}
+/** Una placa en lista vuelve a pasar por una cámara. Si el vehículo ya tiene una alerta abierta (sin
+    descartar ni cerrada en Maic), se actualiza esa: dónde está ahora, una lectura más y una línea en su
+    historia; sube al principio de la lista. Si no, se crea una alerta nueva. Una sola alerta por vehículo:
+    si no, la bandeja se llena con el mismo auto. */
+function plateSighting(alerts: Alert[], now: number): Alert[] {
+  const read = newPlateAlert(now);
+  const open = alerts.find((a) => a.plate?.listed === read.plate!.listed && a.review !== 'descartada' && a.maic !== 'cerrada');
+  if (!open) return [read, ...alerts];
+  const s = sightingsOf(read)[0];
+  const next: Alert = {
+    ...open, lat: s.lat, lon: s.lon, cameraId: s.cameraId, zoneId: read.zoneId, updatedAt: now, observations: open.observations + 1,
+    sightings: [...sightingsOf(open), s],
+    timeline: [...open.timeline, { at: now, label: `Nueva lectura de la placa: ${s.cameraId}${s.street ? ' · ' + s.street : ''}` }],
+  };
+  return [next, ...alerts.filter((a) => a.id !== open.id)];
+}
+
+/** Cada lectura de la demo lleva su propia cámara (y, si crea alerta, su propio número). */
 let plateSeq = 0;
 function newPlateAlert(now: number): Alert {
   const watch = Object.keys(seed.plateWatch);
@@ -192,6 +216,7 @@ function newPlateAlert(now: number): Alert {
     rule: { id: 'R-PLACA', name: 'Placa en lista de robados', threshold: 'Confianza ≥ 85 %', measured: 'Confianza 95 %', persistence: 'Inmediata' },
     observations: 1, evidence: { type: 'pendiente', caption: 'Recorte de placa y foto del vehículo' },
     plate: { read: plate, listed: plate, confidence: 0.95, reason: info.reason, caseId: info.case, since: info.since, vehicle: info.vehicle, direction: 'Hacia el oriente' },
+    sightings: [{ at: now, cameraId: cam.id, street: cam.street, lat: cam.lat, lon: cam.lon, confidence: 0.95, evidence: { type: 'pendiente', caption: 'Recorte de placa y foto del vehículo' } }],
     review: 'por_revisar', maic: null, timeline: [{ at: now, label: 'Alerta creada por la regla "Placa en lista de robados"' }],
   }, state.zones);
 }

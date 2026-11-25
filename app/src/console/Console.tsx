@@ -113,7 +113,8 @@ function Layout() {
     const live = events.filter((e) => eventStatus(e, now) === 'en_curso');
     return (zoneId: string) => { const e = live.find((x) => x.zoneIds.includes(zoneId)); return e ? { id: e.id, name: e.name, end: e.end } : null; };
   }, [events, Math.floor(now / 60000)]); // eslint-disable-line react-hooks/exhaustive-deps
-  const sectorPts = useMemo(() => zones.flatMap((z) => z.ring).concat(cameras.map((x) => [x.lon, x.lat] as LngLat)), [zones, cameras]);
+  // El sector son las zonas con cámaras: las que no tienen (lejos del centro) no agrandan el encuadre inicial.
+  const sectorPts = useMemo(() => zones.filter((z) => z.cameras.length).flatMap((z) => z.ring).concat(cameras.map((x) => [x.lon, x.lat] as LngLat)), [zones, cameras]);
   const [fit, setFit] = useState<{ points: LngLat[]; key: string }>({ points: sectorPts, key: 'sector' });
   const sheetKey = c.sheet ? JSON.stringify(c.sheet) : '';
   useEffect(() => {
@@ -412,10 +413,11 @@ function ArrivalBanner() {
   if (!a) return null;
   const where = zones.find((z) => z.id === a.zoneId)?.name ?? cameras.find((x) => x.id === a.cameraId)?.street ?? a.cameraId;
   return (
-    <div className="arrival" role="alert" key={a.id}>
+    <div className="arrival" role="alert" key={a.id + ':' + (a.sightings?.length ?? 1)}>
       <AlertTile kind={a.kind} size={34} />
       <div className="arrival-txt">
-        <span className="arrival-lbl">Nueva alerta · {hhmm(a.createdAt)}</span>
+        {/* Una placa que vuelve a leerse no es una alerta nueva: es una lectura más de la misma. */}
+        <span className="arrival-lbl">{(a.sightings?.length ?? 1) > 1 ? `Nueva lectura · ${hhmm(a.updatedAt)}` : `Nueva alerta · ${hhmm(a.createdAt)}`}</span>
         <b>{KIND_PHRASE[a.kind]}{a.plate && <span className="plate">{a.plate.listed}</span>}</b>
         <span className="arrival-where">{where}</span>
       </div>

@@ -123,17 +123,19 @@ export function ConsoleProvider({ role, children }: { role: Role; children: Reac
   /* Llegada de alertas nuevas: se detectan las que aparecen después de abrir la consola.
      Quedan "frescas" hasta que alguien las abre; la última se anuncia arriba del mapa. */
   const allAlerts = useApi((s) => s.alerts);
-  const known = useRef<Set<string> | null>(null);
+  /** Alertas ya vistas y cuántas lecturas tenía cada una: una placa que vuelve a leerse también avisa. */
+  const known = useRef<Map<string, number> | null>(null);
   const [fresh, setFresh] = useState<string[]>([]);
   const [arrival, setArrival] = useState<string | null>(null);
   const [sound, setSoundState] = useState(() => { try { return localStorage.getItem('p33.sound') !== 'off'; } catch { return true; } });
   const setSound = useCallback((on: boolean) => { setSoundState(on); try { localStorage.setItem('p33.sound', on ? 'on' : 'off'); } catch { /* sin almacenamiento */ } }, []);
   useEffect(() => {
-    if (!known.current) { known.current = new Set(allAlerts.map((a) => a.id)); return; }
-    const nuevas = allAlerts.filter((a) => !known.current!.has(a.id) && a.review === 'por_revisar' && forOperator(a));
-    allAlerts.forEach((a) => known.current!.add(a.id));
+    const seen = (a: (typeof allAlerts)[number]) => a.sightings?.length ?? 1;
+    if (!known.current) { known.current = new Map(allAlerts.map((a) => [a.id, seen(a)])); return; }
+    const nuevas = allAlerts.filter((a) => (!known.current!.has(a.id) || seen(a) > known.current!.get(a.id)!) && a.review === 'por_revisar' && forOperator(a));
+    allAlerts.forEach((a) => known.current!.set(a.id, seen(a)));
     if (!nuevas.length) return;
-    setFresh((f) => [...nuevas.map((a) => a.id), ...f]);
+    setFresh((f) => [...nuevas.map((a) => a.id), ...f.filter((x) => !nuevas.some((a) => a.id === x))]);
     setArrival(nuevas[0].id);
     if (sound) chime();
   }, [allAlerts]); // eslint-disable-line react-hooks/exhaustive-deps

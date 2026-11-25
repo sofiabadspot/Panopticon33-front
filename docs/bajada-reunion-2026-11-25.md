@@ -19,7 +19,7 @@ Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
 5. [x] Separar lenguajes: alertas como íconos, cobertura como color del hexágono (2.1). Las zonas ya no se pintan y su rótulo no se pone rojo con una alerta: en el mapa, los íconos son alertas y los colores, lo que miden los hexágonos
 6. [ ] Elegir la iconografía de criticidad: Propuesta A o B, y cómo se marca el nivel (2.3). **En pausa** (pedido de Sofía, 25/11)
 7. [ ] Mostrar la criticidad en los íconos de alerta del mapa y de la lista (2.2). **En pausa**: depende de la 6
-8. [ ] Una sola alerta por placa: cada nueva lectura actualiza la alerta existente (2.4, 3.2)
+8. [x] Una sola alerta por placa: cada nueva lectura actualiza la alerta existente (2.4, 3.2). La alerta se mueve a la última lectura, suma la lectura a su recorrido y a su historia, sube en la lista y avisa "Nueva lectura"
 9. [ ] "Ver recorrido" de placa con la captura y la cámara en cada punto (3.1). Ya hay un avance sin commitear: cada parada muestra su captura y se puede ocultar desde el HUD
 10. [ ] Facial: sacar el paso "Reconstruir en 3D" (4.3)
 11. [ ] Facial: la ficha muestra captura, todas las fotos de la lista y la reconstrucción 3D (4.2)

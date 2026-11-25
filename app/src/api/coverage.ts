@@ -107,8 +107,13 @@ export type HexData = { zones: Zone[]; status: Record<string, ZoneStatus>; camer
 /** Firma de los datos que usa cada lectura: si no cambia, no hace falta recalcular aunque los
     objetos sean otros. Redondea lo que el ojo no distingue (personas a ~2 %, posiciones a ~10 m). */
 export function hexSignature(metric: HexMetric, d: HexData): string {
+  // Qué zonas no se miden ahora: adentro no se pinta, en cualquier lectura.
+  return d.zones.filter((z) => d.status[z.id] && d.status[z.id].coverage !== 'medida').map((z) => z.id).join(',') + '#' + readingSig(metric, d);
+}
+function readingSig(metric: HexMetric, d: HexData): string {
   if (metric === 'personas') return d.zones.map((z) => { const s = d.status[z.id]; return `${z.id}:${s?.count == null ? '-' : Math.round((s.occupancy ?? (s.densityPerM2 ?? 0) / 5) * 50)}`; }).join(',') + '|' + camSig(d.cameras);
-  if (metric === 'alertas') return d.alerts.map((a) => `${a.id}:${a.severity}:${a.review}:${a.maic ?? ''}`).join(',');
+  // Con la posición: una alerta de placa se mueve con cada lectura nueva sin cambiar de número.
+  if (metric === 'alertas') return d.alerts.map((a) => `${a.id}:${a.severity}:${a.review}:${a.maic ?? ''}:${a.lat.toFixed(4)}:${a.lon.toFixed(4)}`).join(',');
   return (d.units ?? []).filter(reporting).map((u) => `${u.id}:${u.lat.toFixed(4)}:${u.lon.toFixed(4)}`).join(',');
 }
 const camSig = (cameras: Camera[]) => cameras.map((c) => c.status[0]).join('');

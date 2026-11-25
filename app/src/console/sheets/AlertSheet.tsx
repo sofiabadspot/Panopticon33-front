@@ -2,10 +2,10 @@
    confirmar es un clic (va a Maic); descartar pide un motivo de una lista corta.
    Tras decidir, la ficha pasa sola a la siguiente alerta por revisar. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { audit, confirmAlert, discardAlert, forOperator, openAlert, readsOf, useApi } from '../../api';
+import { audit, confirmAlert, discardAlert, forOperator, openAlert, readsOf, sightingsOf, useApi } from '../../api';
 import { ago, dateTime, dec1, fmt, fmtCrowd, hhmm, pct } from '../../api/format';
 import { DISCARD_REASONS, KIND_LABEL, KIND_PHRASE } from '../../api/labels';
-import type { Alert, Zone } from '../../api/types';
+import type { Alert, PlateRead, Zone } from '../../api/types';
 import { useSession } from '../../shell/session';
 import { Unattended } from '../../ui/Unattended';
 import { Evidence, Icon, Sparkline, StatusChip, useNow, useToast } from '../../ui/kit';
@@ -29,7 +29,18 @@ export function AlertSheet({ id }: { id: string }) {
   const cameras = useApi((s) => s.cameras);
   const [discarding, setDiscarding] = useState(false);
   const a = alerts.find((x) => x.id === id);
-  const prev = useMemo(() => (a?.plate ? readsOf(a.plate.listed).filter((x) => x.at <= a.createdAt).sort((x, y) => y.at - x.at) : []), [a?.plate, a?.createdAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* Lecturas de la placa antes de la última: las de los 7 días anteriores a la alerta y las que la alerta
+     fue sumando (una placa tiene una sola alerta; cada lectura nueva se suma a esta). La última es dónde
+     está ahora: la posición de la alerta. */
+  const sights = a ? sightingsOf(a) : [];
+  const last = sights[sights.length - 1];
+  const prev = useMemo(() => {
+    if (!a?.plate) return [];
+    const first = sights[0]?.at ?? a.createdAt;
+    const before = readsOf(a.plate.listed).filter((x) => x.at < first);
+    const since: PlateRead[] = sights.slice(0, -1).map((x, i) => ({ id: `${a.id}-${i}`, plate: a.plate!.listed, at: x.at, cameraId: x.cameraId, street: x.street, lat: x.lat, lon: x.lon, confidence: x.confidence, normalized: false, listed: true, evidence: x.evidence }));
+    return [...before, ...since].sort((x, y) => y.at - x.at);
+  }, [a?.plate, a?.createdAt, sights.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (a) openAlert(a.id, user); }, [a?.id, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Recorrido de la placa: el usuario lo pide y el mapa dibuja todas las lecturas en orden,
@@ -43,11 +54,11 @@ export function AlertSheet({ id }: { id: string }) {
     if (!trace || !a) return;
     const stops: RouteStop[] = traceReads.map((r, i) => ({ lat: r.lat, lon: r.lon, label: String(i + 1), time: hhmm(r.at), title: `${dateTime(r.at)} · ${r.cameraId} · ${r.street}`,
       snap: { camera: r.cameraId, street: r.street, evidence: r.evidence, confidence: r.confidence } }));
-    stops.push({ lat: a.lat, lon: a.lon, label: String(stops.length + 1), time: hhmm(a.createdAt), title: `Ahora · lectura de esta alerta · ${a.cameraId}`,
-      snap: { camera: a.cameraId, street: 'Lectura de esta alerta', evidence: a.evidence } });
+    stops.push({ lat: a.lat, lon: a.lon, label: String(stops.length + 1), time: hhmm(last?.at ?? a.createdAt), title: `Ahora · última lectura · ${a.cameraId}`,
+      snap: { camera: a.cameraId, street: last?.street || 'Última lectura', evidence: last?.evidence ?? a.evidence, confidence: last?.confidence } });
     c.setOverlay({ route: stops, routeLabel: a.plate?.listed, fit: { points: stops.map((s) => [s.lon, s.lat]), key: `recorrido-${a.id}` } });
     return () => c.setOverlay({});
-  }, [trace, a?.id, traceReads]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [trace, a?.id, traceReads, a?.lat, a?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggleTrace = () => {
     if (!a?.plate) return;
     if (!trace) audit(user, 'Ver recorrido de placa', a.plate.listed, `${traceReads.length + 1} lecturas en el mapa`);
@@ -237,7 +248,9 @@ function Transmission({ a, onSolo }: { a: Alert; onSolo?: (solo: boolean) => voi
 function PlateBlocks({ a, camId, place, onCamera }: { a: Alert; camId?: string; place?: string; onCamera?: () => void }) {
   const p = a.plate!;
   const same = p.read === p.listed;
-  const conf = Math.round(p.confidence * 100);
+  // Una placa suma lecturas a su alerta: lo que se muestra es la última (dónde y con qué certeza se leyó).
+  const reads = sightingsOf(a), lastRead = reads[reads.length - 1];
+  const conf = Math.round((lastRead?.confidence ?? p.confidence) * 100);
   const insp = useInspect(`${p.listed} · ${camId ?? ''} · ${dateTime(a.createdAt)}`);
   return (
     <>
@@ -276,14 +289,14 @@ function PlateBlocks({ a, camId, place, onCamera }: { a: Alert; camId?: string; 
       <div className="box">
         <div className="bh"><h3>Detalles de la lectura</h3></div>
         <div className="bb"><dl className="details">
-          <dt>Fecha y hora</dt><dd className="mono">{dateTime(a.createdAt)}</dd>
+          <dt>Fecha y hora</dt><dd className="mono">{dateTime(lastRead?.at ?? a.createdAt)}</dd>
           {camId && <><dt>Cámara</dt><dd>{onCamera ? <button className="linklike mono" onClick={onCamera}>{camId}</button> : <span className="mono">{camId}</span>}</dd></>}
           {place && <><dt>Lugar</dt><dd>{place}</dd></>}
           <dt>Dirección</dt><dd>{p.direction}</dd>
           <dt>Regla</dt><dd>{a.rule.name}</dd>
           <dt>Umbral</dt><dd>{a.rule.threshold}</dd>
           {/* "Medido" es la certeza de la lectura: ya está arriba, junto a las placas. */}
-          <dt>Observaciones</dt><dd><span className="mono">{a.observations}</span> {a.observations === 1 ? 'lectura' : 'agrupadas'}</dd>
+          <dt>Lecturas</dt><dd><span className="mono">{a.observations}</span> {a.observations === 1 ? 'lectura' : 'lecturas'} desde que se creó la alerta</dd>
         </dl></div>
       </div>
     </>

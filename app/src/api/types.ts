@@ -56,6 +56,9 @@ export interface PlateMatch {
   vehicle: { type: string; color: string; make: string }; direction: string;
 }
 
+/** Una lectura de la placa de una alerta: dónde, cuándo, con qué certeza y la captura de la cámara. */
+export interface Sighting { at: number; cameraId: string; street: string; lat: number; lon: number; confidence: number; evidence: Evidence }
+
 export interface TimelineEntry { at: number; label: string; by?: string }
 
 export interface Alert {
@@ -66,6 +69,10 @@ export interface Alert {
   observations: number;
   evidence: Evidence;
   plate?: PlateMatch;
+  /** Placa: cada vez que una cámara volvió a leer el vehículo desde que se creó la alerta. La primera es la
+      lectura que la creó y la última, dónde está ahora (es también lat, lon y cameraId de la alerta).
+      Una placa en lista tiene una sola alerta abierta: las lecturas nuevas se suman acá. */
+  sightings?: Sighting[];
   eventId?: string;
   review: ReviewStatus; reviewedBy?: string; discardReason?: string;
   maic: MaicStatus | null; maicId?: string;

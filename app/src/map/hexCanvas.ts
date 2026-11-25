@@ -5,7 +5,7 @@
    cuando cambian los datos.
    Un lienzo por franja de zoom (HEX_TIERS), del tamaño de su área (la ciudad o el sector). */
 import { cellToBoundary } from 'h3-js';
-import { CITY_BOUNDS, HEX_TIERS, hexGrid, hexValues, sectorBounds, type Bounds, type HexData, type HexGrid, type HexMetric, type HexTier } from '../api/coverage';
+import { cellsAtRes, CITY_BOUNDS, HEX_TIERS, hexGrid, hexValues, sectorBounds, zoneHexes, type Bounds, type HexData, type HexGrid, type HexMetric, type HexTier } from '../api/coverage';
 
 /** Lado medio del hexágono por resolución H3 (m). */
 const EDGE_M: Record<number, number> = { 9: 174, 10: 66, 11: 25 };
@@ -56,6 +56,9 @@ export async function makeHexLayer(i: number, zones: HexData['zones']): Promise<
   return { tier, grid, canvas, ctx, coords: [[b.w, b.n], [b.e, b.n], [b.e, b.s], [b.w, b.s]], verts, nv, dirty: true };
 }
 
+/** Zonas que ninguna cámara mide ahora (cámara fuera de su posición o sin video). */
+export const unmeasured = (d: Pick<HexData, 'zones' | 'status'>) => d.zones.filter((z) => d.status[z.id] && d.status[z.id].coverage !== 'medida');
+
 export interface HexColors { positive: string; alert: string; negative: string }
 const rgb = (hex: string) => { const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map((x) => x + x).join('') : h.slice(0, 6), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 /** Opacidad de personas y alertas según el valor: casi nada en el borde de la mancha, más al centro. */
@@ -74,8 +77,11 @@ function fill(m: HexMetric, v: number, c: HexColors) {
     trazado con miles de hexágonos tarda segundos (4.9 s para 35.000), uno por celda ~15 ms. */
 export function drawHexLayer(L: HexLayer, m: HexMetric, d: HexData, colors: HexColors) {
   const v = hexValues(m, L.grid, d);
+  // Zonas sin medición (ninguna cámara la mide): adentro no hay mapa de calor. Sin dato no se muestra
+  // como cero; el mapa las marca con un contorno gris punteado (ver MapView). Mismas celdas que ese contorno.
+  const blind = new Set(cellsAtRes(zoneHexes(unmeasured(d)), L.tier.res));
   const groups = new Map<number, number[]>();
-  for (let c = 0; c < v.length; c++) if (v[c] >= 0) { const g = groups.get(v[c]); if (g) g.push(c); else groups.set(v[c], [c]); }
+  for (let c = 0; c < v.length; c++) if (v[c] >= 0 && !blind.has(L.grid.cells[c])) { const g = groups.get(v[c]); if (g) g.push(c); else groups.set(v[c], [c]); }
   const { ctx, verts, nv } = L;
   ctx.clearRect(0, 0, L.canvas.width, L.canvas.height);
   for (const [val, cells] of groups) {

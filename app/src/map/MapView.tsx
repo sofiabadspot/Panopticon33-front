@@ -14,7 +14,7 @@ import { fmtCrowd, hhmm } from '../api/format';
 import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
 import { cellsAtRes, HEX_TIERS, hexesOutline, zoneHexes, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
-import { drawHexLayer, makeHexLayer, type HexColors, type HexLayer } from './hexCanvas';
+import { drawHexLayer, makeHexLayer, unmeasured, type HexColors, type HexLayer } from './hexCanvas';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
 
@@ -218,11 +218,14 @@ export function MapView(p: Props) {
          nombre del evento va en su propio rótulo, arriba del área (ver los marcadores). */
       map.addSource('area', { type: 'geojson', data: fc([]) });
       map.addSource('areaCells', { type: 'geojson', data: fc([]) });
-      map.addLayer({ id: 'area-fill', type: 'fill', source: 'area', paint: {
+      map.addLayer({ id: 'area-fill', type: 'fill', source: 'area', filter: ['!=', ['get', 'k'], 'sinmedicion'], paint: {
         'fill-color': ink, 'fill-opacity': ['case', ['get', 'dim'], 0.02, ['match', ['get', 'k'], 'sel', 0.08, 0.06]] } });
       map.addLayer({ id: 'area-cells', type: 'line', source: 'areaCells', minzoom: 14, paint: {
         'line-color': ink, 'line-width': 0.6, 'line-opacity': ['case', ['get', 'dim'], 0.05, 0.16] } });
-      map.addLayer({ id: 'area-line', type: 'line', source: 'area', layout: { 'line-join': 'round' }, paint: {
+      /* Zona sin medición (ninguna cámara la mide): contorno gris punteado y, adentro, sin mapa de calor. */
+      map.addLayer({ id: 'nodata-line', type: 'line', source: 'area', filter: ['==', ['get', 'k'], 'sinmedicion'], layout: { 'line-join': 'round' }, paint: {
+        'line-color': muted, 'line-width': 1.8, 'line-dasharray': [2, 1.6], 'line-opacity': ['case', ['get', 'dim'], 0.45, 1] } });
+      map.addLayer({ id: 'area-line', type: 'line', source: 'area', filter: ['!=', ['get', 'k'], 'sinmedicion'], layout: { 'line-join': 'round' }, paint: {
         'line-color': ink, 'line-width': ['match', ['get', 'k'], 'sel', 2, 1.4],
         'line-opacity': ['case', ['get', 'dim'], 0.3, ['match', ['get', 'k'], 'sel', 0.9, 0.7]] } });
       // Campo de visión de cada cámara: hacia dónde mira, con qué ángulo y hasta dónde llega.
@@ -433,13 +436,13 @@ export function MapView(p: Props) {
     const eventAreas: { id: string; name: string; end: number; top: LngLat; dim: boolean }[] = [];
     // Las celdas se dibujan al tamaño de la grilla que se ve a este zoom, para que el área calce con los hexágonos.
     const zNow = map.getZoom(), gridRes = (HEX_TIERS.find((tr) => zNow >= tr.minzoom && zNow < tr.maxzoom) ?? HEX_TIERS[0]).res;
-    const addArea = (data: string[], k: 'evento' | 'sel', dim: boolean) => {
+    const addArea = (data: string[], k: 'evento' | 'sel' | 'sinmedicion', dim: boolean) => {
       const key = gridRes + ':' + data.join(',');
       let hit = areaCache.get(key);
       if (!hit) { const cells = cellsAtRes(data, gridRes); hit = { cells, shape: hexesOutline(cells) }; if (areaCache.size > 40) areaCache.clear(); areaCache.set(key, hit); }
       const { cells, shape } = hit; if (!shape.length) return null;
       area.push({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: shape }, properties: { k, dim } });
-      for (const c of cells) areaCells.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(c)] }, properties: { dim } });
+      if (k !== 'sinmedicion') for (const c of cells) areaCells.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(c)] }, properties: { dim } });
       return shape.flat(2).reduce((a, q) => (q[1] > a[1] ? q : a)); // el punto más al norte, para el rótulo
     };
     if (L.events) {
@@ -451,6 +454,7 @@ export function MapView(p: Props) {
         if (top) eventAreas.push({ id: e.id, name, end: e.end, top, dim });
       }
     }
+    if (L.zones && P.zoneStatus) for (const z of unmeasured({ zones: P.zones, status: st })) addArea(zoneHexes([z]), 'sinmedicion', !!selZone && selZone !== z.id);
     if (L.zones) {
       const sel = P.zones.filter((z) => z.id === selZone || z.id === P.selectedZone || P.highlightZones?.includes(z.id));
       if (sel.length) addArea(zoneHexes(sel), 'sel', false);
@@ -557,9 +561,9 @@ export function MapView(p: Props) {
         // propio rótulo sobre su área.
         <span className={`mk-zone ${nodata ? 'nodata' : ''} ${P.selectedZone === z.id || P.highlightZones?.includes(z.id) ? 'sel' : ''} ${dimZ ? 'dimz' : ''}`}>
           <i className="zdot" aria-hidden />
-          <span className="zl"><span className="zn">{z.name}</span><b>{nodata ? (s?.coverage === 'sin_cobertura' ? 'Sin medición' : 'Sin datos') : fmtCrowd(s.count!)}</b></span>
+          <span className="zl"><span className="zn">{z.name}</span><b>{nodata ? (!z.cameras.length ? 'Sin cámara' : s?.coverage === 'sin_cobertura' ? 'Sin medición' : 'Sin datos') : fmtCrowd(s.count!)}</b></span>
         </span>
-      ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'center', `Zona ${z.name}: ${nodata ? (s?.coverage === 'sin_cobertura' ? 'sin medición' : 'sin datos') : fmtCrowd(s.count!) + ' personas'}${ev ? ` · evento en curso hasta ${hhmm(ev.end)}` : ''}`);
+      ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'center', `Zona ${z.name}: ${nodata ? (!z.cameras.length ? 'sin cámara' : s?.coverage === 'sin_cobertura' ? 'sin medición' : 'sin datos') : fmtCrowd(s.count!) + ' personas'}${ev ? ` · evento en curso hasta ${hhmm(ev.end)}` : ''}`);
     }
     // Rótulo del evento: arriba de su área (en el punto más al norte), con su nombre y hasta qué hora dura.
     if (!focus && !P.compact && map.getZoom() >= EVENT_LABEL_Z) for (const e of eventAreas) {

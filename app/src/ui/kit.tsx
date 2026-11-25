@@ -38,9 +38,10 @@ export function KindIcon({ alert }: { alert: Alert }) {
   return <span className={`ic ${alert.severity}`}><Icon name={KIND_ICON[alert.kind]} /></span>;
 }
 
-export function CoverageChip({ coverage }: { coverage: Coverage }) {
+/** Si la zona se mide. `noCamera`: la zona no tiene cámaras (más preciso que "Sin datos"). */
+export function CoverageChip({ coverage, noCamera }: { coverage: Coverage; noCamera?: boolean }) {
   if (coverage === 'medida') return <span className="chip ok"><span className="dot" aria-hidden />Medida</span>;
-  return <span className="chip nodata"><Icon name="visibility_off" />{COVERAGE_LABEL[coverage]}</span>;
+  return <span className="chip nodata"><Icon name="visibility_off" />{noCamera ? 'Sin cámara' : COVERAGE_LABEL[coverage]}</span>;
 }
 
 /** Regla de evidencia: solo material real. Si aún no hay, el marcador con el logo en B/N, nunca una imagen inventada. */

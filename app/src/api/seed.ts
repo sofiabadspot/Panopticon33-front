@@ -27,10 +27,22 @@ export const ORIGIN = S.origin;
 /* ---------- Zonas: capacidad de referencia = 4 personas/m² (supuesto hasta que el Ministerio la fije) ---------- */
 /** Base de personas por zona en el escenario de la demo (evento de diciembre en la plaza). */
 const BASE: Record<string, number> = { 'Z-01': 78000, 'Z-02': 31000, 'Z-03': 19500, 'Z-04': 17200, 'Z-05': 470, 'Z-06': 900 };
-export const zones: Zone[] = S.zones.map((z) => ({
-  id: z.id, name: z.name, lat: z.lat, lon: z.lon, areaM2: z.areaM2, ring: z.ring, cameras: z.cameras,
-  capacity: Math.round((z.areaM2 * 4) / 100) * 100,
-}));
+/** Zona vigilada que todavía no tiene cámaras, lejos del sector: no se mide, y el mapa la marca con un
+    contorno gris punteado y sin mapa de calor adentro. El contorno es un polígono simple alrededor del centro. */
+function zoneWithoutCameras(id: string, name: string, lon: number, lat: number, radiusM: number): Zone {
+  const kx = Math.cos((lat * Math.PI) / 180) * 111320;
+  const ring: LngLat[] = Array.from({ length: 9 }, (_, i) => { const a = (i / 8) * 2 * Math.PI, f = i % 2 ? 0.82 : 1; return [lon + (Math.cos(a) * radiusM * f) / kx, lat + (Math.sin(a) * radiusM * f) / 111320] as LngLat; });
+  const areaM2 = Math.round(Math.PI * radiusM * radiusM * 0.85);
+  return { id, name, lat, lon, areaM2, ring, cameras: [], capacity: Math.round((areaM2 * 4) / 100) * 100 };
+}
+export const zones: Zone[] = [
+  ...S.zones.map((z) => ({
+    id: z.id, name: z.name, lat: z.lat, lon: z.lon, areaM2: z.areaM2, ring: z.ring, cameras: z.cameras,
+    capacity: Math.round((z.areaM2 * 4) / 100) * 100,
+  })),
+  zoneWithoutCameras('Z-07', 'Mercado Central', -89.1945, 13.6985, 90),
+  zoneWithoutCameras('Z-08', 'Plaza Masferrer', -89.2405, 13.7085, 70),
+];
 export const zoneBase = BASE;
 
 /* ---------- Cámaras ---------- */
@@ -45,10 +57,11 @@ export const cameras: Camera[] = S.cameras.map((c, i) => {
     lastFrameAt: c.status === 'offline' ? NOW - 23 * MIN : NOW,
   };
 });
-// Redondel Olímpico: su cámara PTZ está fuera de preset → la zona queda "sin cobertura", nunca "0 personas".
+// Redondel Olímpico: su cámara es PTZ (se puede mover entre presets). Se mide normalmente; el ejemplo de
+// zona sin medición son las zonas sin cámaras, lejos del sector (Z-07 y Z-08).
 for (const id of S.zones.find((z) => z.id === 'Z-05')?.cameras ?? []) {
   const cam = cameras.find((c) => c.id === id);
-  if (cam) { cam.ptz = true; cam.presets = ['P1 · Redondel', 'P2 · Acceso sur']; cam.status = 'fuera_de_preset'; }
+  if (cam) { cam.ptz = true; cam.presets = ['P1 · Redondel', 'P2 · Acceso sur']; }
 }
 
 /* ---------- Unidades: las de cada zona se reparten dentro de su perímetro ---------- */
@@ -146,10 +159,14 @@ for (let i = 0; i < 520; i++) addRead(randPlate(), NOW - Math.floor(r() * 7 * 24
 Object.keys(plateWatch).forEach((plate, k) => {
   let cam = plateCams[(k * 7 + 3) % plateCams.length];
   const used = new Set<string>();
-  const start = NOW - (k === 0 ? 50 : 180 + k * 400) * MIN;
+  // Entre lectura y lectura pasan de 5 a 11 min; la última, como mucho 2 min antes de ahora (nunca en el futuro).
+  const gaps = Array.from({ length: 6 }, (_, i) => (i ? 5 + Math.floor(r() * 7) : 0));
+  const span = gaps.reduce((s, g) => s + g, 0);
+  let at = NOW - Math.max(k === 0 ? 50 : 180 + k * 400, span + 2) * MIN;
   for (let i = 0; i < 6; i++) {
     used.add(cam.id);
-    addRead(plate, start + i * (5 + Math.floor(r() * 7)) * MIN, cam, 0.9 + r() * 0.09, true);
+    at += gaps[i] * MIN;
+    addRead(plate, at, cam, 0.9 + r() * 0.09, true);
     const next = plateCams.filter((c) => !used.has(c.id)).sort((a, b) => Math.hypot(a.lat - cam.lat, a.lon - cam.lon) - Math.hypot(b.lat - cam.lat, b.lon - cam.lon))[1];
     if (!next) break;
     cam = next;

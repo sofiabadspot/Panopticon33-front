@@ -43,10 +43,10 @@ export function ZoneSheet({ id }: { id: string }) {
       <SheetHead
         kicker={<><span className="mono">{zone.id}</span>·<span>{fmt(zone.areaM2)} m²</span>·<span>capacidad {fmt(zone.capacity)}</span></>}
         title={<>{sev && <span className={`sev ${sev}`} aria-hidden />}{zone.name}</>}
-        aside={<>{s && <CoverageChip coverage={s.coverage} />}{ev && <button className="chip outline" onClick={() => c.open({ k: 'evento', id: ev.id })}><Icon name="flag" />{ev.name.split(' · ')[0]} · hasta {hhmm(ev.end)}</button>}</>}
+        aside={<>{s && <CoverageChip coverage={s.coverage} noCamera={!!zone && !zone.cameras.length} />}{ev && <button className="chip outline" onClick={() => c.open({ k: 'evento', id: ev.id })}><Icon name="flag" />{ev.name.split(' · ')[0]} · hasta {hhmm(ev.end)}</button>}</>}
       />
       <div className="pb">
-        {nd && <div className="callout"><Icon name="visibility_off" /><span className="grow"><b>{s?.coverage === 'sin_cobertura' ? 'Sin medición.' : 'Sin datos.'}</b> {s?.coverage === 'sin_cobertura' ? 'La cámara PTZ está fuera de su preset: se detectan personas pero la zona no se mide.' : 'Ninguna cámara de la zona envía video.'} No significa que esté vacía.</span></div>}
+        {nd && <div className="callout"><Icon name="visibility_off" /><span className="grow"><b>{!zone.cameras.length ? 'Sin cámara.' : s?.coverage === 'sin_cobertura' ? 'Sin medición.' : 'Sin datos.'}</b> {!zone.cameras.length ? 'La zona todavía no tiene cámaras: no se puede medir cuánta gente hay.' : s?.coverage === 'sin_cobertura' ? 'La cámara PTZ está fuera de su preset: se detectan personas pero la zona no se mide.' : 'Ninguna cámara de la zona envía video.'} No significa que esté vacía.</span></div>}
         <div className="kpis" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
           <div className={`kpi ${nd ? 'nodata' : ''}`}><div className="v">{nd ? 'Sin medición' : fmtCrowd(s.count!)}</div><div className="l">Personas</div>{!nd && <div className="x">entre {fmtCrowd(s.low!)} y {fmtCrowd(s.high!)}</div>}</div>
           <div className={`kpi ${nd ? 'nodata' : s.occupancy! * 100 > occMax ? 'alert' : ''}`}>
