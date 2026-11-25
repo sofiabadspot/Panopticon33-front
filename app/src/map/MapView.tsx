@@ -183,6 +183,8 @@ export function MapView(p: Props) {
       // Vista inclinada, como una sala de control: 45° y un rumbo leve. Botón derecho para girar e inclinar.
       pitch: p.compact ? 0 : 45, bearing: p.compact ? 0 : -18, maxPitch: 60,
       dragRotate: !p.compact, pitchWithRotate: !p.compact, doubleClickZoom: !p.onMapClick, maxZoom: 18.5, minZoom: 5,
+      // Mosaicos ya vistos quedan en memoria: al volver a una zona no se piden de nuevo.
+      maxTileCacheSize: 1000,
     });
     if (p.compact) map.touchZoomRotate.disableRotation();
     // La perspectiva se maneja con el control propio (ViewControl, abajo): el de MapLibre aplanaba el mapa al tocar la brújula.
@@ -317,11 +319,24 @@ export function MapView(p: Props) {
         const id = 'g-' + k;
         if (k === kind && !map.getSource(id)) {
           map.addSource(id, { type: 'raster', tiles: googleTiles(session), tileSize: 256, maxzoom: 20 });
-          map.addLayer({ id, type: 'raster', source: id, paint: k === 'satelite' ? { 'raster-brightness-max': 0.7, 'raster-saturation': -0.4 } : {} }, 'country-line');
+          // Cada mosaico aparece apenas llega, sin fundido (por defecto MapLibre tarda 300 ms más en mostrarlo).
+          map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-fade-duration': 0, ...(k === 'satelite' ? { 'raster-brightness-max': 0.7, 'raster-saturation': -0.4 } : {}) } }, 'country-line');
+          // El mapa local queda debajo de Google como respaldo: mientras un mosaico no llega (tarda ~300 ms),
+          // se ven las calles propias en la misma paleta en vez de un hueco. Al llegar, el mosaico las tapa.
+          for (const l of ['parks', 'buildings', 'roads-minor', 'roads-major']) map.moveLayer(l, id);
+          // Debajo, la misma base en baja resolución (mosaicos de zoom 13 como mucho, cada uno cubre 16 de
+          // los de zoom 15): llega mucho antes y llena la pantalla con una versión borrosa mientras cargan
+          // los nítidos, como en Google Maps. Va sin rótulos (ampliados se verían gigantes). Afuera del
+          // sector, donde no hay mapa local, es el respaldo.
+          const bare = await googleSession(kind, true).catch(() => null);
+          if (bare && mapRef.current === map && !map.getSource(id + '-lo')) {
+          map.addSource(id + '-lo', { type: 'raster', tiles: googleTiles(bare), tileSize: 256, maxzoom: 13 });
+          map.addLayer({ id: id + '-lo', type: 'raster', source: id + '-lo', paint: { 'raster-fade-duration': 0, ...(k === 'satelite' ? { 'raster-brightness-max': 0.7, 'raster-saturation': -0.4 } : {}) } }, id);
+          }
         }
-        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', k === kind ? 'visible' : 'none');
+        for (const l of [id, id + '-lo']) if (map.getLayer(l)) map.setLayoutProperty(l, 'visibility', k === kind ? 'visible' : 'none');
       }
-      for (const l of LOCAL_LAYERS) map.setLayoutProperty(l, 'visibility', 'none');
+      for (const l of LOCAL_LAYERS) map.setLayoutProperty(l, 'visibility', 'visible');
       setGoogle({ session, copyright: null });
       cb.current.onBaseStatus?.('google');
     } catch {

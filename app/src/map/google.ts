@@ -38,22 +38,25 @@ const ROADMAP_STYLE = [
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#6d6d6d' }] },
 ];
 
-const sessions: Partial<Record<GoogleBase, string>> = {};
+const sessions: Partial<Record<string, string>> = {};
 
-/** POST /v1/createSession — una sesión por tipo de base. Lanza si Google la rechaza. */
-export async function googleSession(kind: GoogleBase): Promise<string> {
-  if (sessions[kind]) return sessions[kind]!;
+/** POST /v1/createSession — una sesión por tipo de base. Lanza si Google la rechaza.
+    `bare`: sin rótulos. Es para la capa de baja resolución que se ve mientras cargan los mosaicos
+    nítidos: ampliada, con rótulos, mostraría nombres gigantes. */
+export async function googleSession(kind: GoogleBase, bare = false): Promise<string> {
+  const key = kind + (bare ? '-bare' : '');
+  if (sessions[key]) return sessions[key]!;
   if (!KEY) throw new Error('sin clave');
   const hidpi = (window.devicePixelRatio || 1) >= 1.5;
   const scale = hidpi ? { scale: 'scaleFactor2x', highDpi: true } : { scale: 'scaleFactor1x' };
   const body = kind === 'mapa'
-    ? { mapType: 'roadmap', language: 'es-419', region: 'SV', ...scale, styles: ROADMAP_STYLE }
-    : { mapType: 'satellite', language: 'es-419', region: 'SV', layerTypes: ['layerRoadmap'], ...scale };
+    ? { mapType: 'roadmap', language: 'es-419', region: 'SV', ...scale, styles: bare ? [...ROADMAP_STYLE, { elementType: 'labels', stylers: [{ visibility: 'off' }] }] : ROADMAP_STYLE }
+    : { mapType: 'satellite', language: 'es-419', region: 'SV', ...(bare ? {} : { layerTypes: ['layerRoadmap'] }), ...scale };
   const res = await fetch(`${API}/v1/createSession?key=${KEY}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`Google rechazó la sesión (${res.status})`);
   const data = await res.json();
-  sessions[kind] = data.session as string;
-  return sessions[kind]!;
+  sessions[key] = data.session as string;
+  return sessions[key]!;
 }
 
 export const googleTiles = (session: string) => [`${API}/v1/2dtiles/{z}/{x}/{y}?session=${session}&key=${KEY}`];
