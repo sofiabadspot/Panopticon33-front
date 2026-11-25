@@ -170,7 +170,7 @@ function simulate() {
   // (solo con alertas: en los escenarios gestionadas, sin alertas y cargando no llegan nuevas)
   if ((state.scenario === 'normal' || state.scenario === 'sin_maic') && (tick === 12 || (tick > 12 && tick <= 57 && tick % 15 === 12))) alerts = [newPlateAlert(now), ...alerts];
   const moved = advanceUnits(state.units, now);
-  alerts = closeArrived(alerts, now);
+  alerts = closeArrived(alerts, moved, now);
   const units = tick % 4 === 0 ? moved.map((u) => (u.status === 'sin_reporte' || u.status === 'desconocida' || u.enRoute ? u
     : { ...u, lat: u.lat + (r() - 0.5) * 0.00012, lon: u.lon + (r() - 0.5) * 0.00012, lastReportAt: now })) : moved;
   const next = { ...state, now, alerts, units, maic: { ...state.maic, lastMessageAt: state.maic.connected ? now : state.maic.lastMessageAt } };
@@ -228,8 +228,9 @@ export function openAlert(id: string, user: User) {
 }
 
 /* ---------------- Unidades en camino ----------------
-   Cuando Maic despacha una alerta, la unidad más cercana (a más de 300 m: si ya está ahí no "va")
-   sale hacia el lugar. En la demo avanza en línea recta ~45 m cada 4 s y al llegar queda en servicio. */
+   Cuando Maic despacha una alerta, las unidades más cercanas (a más de 300 m: si ya están ahí no "van")
+   salen hacia el lugar. Suele ser una; en aglomeraciones Maic manda más (ver unitsFor).
+   En la demo avanzan en línea recta ~45 m cada 4 s y al llegar quedan en servicio. */
 const metersBetween = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => {
   const kx = 111320 * Math.cos((a.lat * Math.PI) / 180);
   return Math.hypot((a.lon - b.lon) * kx, (a.lat - b.lat) * 111320);
@@ -243,25 +244,34 @@ function followTarget(alertId: string): Alert | undefined {
   const a = state.alerts.find((x) => x.id === alertId); if (!a?.plate) return a;
   return state.alerts.filter((x) => x.plate?.listed === a.plate!.listed).sort((p, q) => q.createdAt - p.createdAt)[0];
 }
+/** Cuántas unidades manda Maic. Aglomeración: 3 si es crítica, 2 si es media; lo demás, una. */
+function unitsFor(a: Alert) {
+  if (a.kind === 'aglomeracion') return a.severity === 'critica' ? 3 : a.severity === 'media' ? 2 : 1;
+  return 1;
+}
 function dispatchTo(alertId: string, minDist = 300) {
   const a = state.alerts.find((x) => x.id === alertId); if (!a) return;
-  if (state.units.some((u) => u.enRoute?.alertId === alertId)) return;
-  const free = state.units.filter((u) => (u.status === 'disponible' || u.status === 'en_servicio') && !u.enRoute)
-    .map((u) => ({ u, d: metersBetween(u, a) })).filter((x) => x.d > minDist).sort((p, q) => p.d - q.d)[0];
-  if (!free) return;
+  const need = unitsFor(a) - state.units.filter((u) => u.enRoute?.alertId === alertId).length;
+  if (need <= 0) return;
+  const picked = new Set(state.units.filter((u) => (u.status === 'disponible' || u.status === 'en_servicio') && !u.enRoute)
+    .map((u) => ({ u, d: metersBetween(u, a) })).filter((x) => x.d > minDist).sort((p, q) => p.d - q.d).slice(0, need).map((x) => x.u.id));
+  if (!picked.size) return;
   const enRoute = { lat: a.lat, lon: a.lon, label: followLabel(a), alertId, since: Date.now() };
-  commit({ units: state.units.map((u) => (u.id === free.u.id ? { ...u, status: 'en_servicio', enRoute } : u)) });
+  commit({ units: state.units.map((u) => (picked.has(u.id) ? { ...u, status: 'en_servicio', enRoute } : u)) });
 }
 /** Unidades que llegaron en este ciclo: su alerta se cierra en Maic. */
 let arrivals: { alertId: string; unitId: string }[] = [];
-/** Llegó la unidad: la alerta (y, si es una placa, las lecturas confirmadas del mismo vehículo) queda cerrada en Maic. */
-function closeArrived(alerts: Alert[], now: number): Alert[] {
+/** Llegó una unidad. Si Maic mandó varias, cada llegada queda en la línea de tiempo; cuando llega la última,
+    la alerta (y, si es una placa, las lecturas confirmadas del mismo vehículo) queda cerrada en Maic. */
+function closeArrived(alerts: Alert[], units: Unit[], now: number): Alert[] {
   if (!arrivals.length) return alerts;
   const done = arrivals; arrivals = [];
   return alerts.map((x) => {
-    const hit = done.find(({ alertId }) => { const a = alerts.find((y) => y.id === alertId); return x.id === alertId || (!!a?.plate && x.plate?.listed === a.plate.listed); });
-    if (!hit || x.review !== 'confirmada' || !x.maic || x.maic === 'cerrada') return x;
-    return { ...x, maic: 'cerrada', updatedAt: now, timeline: [...x.timeline, { at: now, label: `Llegó ${hit.unitId} · cerrada en Maic` }] };
+    const hits = done.filter(({ alertId }) => { const a = alerts.find((y) => y.id === alertId); return x.id === alertId || (!!a?.plate && x.plate?.listed === a.plate.listed); });
+    if (!hits.length || x.review !== 'confirmada' || !x.maic || x.maic === 'cerrada') return x;
+    const stillGoing = units.some((u) => u.enRoute?.alertId && hits.some((h) => h.alertId === u.enRoute!.alertId));
+    const timeline = [...x.timeline, ...hits.map((h, i) => ({ at: now, label: !stillGoing && i === hits.length - 1 ? `Llegó ${h.unitId} · cerrada en Maic` : `Llegó ${h.unitId}` }))];
+    return { ...x, maic: stillGoing ? x.maic : 'cerrada', updatedAt: now, timeline };
   });
 }
 function advanceUnits(units: Unit[], now: number): Unit[] {

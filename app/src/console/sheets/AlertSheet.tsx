@@ -180,14 +180,21 @@ function Transmission({ a, onSolo }: { a: Alert; onSolo?: (solo: boolean) => voi
   useEffect(() => { const t = setTimeout(() => setBoot(2), 700); return () => clearTimeout(t); }, []);
   const done = Math.min(lvl, boot === 1 ? 1 : lvl);
   const at = (label: string) => a.timeline.find((t) => t.label.startsWith(label))?.at;
-  // "Llegó U-12 · cerrada en Maic" → "U-12 · 13:42"
-  const arrived = () => { const t = a.timeline.find((x) => x.label.startsWith('Llegó')); return t ? `${t.label.replace(/^Llegó (\S+).*/, '$1')} · ${hhmm(t.at)}` : 'Llegó la unidad'; };
+  // Maic puede mandar más de una unidad (en aglomeraciones, sobre todo): las que van y las que ya llegaron.
+  const going = useApi((s) => s.units).filter((u) => u.enRoute?.alertId === a.id).length;
+  // "Llegó U-12" / "Llegó U-12 · cerrada en Maic" → "U-12"
+  const landed = a.timeline.filter((x) => x.label.startsWith('Llegó'));
+  const total = going + landed.length;
+  const many = total > 1;
+  const units = (n: number) => `${n} ${n === 1 ? 'unidad' : 'unidades'}`;
+  const arrived = () => landed.length ? `${landed.map((t) => t.label.replace(/^Llegó (\S+).*/, '$1')).join(', ')} · ${hhmm(landed[landed.length - 1].at)}` : 'Llegó la unidad';
+  const placeTitle = many ? 'Unidades en el lugar' : 'Unidad en el lugar';
   const steps = [
     { t: 'Confirmada por el operador', s: `${a.reviewedBy ?? ''}${at('Confirmada') ? ' · ' + hhmm(at('Confirmada')!) : ''}` },
     { t: queued ? 'En cola para Maic' : 'Transmitida a Maic', s: queued ? 'Maic sin conexión: sale cuando vuelva' : 'Canal cifrado' },
     { t: 'Recibida en Maic', s: lvl >= 3 && a.maicId ? `Caso ${a.maicId}` : 'Esperando acuse de Maic…' },
-    { t: 'Despachada', s: lvl >= 4 ? 'Maic asignó unidades' : 'Maic asigna unidades…' },
-    { t: 'Unidad en el lugar', s: lvl >= 5 ? arrived() : lvl >= 4 ? 'La unidad va en camino…' : 'Cuando Maic despache' },
+    { t: 'Despachada', s: lvl >= 4 ? (total ? `Maic asignó ${units(total)}` : 'Maic asignó unidades') : 'Maic asigna unidades…' },
+    { t: placeTitle, s: lvl >= 5 ? arrived() : lvl >= 4 ? (!many ? 'La unidad va en camino…' : landed.length ? `${landed.length} de ${total} en el lugar · ${going} en camino` : `${units(going)} en camino…`) : 'Cuando Maic despache' },
   ];
 
   // Fase: sola en la ficha → arriba, con el resto debajo
@@ -212,7 +219,7 @@ function Transmission({ a, onSolo }: { a: Alert; onSolo?: (solo: boolean) => voi
   const body = (
     <>
       <div className="tx-hd"><span className="tx-eyebrow">Transmisión a Maic</span>{a.maicId && <span className="mono tx-id">{a.maicId}</span>}</div>
-      <div className="tx-title"><span className="tx-orb" aria-hidden><i /><i /><b /></span><div><b>{queued ? 'En cola: Maic sin conexión' : lvl >= 5 ? 'Unidad en el lugar' : lvl >= 4 ? 'Despachada por Maic' : lvl >= 3 ? 'Maic recibió la alerta' : 'Enviando a Maic'}</b><small>{a.plate ? `Placa ${a.plate.listed}` : KIND_LABEL[a.kind]} · {a.id}</small></div></div>
+      <div className="tx-title"><span className="tx-orb" aria-hidden><i /><i /><b /></span><div><b>{queued ? 'En cola: Maic sin conexión' : lvl >= 5 ? placeTitle : lvl >= 4 ? 'Despachada por Maic' : lvl >= 3 ? 'Maic recibió la alerta' : 'Enviando a Maic'}</b><small>{a.plate ? `Placa ${a.plate.listed}` : KIND_LABEL[a.kind]} · {a.id}</small></div></div>
       <div className="tx-beam" aria-hidden><i style={{ width: `${(done / 5) * 100}%` }} /></div>
       <ol className="tx-steps">
         {steps.map((s, i) => <li key={i} className={i < done ? 'done' : i === done ? 'now' : ''}><span className="tx-b" aria-hidden /><div><div>{s.t}</div><small>{s.s}</small></div></li>)}
