@@ -13,7 +13,7 @@ import type { Alert, Camera, Evidence as Ev, LngLat, Unit, Zone, ZoneStatus } fr
 import { fmtCrowd, hhmm } from '../api/format';
 import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
-import { areaOutline, coverageHexes, hexCounts, hexRing, HEX_RES, peopleField, type HexMetric } from '../api/coverage';
+import { areaOutline, displayRes, FAST_MIN, hexField, hexRing, NEAR_MIN, type HexMetric } from '../api/coverage';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AlertMark, GroupChip, UnitHex } from './icons';
 
@@ -26,13 +26,11 @@ maplibregl.setWorkerUrl(workerUrl);
 
 export const COUNTRY_BOUNDS: LngLatBoundsLike = [[-90.15, 13.13], [-87.68, 14.46]];
 
-export interface MapLayers { /** Personas: ocupación por hexágono. */ people: boolean; zones: boolean; cameras: boolean; units: boolean; alerts: boolean;
+export interface MapLayers { zones: boolean; cameras: boolean; units: boolean; alerts: boolean;
   /** Campo de visión de las cámaras (ángulo y alcance). Apagado por defecto: carga mucho el mapa. */
   fov?: boolean;
-  /** Capa de hexágonos H3: qué se cuenta (patrullas, personas o alertas). null = apagada. */
-  hex?: HexMetric | null;
-  /** Zonas pintadas por cobertura policial: cubierta, patrulla cerca, sin cobertura. */
-  cover?: boolean }
+  /** Hexágonos: qué muestran (personas, cobertura o alertas). null = apagados. */
+  hex?: HexMetric | null }
 export interface RouteStop { lat: number; lon: number; label: string; title: string; /** Hora de la lectura, al lado del número. */ time?: string; /** Captura de la cámara que hizo la lectura: se proyecta sobre la parada. */
   snap?: { camera: string; street: string; evidence: Ev; confidence?: number } }
 
@@ -123,9 +121,8 @@ function baseStyle(): StyleSpecification {
 }
 
 const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features });
-/** Personas: opacidad según cuánta gente hay. Casi nada en los bordes de la mancha, más al centro. */
-const DENS_FILL_OP: maplibregl.ExpressionSpecification = ['interpolate', ['linear'], ['get', 'w'], 0, 0.1, 0.3, 0.3, 0.7, 0.5, 1, 0.6];
-const DENS_LINE_OP: maplibregl.ExpressionSpecification = ['interpolate', ['linear'], ['get', 'w'], 0, 0.06, 1, 0.4];
+/** Hexágonos: personas y alertas se desvanecen hacia el borde de la mancha; cobertura, pareja en todo el mapa. */
+const FIELD_OP: maplibregl.ExpressionSpecification = ['match', ['get', 'm'], 'cobertura', 0.26, ['interpolate', ['linear'], ['get', 'w'], 0, 0, 0.12, 0.12, 0.3, 0.3, 0.7, 0.5, 1, 0.62]];
 
 /** Nodo de cámara como imagen para la capa del mapa. Misma geometría que CameraNode (src/map/icons.tsx). */
 function cameraSvg(st: Camera['status'], c: { ink: string; muted: string; subtle: string }) {
@@ -149,6 +146,8 @@ export function MapView(p: Props) {
   const [hover, setHover] = useState<Hover | null>(null);
   const [view, setView] = useState({ bearing: p.compact ? 0 : -18, pitch: p.compact ? 0 : 45 });
   const hoverCam = useRef<string | null>(null);
+  /** Últimos hexágonos dibujados: qué se veía y con qué datos. */
+  const fieldCache = useRef<{ key: string; data: { status?: unknown; cameras?: unknown; units?: unknown; alerts?: unknown } }>({ key: '', data: {} });
   /* Recorrido animado: se dibuja de punta a punta con una estela; cada parada se enciende al pasar. */
   const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[] }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
   const [hud, setHud] = useState<{ reached: number; n: number; done: boolean } | null>(null);
@@ -175,17 +174,8 @@ export function MapView(p: Props) {
         img.onload = () => { if (!map.hasImage('cam-' + st)) map.addImage('cam-' + st, img, { pixelRatio: 2 }); };
         img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(cameraSvg(st, { ink, muted, subtle }));
       }
-      map.addSource('hex', { type: 'geojson', data: fc([]) });
-      map.addSource('covhex', { type: 'geojson', data: fc([]) });
-      // Cobertura: cada hexágono según cuánto tarda la unidad más cercana (verde ≤2 min, amarillo ≤4, rojo más).
-      const covC = ['match', ['get', 'st'], 'cubierta', token('--status-positive'), 'cerca', alertC, negative] as maplibregl.ExpressionSpecification;
-      map.addLayer({ id: 'covhex-fill', type: 'fill', source: 'covhex', paint: { 'fill-color': covC, 'fill-opacity': 0.16 } });
-      map.addLayer({ id: 'covhex-line', type: 'line', source: 'covhex', paint: { 'line-color': covC, 'line-opacity': 0.55, 'line-width': 0.8 } });
       map.addSource('measure', { type: 'geojson', data: fc([]) });
-      // Hexágonos H3: intensidad en blanco según la cantidad (no es un estado, así que no lleva color)
-      map.addLayer({ id: 'hex-fill', type: 'fill', source: 'hex', paint: { 'fill-color': ink, 'fill-opacity': ['*', 0.5, ['get', 'k']] } });
-      map.addLayer({ id: 'hex-line', type: 'line', source: 'hex', paint: { 'line-color': ink, 'line-opacity': ['+', 0.08, ['*', 0.3, ['get', 'k']]], 'line-width': 0.8 } });
-      map.addSource('dens', { type: 'geojson', data: fc([]) });
+      map.addSource('field', { type: 'geojson', data: fc([]) });
 
       map.addSource('zones', { type: 'geojson', data: fc([]) });
       map.addSource('cameras', { type: 'geojson', data: fc([]) });
@@ -197,11 +187,15 @@ export function MapView(p: Props) {
       map.addSource('sketch', { type: 'geojson', data: fc([]) });
       map.addSource('cones', { type: 'geojson', data: fc([]) });
       map.addSource('coneHi', { type: 'geojson', data: fc([]) });
-      /* Personas en todo el mapa: hexágonos de amarillo (poca gente) a rojo (mucha), cada vez más
-         transparentes hacia el borde de la mancha para que se lea el mapa debajo. */
-      const densC = ['interpolate', ['linear'], ['get', 'w'], 0, alertC, 0.6, negative] as maplibregl.ExpressionSpecification;
-      map.addLayer({ id: 'dens-fill', type: 'fill', source: 'dens', paint: { 'fill-color': densC, 'fill-opacity': DENS_FILL_OP } });
-      map.addLayer({ id: 'dens-line', type: 'line', source: 'dens', paint: { 'line-color': densC, 'line-opacity': DENS_LINE_OP, 'line-width': 0.8 } });
+      /* Hexágonos, una sola capa, sin borde: tan chicos que se leen como un degradé.
+         · Personas y alertas: amarillo (poco) → rojo (mucho).
+         · Cobertura: tres estados, sin degradé: verde (la unidad llega en FAST_MIN o menos), amarillo
+           (hasta NEAR_MIN) y rojo (más). Ahí `w` son los minutos. */
+      const positive = token('--status-positive');
+      const fieldC = ['match', ['get', 'm'],
+        'cobertura', ['step', ['get', 'w'], positive, FAST_MIN, alertC, NEAR_MIN, negative],
+        ['interpolate', ['linear'], ['get', 'w'], 0, alertC, 0.6, negative]] as maplibregl.ExpressionSpecification;
+      map.addLayer({ id: 'field-fill', type: 'fill', source: 'field', paint: { 'fill-color': fieldC, 'fill-opacity': FIELD_OP, 'fill-antialias': false } });
       /* Zonas: ya no se dibujan. La capa queda invisible solo para poder tocarlas y abrir su ficha;
          el nombre y el conteo van en su rótulo. */
       map.addLayer({ id: 'zones-fill', type: 'fill', source: 'zones', paint: { 'fill-color': muted, 'fill-opacity': 0 } });
@@ -338,17 +332,22 @@ export function MapView(p: Props) {
     // Selección del lateral: la alerta abierta (y su zona), la zona o la cámara.
     const selAlert = P.focusSel?.k === 'alerta' ? P.alerts?.find((x) => x.id === P.focusSel!.id) ?? null : null;
     const selZone = P.focusSel?.k === 'zona' ? P.focusSel.id : selAlert?.zoneId ?? null;
-    const L: MapLayers = { people: true, zones: true, cameras: false, units: false, alerts: true, fov: false, hex: null, cover: false, ...P.layers };
-    (map.getSource('dens') as GeoJSONSource).setData(fc(L.people ? peopleField(P.zones, st, P.cameras ?? [])
-      .map(({ cell, w }) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: { w } })) : []));
-    // Hexágonos H3, siempre del mismo tamaño
+    const L: MapLayers = { zones: true, cameras: false, units: false, alerts: true, fov: false, hex: null, ...P.layers };
+    // Hexágonos: solo las celdas de lo que se ve, del tamaño que da el zoom. Se recalcula si cambia lo
+    // que se ve o los datos; si no, se reusa.
     if (L.hex) {
-      const counts = hexCounts(L.hex, HEX_RES, { units: P.units ?? null, alerts: P.alerts ?? [], zones: P.zones, status: st });
-      const max = Math.max(1, ...counts.values());
-      (map.getSource('hex') as GeoJSONSource).setData(fc([...counts].filter(([, n]) => n > 0).map(([cell, n]) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: { k: Math.max(0.3, Math.sqrt(n / max)) } })))); // raíz: las zonas con poca gente igual se leen
-    } else (map.getSource('hex') as GeoJSONSource).setData(fc([]));
-    (map.getSource('covhex') as GeoJSONSource).setData(fc(L.cover ? coverageHexes(P.zones, HEX_RES, P.units ?? null)
-      .map(({ cell, state }) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: { st: state } })) : []));
+      const bb = map.getBounds(); const b = { w: bb.getWest(), s: bb.getSouth(), e: bb.getEast(), n: bb.getNorth() };
+      const res = displayRes(map.getZoom(), b);
+      const data = { zones: P.zones, status: st, cameras: P.cameras ?? [], units: P.units ?? null, alerts: P.alerts ?? [] };
+      const key = [L.hex, res, b.w.toFixed(3), b.s.toFixed(3), b.e.toFixed(3), b.n.toFixed(3)].join('|');
+      const f = fieldCache.current;
+      if (f.key !== key || f.data.status !== data.status || f.data.cameras !== data.cameras || f.data.units !== data.units || f.data.alerts !== data.alerts) {
+        const m = L.hex;
+        (map.getSource('field') as GeoJSONSource).setData(fc(hexField(m, b, res, data)
+          .map(({ cell, w }) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: { w, m } }))));
+        fieldCache.current = { key, data };
+      }
+    } else if (fieldCache.current.key) { (map.getSource('field') as GeoJSONSource).setData(fc([])); fieldCache.current = { key: '', data: {} }; }
     // Medición de cobertura alrededor de un punto
     const M = P.measure;
     (map.getSource('measure') as GeoJSONSource).setData(fc(M ? [
@@ -418,7 +417,7 @@ export function MapView(p: Props) {
     // ---- Recorrido: modo foco y animación ----
     const R = P.route && P.route.length > 1 ? P.route : null; const focus = !!R;
     map.setPaintProperty('focus-dim', 'fill-opacity', focus ? 0.55 : 0);
-    for (const id of ['dens-fill', 'dens-line', 'hex-fill', 'hex-line', 'covhex-fill', 'covhex-line', 'zones-fill', 'cameras', 'cameras-hit', 'cones-fill', 'cones-line', 'cone-hi-fill', 'cone-hi-line']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', focus ? 'none' : 'visible');
+    for (const id of ['field-fill', 'zones-fill', 'cameras', 'cameras-hit', 'cones-fill', 'cones-line', 'cone-hi-fill', 'cone-hi-line']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', focus ? 'none' : 'visible');
     map.setPaintProperty('area-line', 'line-opacity', focus ? 0.22 : ['case', ['get', 'dim'], 0.35, 1]);
     const rkey = R ? JSON.stringify(R.map((s) => [s.lon, s.lat])) : '';
     if (rkey !== anim.current.key) { anim.current.key = rkey; if (R) playRoute(R); else stopRoute(); }
@@ -526,10 +525,9 @@ export function MapView(p: Props) {
       });
     }
     // Atenuar todo lo que no es lo seleccionado en el lateral
-    // Personas, relleno y contorno: atenuados mientras hay algo seleccionado en el lateral
+    // Hexágonos atenuados mientras hay algo seleccionado en el lateral
     const dim = P.focusSel && !focus ? 0.4 : 1;
-    if (map.getLayer('dens-fill')) map.setPaintProperty('dens-fill', 'fill-opacity', ['*', dim, DENS_FILL_OP]);
-    if (map.getLayer('dens-line')) map.setPaintProperty('dens-line', 'line-opacity', ['*', dim, DENS_LINE_OP]);
+    if (map.getLayer('field-fill')) map.setPaintProperty('field-fill', 'fill-opacity', ['*', dim, FIELD_OP]);
     for (const [key, h] of markers.current) {
       const keep = !P.focusSel || focus || key === 'a' + (selAlert?.id ?? '') || (selZone && key === 'z' + selZone) || key === 'pin' || key.startsWith('sig') || key.startsWith('csel') || /^r[as]?\d/.test(key);
       h.el.classList.toggle('is-dim', !keep && key !== 'a' + P.hoverAlert);

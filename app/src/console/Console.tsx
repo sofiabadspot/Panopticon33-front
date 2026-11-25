@@ -18,6 +18,7 @@ import type { GoogleBase } from '../map/google';
 import { AlertMark, AlertTile, CameraNode, UnitHex } from '../map/icons';
 import { coverageAt } from '../api/coverage';
 import { MapView, type MapLayers } from '../map/MapView';
+import type { HexMetric } from '../api/coverage';
 import { useSession } from '../shell/session';
 import { Icon, useNow, PanelSkeleton, SheetSkeleton } from '../ui/kit';
 import { P33Logo } from '../ui/Logo';
@@ -75,7 +76,9 @@ function Layout() {
   const facial = useFacial();
   const sevOf = useZoneSeverity(alerts);
 
-  const [layers, setLayers] = useState<MapLayers>({ people: true, zones: true, alerts: true, units: false, cameras: role === 'admin' || role === 'analyst', fov: false, hex: null, cover: false });
+  const [layers, setLayers] = useState<MapLayers>({ zones: true, alerts: true, units: false, cameras: role === 'admin' || role === 'analyst', fov: false, hex: 'personas' });
+  /** Última lectura elegida para los hexágonos: al volver a prenderlos, vuelven con esa. */
+  const [hexPick, setHexPick] = useState<HexMetric>('personas');
   /* Medir cobertura alrededor de un punto: se activa, se hace clic en el mapa y se ve el radio,
      las unidades dentro y cuánto tardaría en llegar cada una. */
   const [wallOpen, setWallOpen] = useState(false);
@@ -161,22 +164,31 @@ function Layout() {
   /* Capas del mapa. Cada chip lleva el MISMO ícono que ese elemento tiene en el mapa, así el chip es a la vez
      el filtro y la referencia (no hay leyenda aparte). */
   const LAYER_ICON: Record<string, ReactNode> = {
-    // Personas: hexágonos de amarillo (poca gente) a rojo (mucha), igual que en el mapa
-    people: <svg className="li-hex dens" viewBox="0 0 30 20" aria-hidden><path className="lo" d="M6 3l5 2.9v5.8L6 14.6 1 11.7V5.9z" /><path className="mid" d="M15 8.4l5 2.9v5.8l-5 2.9-5-2.9v-5.8z" /><path className="hi" d="M24 3l5 2.9v5.8l-5 2.9-5-2.9V5.9z" /></svg>,
     zones: <svg className="li-zone" viewBox="0 0 20 20" aria-hidden><path d="M3 7l6-4 8 3-1 9-9 2z" /></svg>,
     alerts: <AlertMark kind="placa_en_lista" size={18} still />,
     units: <UnitHex type="Patrulla" size={18} />,
-    // Cobertura: hexágonos verde, amarillo y rojo, igual que en el mapa
-    cover: <svg className="li-hex cov" viewBox="0 0 30 20" aria-hidden><path className="ok" d="M6 3l5 2.9v5.8L6 14.6 1 11.7V5.9z" /><path className="near" d="M15 8.4l5 2.9v5.8l-5 2.9-5-2.9v-5.8z" /><path className="no" d="M24 3l5 2.9v5.8l-5 2.9-5-2.9V5.9z" /></svg>,
   };
-  type ChipKey = 'people' | 'zones' | 'alerts' | 'units' | 'cover';
+  /* Hexágonos: una sola capa con tres lecturas. El ícono del chip es la escala de lo que se ve:
+     amarillo → rojo para personas y alertas, verde → amarillo → rojo para cobertura. */
+  const hexIcon = (m: HexMetric) => (
+    <svg className={`li-hex ${m === 'cobertura' ? 'cov' : 'dens'}`} viewBox="0 0 30 20" aria-hidden>
+      <path className={m === 'cobertura' ? 'ok' : 'lo'} d="M6 3l5 2.9v5.8L6 14.6 1 11.7V5.9z" /><path className={m === 'cobertura' ? 'near' : 'mid'} d="M15 8.4l5 2.9v5.8l-5 2.9-5-2.9v-5.8z" /><path className={m === 'cobertura' ? 'no' : 'hi'} d="M24 3l5 2.9v5.8l-5 2.9-5-2.9V5.9z" />
+    </svg>
+  );
+  const HEX_OPTS: [HexMetric, string, string][] = [
+    ['personas', 'Personas', 'Dónde hay gente: amarillo poca, rojo mucha'],
+    ['cobertura', 'Cobertura', 'Cuánto tarda en llegar la unidad más cercana: verde 2 min o menos, amarillo hasta 4 min, rojo más de 4 min'],
+    ['alertas', 'Alertas', 'Dónde se concentran las alertas abiertas, según su criticidad: amarillo poca, rojo mucha'],
+  ];
+  /* En histórico solo hay alertas de la ventana del hecho; personas y cobertura son en vivo. */
+  const hexOff = (m: HexMetric) => (!!inv && m !== 'alertas') || (m === 'cobertura' && !policeSource);
+  const hexTitle = (m: HexMetric) => (inv && m !== 'alertas' ? 'En vivo: no se muestra en modo histórico' : 'Sin acceso a la ubicación policial');
+  type ChipKey = 'zones' | 'alerts' | 'units';
   const chips: [ChipKey, string, string, boolean?][] = [
-    ['people', 'Personas', inv ? 'En vivo: no se muestra en modo histórico' : 'Dónde hay gente en todo el mapa: amarillo poca, rojo mucha. Sin hexágono: ninguna cámara mide ahí', !!inv],
     ['zones', 'Zonas', 'Nombre y conteo de los lugares vigilados. El borde punteado marca el evento en curso'],
     ['alerts', 'Alertas', inv ? 'Alertas de la ventana del hecho' : 'Alertas que esperan una decisión'],
     ['units', 'Unidades', inv ? 'En vivo: no se muestra en modo histórico' : 'Unidades policiales (MAIC)', !policeSource || !!inv],
     // Cámaras y su campo de visión van juntos: ver el grupo más abajo
-    ['cover', 'Cobertura', inv ? 'En vivo: no se muestra en modo histórico' : 'Cuánto tarda en llegar la unidad más cercana: verde 2 min o menos, amarillo hasta 4 min, rojo más de 4 min', !policeSource || !!inv],
   ];
   const chipOn = (k: ChipKey) => layers[k];
   const toggleChip = (k: ChipKey) => setLayers((l) => ({ ...l, [k]: !l[k] }));
@@ -260,7 +272,7 @@ function Layout() {
         <div className="mapwrap">
           <MapView
             zones={zones} zoneStatus={inv ? NO_STATUS : loading ? undefined : status} cameras={cameras} units={policeSource && !inv ? units : null} alerts={mapAlerts}
-            layers={{ ...layers, people: layers.people && !inv, units: layers.units && policeSource && !inv, cover: layers.cover && !inv }} severityOf={sevOf} eventOf={inv ? undefined : eventOf} selectedZone={selectedZone} focusSel={mapFocus} hoverAlert={c.hoverAlert} onAlertHover={c.setHoverAlert} freshAlerts={c.fresh}
+            layers={{ ...layers, hex: layers.hex && !hexOff(layers.hex) ? layers.hex : null, units: layers.units && policeSource && !inv }} severityOf={sevOf} eventOf={inv ? undefined : eventOf} selectedZone={selectedZone} focusSel={mapFocus} hoverAlert={c.hoverAlert} onAlertHover={c.setHoverAlert} freshAlerts={c.fresh}
             highlightZones={c.overlay.highlightZones} route={c.overlay.route} routeLabel={c.overlay.routeLabel} sketch={c.overlay.sketch} pin={c.pin} signal={c.signal}
             bounds={boundsOf(fit.points, 0.0008)} fitKey={fit.key} backOutKey={backOut} padding={{ top: 24, right: 24, bottom: 24, left: 24 }}
             base={base} onBaseStatus={setBaseStatus} onPointer={setPointer}
@@ -312,12 +324,26 @@ function Layout() {
         </div>
         {/* Tocar cualquier capa con una ficha abierta suelta el foco: así la capa se ve al instante. */}
         <div className="mstrip" role="group" aria-label="Capas del mapa" onClickCapture={() => { if (focusSel && !unfocus) setUnfocus(true); }}>
+          {/* Hexágonos + qué muestran: un solo control, como Cámaras + Visión. Las lecturas aparecen pegadas
+              cuando están prendidos y se elige una por vez. */}
+          <div className={`lchip-group ${layers.hex ? 'on' : ''}`} role="group" aria-label="Hexágonos">
+            <button className={`lchip ${layers.hex && !hexOff(layers.hex) ? 'on' : ''}`} aria-pressed={!!layers.hex && !hexOff(layers.hex)}
+              title="Hexágonos sobre todo el mapa" onClick={() => setLayers((l) => ({ ...l, hex: l.hex && !hexOff(l.hex) ? null : !hexOff(hexPick) ? hexPick : inv ? 'alertas' : 'personas' }))}>
+              {hexIcon(layers.hex && !hexOff(layers.hex) ? layers.hex : hexPick)}Hexágonos
+            </button>
+            {layers.hex && !hexOff(layers.hex) && HEX_OPTS.map(([m, label, help]) => (
+              <button key={m} className={`lchip sub ${layers.hex === m ? 'on' : ''}`} aria-pressed={layers.hex === m} disabled={hexOff(m)}
+                title={hexOff(m) ? hexTitle(m) : help} onClick={() => { setHexPick(m); setLayers((l) => ({ ...l, hex: m })); }}>
+                {hexIcon(m)}{label}
+              </button>
+            ))}
+          </div>
           {chips.map(([k, label, icon, disabled]) => (
             <button key={k} className={`lchip ${chipOn(k) && !disabled ? 'on' : ''}`} aria-pressed={!!chipOn(k) && !disabled} disabled={disabled}
               title={disabled && !inv ? 'Sin acceso a la ubicación policial' : icon} onClick={() => toggleChip(k)}>
               {LAYER_ICON[k]}{label}
             </button>
-          )).flatMap((el, i) => (i === 3 ? [el, (
+          )).flatMap((el, i) => (i === 2 ? [el, (
             // Cámaras + Visión: un solo control. Visión es un filtro de Cámaras y aparece pegado cuando están prendidas.
             <div key="cams" className={`lchip-group ${layers.cameras ? 'on' : ''}`} role="group" aria-label="Cámaras">
               <button className={`lchip ${layers.cameras ? 'on' : ''}`} aria-pressed={layers.cameras} onClick={() => setLayers((l) => ({ ...l, cameras: !l.cameras, fov: l.cameras ? false : l.fov }))}>
