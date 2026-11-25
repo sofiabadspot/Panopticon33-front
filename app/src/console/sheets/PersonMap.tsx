@@ -1,13 +1,17 @@
 /* Mapa de la persona (expediente facial): la cara al centro y, alrededor, las categorías de lo que se
    juntó (detecciones de hoy, identidad, vehículos, personas, lugares, casos). Tocar una categoría la
-   abre: salen sus elementos unidos con líneas, en orden de fecha (del más viejo al más nuevo, en el
-   sentido del reloj). Tocar un vínculo abre sus evidencias. Se navega como un panel: arrastrar mueve,
+   abre o cierra (de entrada está todo abierto): sus elementos salen unidos con líneas, en orden de fecha
+   (del más viejo al más nuevo, en el sentido del reloj). Cada evidencia muestra su material (captura,
+   video, documento, registro). Los nodos se acomodan para no pisarse y se mueven al abrir o cerrar. Se navega como un panel: arrastrar mueve,
    la rueda acerca. El buscador encuentra cualquier dato, abre las ramas donde está y lo resalta.
-   Al costado, el detalle de lo elegido (o de la persona si no hay nada elegido). Sin imágenes ficticias. */
+   Al costado, siempre la persona (foto de la lista y reconstrucción 3D) y debajo el detalle de lo
+   elegido. Sin imágenes ficticias. */
 import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { dateShort, hhmm, pct } from '../../api/format';
 import { FACIAL_LISTS, type FacialMatch, type LinkKind } from '../../api/facial';
+import { FaceCloud } from '../../ui/FaceCloud';
 import { Icon } from '../../ui/kit';
+import { Shot } from './FacialDossier';
 import { Artifact, cardsOf, type Card } from './EvidenceWall';
 
 type Cat = 'hoy' | 'identidad' | LinkKind;
@@ -26,12 +30,15 @@ const ART_LABEL: Record<Card['art'], string> = { captura: 'Captura', video: 'Vid
 /** Un nodo del mapa. `parent` dibuja la línea; `at` ordena por fecha. */
 interface Node { id: string; parent: string | null; level: 0 | 1 | 2 | 3; x: number; y: number; label: string; sub: string; icon: string; at?: number; card?: Card; link?: string; cat?: Cat; count?: number; text: string }
 
-const R = [0, 230, 450, 640];
+const R = [0, 250, 520, 860];
+/** Tamaño de cada nodo para que no se pisen: la cara, las categorías, los vínculos y las evidencias (con su material). */
+const box = (n: Node): [number, number] => (n.level === 0 ? [180, 200] : n.card ? [196, 168] : n.level === 1 ? [70 + n.label.length * 8, 48] : [Math.min(276, 64 + Math.max(n.label.length * 7.5, (n.sub.length + 14) * 5.6)), 54]);
 const rad = (d: number) => (d * Math.PI) / 180;
 
 export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[], i: number) => void }) {
   const cards = useMemo(() => cardsOf(m), [m]);
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  // Todo abierto de entrada: categorías y vínculos.
+  const [open, setOpen] = useState<Set<string>>(() => new Set([...CATS.map((c) => `cat:${c.id}`), ...m.links.map((l) => `link:${l.id}`)]));
   const [sel, setSel] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const query = q.trim().toLowerCase();
@@ -80,20 +87,57 @@ export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[
         });
       });
     });
+    // Acomodo: se separan los nodos que se pisan (por su tamaño real) y cada uno vuelve un poco a su lugar
+    // ideal, así se mantiene el orden por categoría y por fecha. La cara no se mueve.
+    const ideal = out.map((n) => [n.x, n.y]);
+    const size = out.map(box);
+    for (let it = 0; it < 360; it++) {
+      for (let i = 1; i < out.length; i++) for (let j = i + 1; j < out.length; j++) {
+        const a = out[i], b2 = out[j];
+        const ox = (size[i][0] + size[j][0]) / 2 + 18 - Math.abs(a.x - b2.x), oy = (size[i][1] + size[j][1]) / 2 + 18 - Math.abs(a.y - b2.y);
+        if (ox <= 0 || oy <= 0) continue;
+        const wa = a.level === 1 ? 0.25 : 0.5, wb = b2.level === 1 ? 0.25 : 0.5;
+        if (ox < oy) { const s = a.x < b2.x ? -1 : 1; a.x += s * ox * wa; b2.x -= s * ox * wb; }
+        else { const s = a.y < b2.y ? -1 : 1; a.y += s * oy * wa; b2.y -= s * oy * wb; }
+      }
+      // Que nada pise la cara.
+      for (let i = 1; i < out.length; i++) {
+        const n = out[i], ox = (size[0][0] + size[i][0]) / 2 + 24 - Math.abs(n.x), oy = (size[0][1] + size[i][1]) / 2 + 24 - Math.abs(n.y);
+        if (ox > 0 && oy > 0) { if (ox < oy) n.x += (n.x < 0 ? -1 : 1) * ox; else n.y += (n.y < 0 ? -1 : 1) * oy; }
+        n.x += (ideal[i][0] - n.x) * 0.02; n.y += (ideal[i][1] - n.y) * 0.02;
+      }
+    }
     return out;
   }, [tree, open, hits, query, m]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Movimiento: al abrir o cerrar algo, cada nodo va de donde estaba a su nuevo lugar (y los nuevos salen
+  // de su padre).
+  const [pos, setPos] = useState<Map<string, [number, number]>>(() => new Map(nodes.map((n) => [n.id, [n.x, n.y]])));
+  const posRef = useRef(pos); posRef.current = pos;
+  useEffect(() => {
+    const from = posRef.current, t0 = performance.now(), D = 420;
+    const start = new Map(nodes.map((n) => [n.id, from.get(n.id) ?? from.get(n.parent ?? '') ?? [0, 0]] as [string, [number, number]]));
+    let raf = 0;
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - t0) / D), e = 1 - (1 - k) ** 3;
+      setPos(new Map(nodes.map((n) => { const s = start.get(n.id)!; return [n.id, [s[0] + (n.x - s[0]) * e, s[1] + (n.y - s[1]) * e]]; })));
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [nodes]);
+  const at = (id: string): [number, number] => pos.get(id) ?? [0, 0];
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
 
   // Panel: mover arrastrando, acercar con la rueda (hacia el puntero).
   const stage = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState({ x: 0, y: 0, k: 0.85 });
+  const [view, setView] = useState({ x: 0, y: 0, k: 0.5 });
   const drag = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
   useEffect(() => {
     const el = stage.current; if (!el) return;
     const w = (e: WheelEvent) => {
       e.preventDefault();
       const r = el.getBoundingClientRect(), px = e.clientX - r.left - r.width / 2, py = e.clientY - r.top - r.height / 2;
-      setView((v) => { const k = Math.max(0.35, Math.min(2.2, v.k * Math.exp(-e.deltaY * 0.0015))); return { k, x: px - ((px - v.x) * k) / v.k, y: py - ((py - v.y) * k) / v.k }; });
+      setView((v) => { const k = Math.max(0.25, Math.min(2.2, v.k * Math.exp(-e.deltaY * 0.0015))); return { k, x: px - ((px - v.x) * k) / v.k, y: py - ((py - v.y) * k) / v.k }; });
     };
     el.addEventListener('wheel', w, { passive: false }); return () => el.removeEventListener('wheel', w);
   }, []);
@@ -110,6 +154,7 @@ export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[
   const selected = sel ? byId.get(sel) : undefined;
   const lit = (n: Node) => !query || hits.has(n.id) || n.level <= 1;
   const L = FACIAL_LISTS[m.list];
+  const seed = [...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7);
 
   return (
     <div className="pm">
@@ -122,18 +167,18 @@ export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[
         </div>
         <div className="pm-zoom" role="group" aria-label="Acercar o alejar">
           <button className="iconbtn" aria-label="Acercar" onClick={() => setView((v) => ({ ...v, k: Math.min(2.2, v.k * 1.25) }))}><Icon name="add" /></button>
-          <button className="iconbtn" aria-label="Alejar" onClick={() => setView((v) => ({ ...v, k: Math.max(0.35, v.k / 1.25) }))}><Icon name="remove" /></button>
-          <button className="iconbtn" aria-label="Centrar en la persona" onClick={() => setView({ x: 0, y: 0, k: 0.85 })}><Icon name="center_focus_strong" /></button>
+          <button className="iconbtn" aria-label="Alejar" onClick={() => setView((v) => ({ ...v, k: Math.max(0.25, v.k / 1.25) }))}><Icon name="remove" /></button>
+          <button className="iconbtn" aria-label="Centrar en la persona" onClick={() => setView({ x: 0, y: 0, k: 0.5 })}><Icon name="center_focus_strong" /></button>
         </div>
         <div className="pm-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
           <svg className="pm-lines" aria-hidden>
             {nodes.filter((n) => n.parent).map((n) => {
-              const p = byId.get(n.parent!); if (!p) return null;
-              const mx = (p.x + n.x) / 2, my = (p.y + n.y) / 2;
+              if (!byId.get(n.parent!)) return null;
+              const [px, py] = at(n.parent!), [nx, ny] = at(n.id);
+              const mx = (px + nx) / 2, my = (py + ny) / 2;
               const on = sel === n.id || sel === n.parent || (selected && selected.parent === n.id);
-              return <path key={n.id} d={`M${p.x} ${p.y} Q${mx * 0.92} ${my * 0.92} ${n.x} ${n.y}`} className={`l${n.level} ${on ? 'on' : ''} ${lit(n) ? '' : 'dim'}`} />;
+              return <path key={n.id} d={`M${px} ${py} Q${mx * 0.92} ${my * 0.92} ${nx} ${ny}`} className={`l${n.level} ${on ? 'on' : ''} ${lit(n) ? '' : 'dim'}`} />;
             })}
-            {nodes.filter((n) => n.level === 1).map((n) => <circle key={'r' + n.id} cx="0" cy="0" r={R[1]} className="pm-ring" />).slice(0, 1)}
           </svg>
           {nodes.map((n) => (
             n.level === 0 ? (
@@ -142,8 +187,15 @@ export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[
                 <b>{m.name}</b><small className="mono">{m.listRef} · {L.name}</small>
               </button>
             ) : (
+              n.card ? (
+                <button key={n.id} className={`pm-n pm-card ${sel === n.id ? 'sel' : ''} ${lit(n) ? '' : 'dim'} ${query && hits.has(n.id) ? 'hit' : ''}`}
+                  style={{ left: at(n.id)[0], top: at(n.id)[1] }} onClick={() => toggle(n)} aria-label={`${ART_LABEL[n.card.art]}: ${n.label}, ${dateShort(n.at ?? 0)}`}>
+                  <span className="pm-ct"><Icon name={n.icon} /><span><b>{n.label}</b><small>{n.sub}</small></span></span>
+                  <span className="pm-thumb"><Artifact c={n.card} /></span>
+                </button>
+              ) :
               <button key={n.id} className={`pm-n l${n.level} ${sel === n.id ? 'sel' : ''} ${isOpen(n.id) ? 'open' : ''} ${lit(n) ? '' : 'dim'} ${query && hits.has(n.id) && n.level >= 2 ? 'hit' : ''}`}
-                style={{ left: n.x, top: n.y }} onClick={() => toggle(n)} aria-expanded={n.level === 1 || n.link ? isOpen(n.id) : undefined}
+                style={{ left: at(n.id)[0], top: at(n.id)[1] }} onClick={() => toggle(n)} aria-expanded={n.level === 1 || n.link ? isOpen(n.id) : undefined}
                 aria-label={`${n.label}${n.at && n.level >= 2 ? `, ${dateShort(n.at)}` : ''}${n.count != null ? `, ${n.count}` : ''}`}>
                 <Icon name={n.icon} />
                 <span><b>{n.label}</b>{n.level >= 2 && <small>{n.level === 2 && n.at && n.at < Infinity ? `${dateShort(n.at)} · ` : ''}{n.sub}</small>}</span>
@@ -155,12 +207,17 @@ export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[
         <p className="pm-hint">Toca una categoría para abrirla · arrastra para moverte · rueda para acercar</p>
       </div>
 
-      <aside className="pm-side" aria-live="polite">
+      <aside className="pm-side">
+        {/* La persona siempre a la vista: foto de la lista y reconstrucción 3D que se gira. */}
+        <div className="pm-who">
+          <span className="pm-photo"><Shot label={m.listPhotos[0] ? `${m.listPhotos[0].caption} · ${m.listPhotos[0].year}` : 'Sin foto'} /></span>
+          <span className="pm-3d"><FaceCloud seed={seed} label={`Reconstrucción 3D del perfil ${m.listRef}`} interactive auto landmarks /></span>
+          <div className="pm-whoid"><b>{m.name}</b><small className="mono">{m.listRef} · {L.name}</small><small>{m.reason}</small></div>
+        </div>
+        <div className="pm-detail" aria-live="polite">
         {!selected ? (
           <>
-            <span className="pm-k mono">Persona</span>
-            <h3>{m.name}</h3>
-            <p>{m.reason}{m.orderUntil ? ` · vigente hasta el ${m.orderUntil}` : ''}</p>
+            <span className="pm-k mono">Datos de la persona</span>
             <dl className="pm-dl">
               <dt>Documento</dt><dd className="mono">{m.docId}</dd>
               <dt>Lista</dt><dd>{L.name} · <span className="mono">{m.listRef}</span></dd>
@@ -212,6 +269,7 @@ export function PersonMap({ m, onOpen }: { m: FacialMatch; onOpen: (cards: Card[
             ))}</ol>
           </>
         )}
+        </div>
       </aside>
     </div>
   );
