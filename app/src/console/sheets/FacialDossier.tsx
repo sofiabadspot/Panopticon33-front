@@ -12,7 +12,7 @@ import { useSession } from '../../shell/session';
 import { FaceCloud, type FaceAnchors } from '../../ui/FaceCloud';
 import { Artifact, type Card } from './EvidenceWall';
 import { PersonMap } from './PersonMap';
-import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
+import { EmptyState, Icon, useNow } from '../../ui/kit';
 
 // Mismo día en hora de El Salvador (no en UTC).
 
@@ -214,7 +214,7 @@ function FaceCalls({ calls, onAnchorsRef }: { calls: Call[]; onAnchorsRef: React
         <div key={c.key} ref={(el) => { lab.current[c.key] = el; }} className={`dz-call ${c.side} ${c.ok ? '' : 'no'}`} style={{ top: `${c.top}%` }}>
           <b>{c.title}</b>
           <span className="dz-call-t">{c.text}</span>
-          <span className="dz-call-back">Del otro lado: gírala</span>
+          <span className="dz-call-back">Del otro lado de la cabeza</span>
         </div>
       ))}
     </div>
@@ -232,7 +232,6 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
 }) {
   const now = useNow(1000);
   const { role } = useSession();
-  const toast = useToast();
   const analyst = role === 'analyst';
   const L = FACIAL_LISTS[m.list];
   const [sec, setSec] = useState<Sec>('resumen');
@@ -264,7 +263,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
       key: `t${i}`, side: faceAt(t)!.every((k) => k.endsWith('d')) ? 'r' : faceAt(t)!.every((k) => k.endsWith('i')) ? 'l' : i % 2 ? 'r' : 'l', top: TOP[Math.min(...faceAt(t)!.map((k) => RANK[k] ?? 2))], title: t.label,
       text: `${t.list} · ${t.seen ? 'coincide' : 'no se ve'}`, ok: !!t.seen, at: faceAt(t)!,
     }));
-    if (m.listPhotos[0]) out.push({ key: 'med', side: 'r', top: out.some((c) => c.side === 'r' && c.top >= 30 && c.top < 50) ? 50 : 38, title: 'Rasgos medidos', text: `${pct(m.listPhotos[0].score)} con la ${m.listPhotos[0].caption.toLowerCase()}`, ok: true, at: ['oi', 'od', 'na', 'bi', 'bd'] });
+    if (m.listPhotos[0]) out.push({ key: 'med', side: 'r', top: out.some((c) => c.side === 'r' && c.top >= 30 && c.top < 50) ? 50 : 38, title: 'Rasgos medidos', text: `${pct(m.listPhotos[0].score)} de coincidencia con la ${m.listPhotos[0].caption.toLowerCase()}`, ok: true, at: ['oi', 'od', 'na', 'bi', 'bd'] });
     return out;
   }, [m.traits, m.listPhotos]);
   const body = m.traits.filter((t) => !faceAt(t));
@@ -319,7 +318,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
   const confirmed = m.timeline.find((x) => x.label.startsWith('Identidad confirmada'));
   const steps: { label: string; done: boolean; wait?: boolean }[] = [
     { label: 'Detectada', done: true }, { label: 'Aviso al 911', done: true },
-    { label: 'Confirma el 911', done: !!confirmed, wait: !confirmed && m.status === 'por_revisar' }, { label: 'Agente avisado', done: !!confirmed },
+    { label: analyst ? 'Confirma el 911' : 'Tu confirmación', done: !!confirmed, wait: !confirmed && m.status === 'por_revisar' }, { label: 'Agente avisado', done: !!confirmed },
   ];
   const wait = Math.max(0, Math.round((now - d.at - 3000) / 1000));
   const riskCls = m.risk.level === 'alto' ? 'critica' : m.risk.level === 'medio' ? 'media' : 'baja';
@@ -358,7 +357,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
               <button className={!cmp ? 'on' : ''} aria-pressed={!cmp} onClick={() => setCmp(false)}>3D</button>
               <button className={cmp ? 'on' : ''} aria-pressed={cmp} onClick={() => { setCmp(true); setSec('resumen'); }}>Comparar</button>
             </div>
-            {!cmp && <button className="btn ghost xs" aria-pressed={!spin} onClick={() => setSpin(!spin)}><Icon name={spin ? 'pause' : 'play_arrow'} />{spin ? 'Pausar' : 'Mover'}</button>}
+            {!cmp && <button className="btn ghost xs" aria-pressed={!spin} onClick={() => setSpin(!spin)}><Icon name={spin ? 'pause' : 'play_arrow'} />{spin ? 'Pausar giro' : 'Reanudar giro'}</button>}
           </div>
           <div className="dz-face">
             <FaceCloud seed={seed} label={`Reconstrucción 3D de ${m.listRef}`} interactive auto={spin && !cmp} sway front={cmp} landmarks scan tags={false} onAnchors={onAnchors} />
@@ -372,7 +371,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
           <figure className="dz-cmp l">
             <span className="ds-eyebrow">Lista</span>
             {refPhoto ? <ListPic caption={refPhoto.caption} year={refPhoto.year} /> : <Shot label="Sin foto" />}
-            <figcaption>{refPhoto ? <>{refPhoto.caption} · {refPhoto.year} · <b className="mono">{pct(refPhoto.score)}</b></> : 'Sin foto en la lista'}</figcaption>
+            <figcaption>{refPhoto ? <>{refPhoto.caption} · {refPhoto.year} · <b className="mono">{pct(refPhoto.score)}</b></> : 'La lista no tiene foto'}</figcaption>
           </figure>
           <figure className="dz-cmp r">
             <span className="ds-eyebrow">Hoy</span>
@@ -394,7 +393,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
               <h2>Dónde está ahora <span className="dz-live" aria-hidden /></h2>
               <p className="dx-big">{d.place}</p>
               <p className="dx-sub">Visto {ago(d.at, now)}</p>
-              <span className="dz-src ds-eyebrow" aria-hidden>Sale de esta captura</span>
+              <span className="dz-src ds-eyebrow" aria-hidden>Visto en esta captura</span>
             </section>
           </div>
           <div className="dz-col r">
@@ -407,7 +406,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
             </section>
             {body.length > 0 && (
               <section className="ds-panel dz-glass">
-                <h2>Señas fuera de la cara</h2>
+                <h2>Otras señas</h2>
                 <dl className="dx-dl">{body.filter((t) => t.list).map((t, i) => <Fragment key={i}><dt>{t.label}</dt><dd className={t.seen ? '' : 'dx-muted'}>{t.list} · {t.seen ? 'coincide' : 'no se ve'}</dd></Fragment>)}</dl>
                 {body.some((t) => !t.list && t.seen) && <p className="dx-sub">Hoy lleva: {body.filter((t) => !t.list && t.seen).map((t) => t.seen!.toLowerCase()).join(', ')}</p>}
                 <p className="dz-legend"><span><i />coincide</span><span><i className="no" />no se ve</span></p>
@@ -439,7 +438,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
                       <h3>{l.label}</h3>
                       <p className="dx-sub">{l.sub}</p>
                       <dl className="dx-dl">{l.facts.map(([k, v]) => <Fragment key={k}><dt>{k}</dt><dd>{v}</dd></Fragment>)}</dl>
-                      {analyst && isUnknown(l) && <button className="btn secondary sm dx-investigate" onClick={() => toast('La búsqueda en otras fuentes todavía no está en la consola')}><Icon name="person_search" />Investigar quién es</button>}
+                      {analyst && isUnknown(l) && <div className="dx-row"><button className="btn secondary sm" disabled aria-describedby="dz-soon"><Icon name="person_search" />Investigar quién es</button><span className="dx-sub" id="dz-soon">Todavía no disponible en la consola</span></div>}
                     </article>
                   ))}
                 </div>
@@ -458,7 +457,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
             {sec === 'docs' && (m.docs.length
               ? <Proofs items={m.docs} onOpen={(i) => setView({ items: m.docs.map(proofItem), index: i })} />
               : <EmptyState icon="description" title="Sin documentos" action={<button className="btn secondary sm" onClick={() => setSec('fuentes')}>Ver las fuentes</button>} />)}
-            {sec === 'fuentes' && <Fuentes m={m} analyst={analyst} onInvestigate={() => toast('La búsqueda en otras fuentes todavía no está en la consola')} />}
+            {sec === 'fuentes' && <Fuentes m={m} analyst={analyst} />}
           </section>
         )}
 
@@ -512,7 +511,7 @@ function Detecciones({ m, dets }: { m: FacialMatch; dets: FacialDetection[] }) {
             <dl className="dx-dl">
               <dt>Ángulo</dt><dd>{POSE_LABEL[x.quality.pose]}</dd>
               <dt>Nitidez</dt><dd>{SHARP_LABEL[x.quality.sharp]}</dd>
-              <dt>Qué la tapa</dt><dd>{x.quality.covered.length ? x.quality.covered.join(', ') : 'Nada'}</dd>
+              <dt>Qué tapa la cara</dt><dd>{x.quality.covered.length ? x.quality.covered.join(', ') : 'Nada'}</dd>
             </dl>
           </article>
         ))}
@@ -522,7 +521,7 @@ function Detecciones({ m, dets }: { m: FacialMatch; dets: FacialDetection[] }) {
 }
 
 /** De dónde sale cada dato. El Analista, además, puede buscar en otras bases. */
-function Fuentes({ m, analyst, onInvestigate }: { m: FacialMatch; analyst: boolean; onInvestigate: () => void }) {
+function Fuentes({ m, analyst }: { m: FacialMatch; analyst: boolean }) {
   const at = lastDetection(m).at;
   const gave = (name: string) => {
     if (/PNC/.test(name)) return `Ficha, motivo${m.orderUntil ? ', orden' : ''}${m.listPhotos.length ? ', fotos' : ''} y señas`;
@@ -556,8 +555,9 @@ function Fuentes({ m, analyst, onInvestigate }: { m: FacialMatch; analyst: boole
             <dt>Caso</dt><dd className="mono">{m.listRef}</dd>
           </dl>
           <div className="dx-row">
-            <button className="btn primary sm" onClick={onInvestigate}><Icon name="person_search" />Investigar a {m.listRef}</button>
-            {unknown && <button className="btn secondary sm" onClick={onInvestigate}>Investigar al acompañante sin identificar</button>}
+            <button className="btn primary sm" disabled aria-describedby="dz-src-soon"><Icon name="person_search" />Investigar a {m.listRef}</button>
+            {unknown && <button className="btn secondary sm" disabled aria-describedby="dz-src-soon">Investigar al acompañante sin identificar</button>}
+            <span className="dx-sub" id="dz-src-soon">Todavía no disponible en la consola</span>
           </div>
         </section>
       )}

@@ -156,5 +156,5 @@ export function FaceCloud({ seed, label, interactive, auto = true, landmarks, sc
       cv.removeEventListener('wheel', wheel); cv.removeEventListener('keydown', key);
     };
   }, [seed, interactive]);
-  return <canvas ref={ref} className={`face-cloud ${interactive ? 'is-live' : ''}`} role="img" aria-label={interactive ? `${label}. Arrastrá para girar, rueda para acercar, flechas para girar, 0 para volver.` : label} tabIndex={interactive ? 0 : undefined} />;
+  return <canvas ref={ref} className={`face-cloud ${interactive ? 'is-live' : ''}`} role="img" aria-label={interactive ? `${label}. Arrastra para girar, rueda para acercar, flechas para girar, 0 para volver.` : label} tabIndex={interactive ? 0 : undefined} />;
 }

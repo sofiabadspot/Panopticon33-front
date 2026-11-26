@@ -171,7 +171,7 @@ export function FacialSheet({ id }: { id: string }) {
           <span className="fc-mscore"><b className="mono">{pct(best.score)}</b><span className={`chip ${meaning.band === 'Alta' ? 'ok' : meaning.band === 'Baja' ? 'media' : ''}`}>{meaning.band}</span></span>
           <button className="fc-mside" onClick={() => setView({ items: imgs, i: m.detections.length })} aria-label="Ver la foto de la lista en grande">
             <span className="fc-ph"><Shot /></span>
-            <span className="fc-cap"><b>{photos[0]?.caption ?? 'Sin foto en la lista'}</b>{photos[0]?.year ?? ''}</span>
+            <span className="fc-cap"><b>{photos[0]?.caption ?? 'La lista no tiene foto'}</b>{photos[0]?.year ?? ''}</span>
           </button>
         </div>
 
