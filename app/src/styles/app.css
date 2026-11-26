@@ -2192,14 +2192,16 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .dz-orbit i:nth-child(2) { inset: -8%; border-style: dashed; opacity: .6; }
 .dz-orbit i:nth-child(3) { border-color: transparent; border-top-color: color-mix(in srgb, var(--ink) 40%, transparent); animation: dzspin 14s linear infinite; }
 @keyframes dzspin { to { transform: rotate(360deg); } }
-.dz-person { position: absolute; left: calc(300px + var(--space-6)); right: calc(300px + var(--space-6)); top: 0; bottom: 150px; transition: left var(--t-slow, .5s) ease, right var(--t-slow, .5s) ease; }
+.dz-person { position: absolute; left: calc(var(--dz-col) + var(--space-6)); right: calc(var(--dz-col) + var(--space-6)); top: 0; bottom: 150px; transition: left var(--t-slow, .5s) ease, right var(--t-slow, .5s) ease; }
 .dz.section .dz-person { left: 0; right: auto; width: 300px; bottom: 60px; }
 .dz.section .dz-orbit { left: 150px; width: 280px; }
 .dz.section .dz-cap { white-space: normal; }
 .dz-modes { position: absolute; left: 50%; top: 0; z-index: 2; transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-2); }
-.dz-face { position: absolute; inset: 44px 0 28px; }
+.dz-face { position: absolute; inset: 44px 0 52px; }
 .dz-face .face-cloud { position: absolute; inset: 0; background: none; color: var(--ink-muted); }
-.dz-cap { position: absolute; left: 0; right: 0; bottom: 0; text-align: center; color: var(--ink-subtle); }
+.dz-cap { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; display: grid; justify-items: center; gap: var(--space-1); text-align: center; color: var(--ink-subtle); }
+.dz-cap-main { font-size: var(--fs-md); color: var(--ink-muted); }
+.dz-cap-main b { color: var(--ink); font-weight: 500; }
 .dz-calls { position: absolute; inset: 0; pointer-events: none; }
 .dz-calls-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .dz-calls-svg polyline { fill: none; stroke: var(--ink); stroke-width: 1; transition: opacity .2s ease; }
@@ -2207,7 +2209,7 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .dz-calls-svg .no polyline { stroke: var(--ink-subtle); stroke-dasharray: 4 4; }
 .dz-calls-svg .no circle { stroke: var(--ink-subtle); }
 .dz-call { position: absolute; width: 190px; display: grid; gap: var(--space-1); padding-bottom: var(--space-1); }
-.dz-call.l { left: 0; } .dz-call.r { right: 0; text-align: right; }
+.dz-call.r { text-align: right; }
 .dz-call b { font: var(--type-hud-label); letter-spacing: var(--type-hud-tracking); text-transform: uppercase; color: var(--ink); }
 .dz-call-t { font-size: var(--fs-sm); color: var(--ink); }
 .dz-call.no .dz-call-t { color: var(--ink-subtle); }
@@ -2215,16 +2217,13 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .dz-call.back { opacity: .5; }
 .dz-call.back .dz-call-t { display: none; } .dz-call.back .dz-call-back { display: block; }
 .dz-glass { background: color-mix(in srgb, var(--surface-panel) 72%, transparent); backdrop-filter: var(--hud-blur); -webkit-backdrop-filter: var(--hud-blur); box-shadow: var(--shadow-lg); overflow: visible; }
-.dz-col { position: absolute; top: 0; width: 300px; display: flex; flex-direction: column; gap: var(--space-3); }
-.dz-col.l { left: 0; bottom: 136px; } .dz-col.r { right: 0; }
-.dz-col.l .dz-now { margin-top: auto; }
+.dz { --dz-col: clamp(300px, 20vw, 380px); }
+.dz-col { position: absolute; top: 0; width: var(--dz-col); display: flex; flex-direction: column; gap: var(--space-3); }
+.dz-col.l { left: 0; } .dz-col.r { right: 0; }
 .dz-group { color: var(--ink-subtle); }
 .dz-col.r .dz-group { text-align: right; }
 .dz-live { width: 8px; height: 8px; border-radius: 50%; background: var(--status-positive); box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-positive) 60%, transparent); animation: dzlive 1.8s ease-out infinite; }
 @keyframes dzlive { to { box-shadow: 0 0 0 8px transparent; } }
-.dz-now { position: relative; }
-.dz-now::after { content: ''; position: absolute; left: 54px; top: 100%; width: 1px; height: 18px; background: var(--ink); }
-.dz-src { position: absolute; left: 62px; top: calc(100% + var(--space-1)); font-size: var(--fs-2xs); color: var(--ink-subtle); }
 .ds-panel h2.dz-risk { margin-top: var(--space-3); }
 .ds-panel h2.dz-risk.alto { color: var(--status-negative-text); }
 .ds-panel h2.dz-risk.medio { color: var(--status-alert-text); }
@@ -2254,14 +2253,13 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .dz-dock button.on { color: var(--on-primary); background: var(--primary); }
 .dz-dock button.on i { color: var(--on-primary); }
 @media (prefers-reduced-motion: reduce) { .dz-orbit i, .dz-live { animation: none; } }
-@media (max-width: 1280px) { .dz-col { width: 260px; } .dz-col .dx-steps li { font-size: var(--fs-xs); } .dz-person { left: calc(260px + var(--space-4)); right: calc(260px + var(--space-4)); } .dz-call { width: 170px; } .dz-dock button { padding: 0 var(--space-3); } }
+@media (max-width: 1280px) { .dz { --dz-col: 260px; } .dz-call { width: 170px; } .dz-dock button { padding: 0 var(--space-3); } }
 @media (max-width: 1100px) {
   .dz { overflow: visible; display: flex; flex-direction: column; gap: var(--space-4); }
   .dz-floor, .dz-orbit { display: none; }
   .dz-person, .dz.section .dz-person { position: relative; left: auto; right: auto; width: 100%; height: 62vh; flex: none; }
   .dz-col, .dz-view, .dz-cmp, .dz-strip, .dz-dock { position: static; width: auto; max-width: none; transform: none; }
   .dz-dock { align-self: center; flex-wrap: wrap; justify-content: center; border-radius: var(--radius-md); }
-  .dz-now::after, .dz-src { display: none; }
 }
 
 /* ---------- Barra de comandos del mapa (estilo Figma) ----------
@@ -2306,3 +2304,16 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .inc-done { display: grid; gap: 6px; }
 .inc-done .hint { font-size: var(--fs-xs); color: var(--ink-subtle); }
 .inc-card { width: 320px; max-height: calc(100% - 96px); overflow-y: auto; }
+/* Pasos en vertical (columnas angostas): punto, línea hacia abajo y el texto al lado. */
+.dx-steps.v { grid-template-columns: 1fr; gap: var(--space-2); }
+.dx-steps.v li { padding: 0 0 0 var(--space-6); }
+.dx-steps.v li::before { left: 4.5px; right: auto; top: 14px; bottom: calc(var(--space-2) * -1); width: 1px; height: auto; }
+.dx-steps.v li i { top: 3px; }
+.dx-docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--space-4); align-items: start; }
+.dx-doc { display: grid; gap: var(--space-2); padding: 0; text-align: left; cursor: zoom-in; }
+.dx-doc .art { border-radius: var(--radius-sm); transition: transform var(--t-mid, .2s) ease; }
+.dx-doc:hover .art { transform: translateY(-2px); }
+.dx-doc-cap { display: grid; gap: var(--space-1); }
+.dx-doc-cap b { font-size: var(--fs-md); font-weight: 500; }
+.dx-doc-cap small { font-size: var(--fs-xs); color: var(--ink-subtle); }
+.dx-detmap { position: relative; height: clamp(420px, 62vh, 700px); border: 1px solid var(--hud-line); border-radius: var(--radius-sm); overflow: hidden; }

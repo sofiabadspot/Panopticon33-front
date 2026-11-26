@@ -6,12 +6,13 @@
    Esc cierra el expediente (no la ficha). Todo es de ejemplo. */
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { ago, dateShort, hhmm, pct } from '../../api/format';
+import { ago, dateShort, dateTime, hhmm, pct } from '../../api/format';
 import { FACIAL_LISTS, FACIAL_SOURCES, POSE_LABEL, SHARP_LABEL, TRAIT_GROUPS, lastDetection, type FacialDetection, type FacialMatch, type LinkKind, type PersonLink, type Proof, type ProofKind, type Trait, type TraitGroup } from '../../api/facial';
 import { useSession } from '../../shell/session';
 import { FaceCloud, type FaceAnchors } from '../../ui/FaceCloud';
-import { Artifact, type Card } from './EvidenceWall';
+import { Artifact, cardsOf, type Card } from './EvidenceWall';
 import { PersonMap } from './PersonMap';
+import { MapView, type RouteStop } from '../../map/MapView';
 import { EmptyState, Icon, useNow } from '../../ui/kit';
 
 // Mismo día en hora de El Salvador (no en UTC).
@@ -180,11 +181,14 @@ function FaceCalls({ calls, onAnchorsRef }: { calls: Call[]; onAnchorsRef: React
     const dots = new Map([...(el0?.querySelectorAll<SVGCircleElement>('[data-d]') ?? [])].map((n) => [n.dataset.d!, n]));
     onAnchorsRef.current = (a) => {
       const el = svg.current; if (!el) return;
-      const W = el.clientWidth;
+      // Mismo encuadre que FaceCloud: la cabeza ocupa un radio de 0,36 del lado menor, centrada.
+      const W = el.clientWidth, H = el.clientHeight, cx = W / 2, R = Math.min(W, H) * 0.36;
       for (const c of calls) {
         const box = lab.current[c.key]; if (!box) continue;
+        // La etiqueta, pegada a la cabeza (no al borde): la línea queda corta.
+        box.style.left = `${c.side === 'l' ? Math.max(0, cx - R * 1.15 - box.offsetWidth) : Math.min(W - box.offsetWidth, cx + R * 1.15)}px`;
         const lx = c.side === 'l' ? box.offsetLeft + box.offsetWidth : box.offsetLeft, ly = box.offsetTop + box.offsetHeight + 4;
-        const bend = c.side === 'l' ? lx + W * 0.05 : lx - W * 0.05;
+        const bend = lx;
         const pts = c.at.map((k) => a[k]).filter(Boolean);
         const back = pts.every((p) => !p.front);
         box.classList.toggle('back', back);
@@ -245,6 +249,8 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
   const onAnchors = useCallback((a: FaceAnchors) => anchors.current?.(a), []);
 
   const dets = useMemo(() => [...m.detections].sort((a, b) => b.at - a.at), [m.detections]);
+  // Los documentos se muestran tal cual (ficha, registro, orden), no como un ícono.
+  const docCards = useMemo(() => cardsOf(m).filter((c) => c.links.includes('identidad')), [m]);
   const d = dets[0] ?? lastDetection(m);
   const best = m.detections.length ? Math.max(...m.detections.map((x) => x.score)) : d.score;
   const seed = [...m.listRef].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 2147483647, 7);
@@ -263,7 +269,6 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
       key: `t${i}`, side: faceAt(t)!.every((k) => k.endsWith('d')) ? 'r' : faceAt(t)!.every((k) => k.endsWith('i')) ? 'l' : i % 2 ? 'r' : 'l', top: TOP[Math.min(...faceAt(t)!.map((k) => RANK[k] ?? 2))], title: t.label,
       text: `${t.list} · ${t.seen ? 'coincide' : 'no se ve'}`, ok: !!t.seen, at: faceAt(t)!,
     }));
-    if (m.listPhotos[0]) out.push({ key: 'med', side: 'r', top: out.some((c) => c.side === 'r' && c.top >= 30 && c.top < 50) ? 50 : 38, title: 'Rasgos medidos', text: `${pct(m.listPhotos[0].score)} de coincidencia con la ${m.listPhotos[0].caption.toLowerCase()}`, ok: true, at: ['oi', 'od', 'na', 'bi', 'bd'] });
     return out;
   }, [m.traits, m.listPhotos]);
   const body = m.traits.filter((t) => !faceAt(t));
@@ -301,7 +306,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
     { id: 'senas', label: 'Señas', count: String(m.traits.length) },
     { id: 'vin', label: 'Vínculos', count: String(m.links.length) },
     { id: 'hist', label: 'Historia', count: String(m.story.length) },
-    { id: 'docs', label: 'Documentos', count: String(m.docs.length) },
+    { id: 'docs', label: 'Documentos', count: String(docCards.length) },
     { id: 'fuentes', label: 'Fuentes', count: `${connected}/${FACIAL_SOURCES.length}` },
   ];
   // Flechas, Inicio y Fin entre secciones, como las pestañas de Jules.
@@ -363,7 +368,10 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
             <FaceCloud seed={seed} label={`Reconstrucción 3D de ${m.listRef}`} interactive auto={spin && !cmp} sway front={cmp} landmarks scan tags={false} onAnchors={onAnchors} />
             {mode === 'home' && <FaceCalls calls={calls} onAnchorsRef={anchors} />}
           </div>
-          <span className="ds-eyebrow dz-cap">Reconstrucción 3D · {m.profile3d.detections} detecciones · no prueba la identidad</span>
+          <p className="dz-cap">
+            {m.listPhotos[0] && <span className="dz-cap-main">Rasgos medidos: <b className="mono">{pct(m.listPhotos[0].score)}</b> de coincidencia con la {m.listPhotos[0].caption.toLowerCase()}</span>}
+            <span className="ds-eyebrow">Reconstrucción 3D · {m.profile3d.detections} detecciones · no prueba la identidad</span>
+          </p>
         </div>
 
         {/* Comparar: la lista y la captura, grandes, a los lados del 3D de frente. */}
@@ -385,15 +393,14 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
           <div className="dz-col l">
             <span className="ds-eyebrow dz-group">Ahora</span>
             <section className="ds-panel dz-glass">
-              <h2>Estado del aviso</h2>
-              {m.status === 'por_revisar' && <p className="dx-wait">{analyst ? 'Esperando al 911' : 'Esperando tu confirmación'} · <b className="mono">{Math.floor(wait / 60)}:{String(wait % 60).padStart(2, '0')}</b></p>}
-              <ol className="dx-steps">{steps.map((s) => <li key={s.label} className={s.done ? 'done' : s.wait ? 'wait' : ''}><i aria-hidden /><span>{s.label}</span></li>)}</ol>
-            </section>
-            <section className="ds-panel dz-glass dz-now">
               <h2>Dónde está ahora <span className="dz-live" aria-hidden /></h2>
               <p className="dx-big">{d.place}</p>
-              <p className="dx-sub">Visto {ago(d.at, now)}</p>
-              <span className="dz-src ds-eyebrow" aria-hidden>Visto en esta captura</span>
+              <p className="dx-sub">Visto {ago(d.at, now)} · <span className="mono">{d.cameraId}</span></p>
+            </section>
+            <section className="ds-panel dz-glass">
+              <h2>Estado del aviso</h2>
+              {m.status === 'por_revisar' && <p className="dx-wait">{analyst ? 'Esperando al 911' : 'Esperando tu confirmación'} · <b className="mono">{Math.floor(wait / 60)}:{String(wait % 60).padStart(2, '0')}</b></p>}
+              <ol className="dx-steps v">{steps.map((s) => <li key={s.label} className={s.done ? 'done' : s.wait ? 'wait' : ''}><i aria-hidden /><span>{s.label}</span></li>)}</ol>
             </section>
           </div>
           <div className="dz-col r">
@@ -454,8 +461,13 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
                 ))}
               </ol>
             )}
-            {sec === 'docs' && (m.docs.length
-              ? <Proofs items={m.docs} onOpen={(i) => setView({ items: m.docs.map(proofItem), index: i })} />
+            {sec === 'docs' && (docCards.length
+              ? <div className="dx-docs">{docCards.map((c, i) => (
+                  <button key={c.key} className="dx-doc" onClick={() => openCards(docCards, i)} aria-label={`Ver en grande: ${c.title}, ${c.src}`}>
+                    <Artifact c={c} />
+                    <span className="dx-doc-cap"><b>{c.title}</b><small>{c.src} · {dateShort(c.at)}</small></span>
+                  </button>
+                ))}</div>
               : <EmptyState icon="description" title="Sin documentos" action={<button className="btn secondary sm" onClick={() => setSec('fuentes')}>Ver las fuentes</button>} />)}
             {sec === 'fuentes' && <Fuentes m={m} analyst={analyst} />}
           </section>
@@ -495,12 +507,26 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
 
 /** Una tarjeta por detección: la captura, el puntaje y qué tan útil es para comparar. */
 function Detecciones({ m, dets }: { m: FacialMatch; dets: FacialDetection[] }) {
+  const [asMap, setAsMap] = useState(false);
   const byTime = [...m.detections].sort((a, b) => a.at - b.at);
   const rose = byTime.length > 1 && byTime[byTime.length - 1].score > byTime[0].score;
+  // El mismo recorrido que la ficha dibuja en el mapa principal: paradas numeradas en orden, con su captura.
+  const stops: RouteStop[] = byTime.map((d, i) => ({ lat: d.lat, lon: d.lon, label: String(i + 1), time: hhmm(d.at), title: `${dateTime(d.at)} · ${d.cameraId} · ${d.place}`,
+    snap: { camera: d.cameraId, street: d.place, evidence: { type: 'pendiente', caption: 'Captura de la detección' }, confidence: d.score } }));
+  const lons = stops.map((s) => s.lon), lats = stops.map((s) => s.lat), pad = 0.002;
+  const bounds: [[number, number], [number, number]] = [[Math.min(...lons) - pad, Math.min(...lats) - pad], [Math.max(...lons) + pad, Math.max(...lats) + pad]];
   return (
     <>
-      {rose && <p className="dx-text dx-muted">La coincidencia subió de {pct(byTime[0].score)} a {pct(byTime[byTime.length - 1].score)}</p>}
-      <div className="dx-cards">
+      <div className="dx-row">
+        {rose && <p className="dx-text dx-muted" style={{ flex: 1 }}>La coincidencia subió de {pct(byTime[0].score)} a {pct(byTime[byTime.length - 1].score)}</p>}
+        <div className="seg dx-end" role="group" aria-label="Cómo ver las detecciones">
+          <button className={!asMap ? 'on' : ''} aria-pressed={!asMap} onClick={() => setAsMap(false)}>Tarjetas</button>
+          <button className={asMap ? 'on' : ''} aria-pressed={asMap} onClick={() => setAsMap(true)}>Mapa</button>
+        </div>
+      </div>
+      {asMap ? (
+        <div className="dx-detmap"><MapView zones={[]} route={stops} routeLabel={m.listRef} bounds={bounds} fitKey={`det-${m.id}-${stops.length}`} layers={{ zones: false, cameras: false, units: false, alerts: false }} compact /></div>
+      ) : <div className="dx-cards">
         {dets.map((x, i) => (
           <article key={x.at} className={`ds-panel dx-card ${i === 0 ? 'last' : ''}`}>
             <div className="dx-card-img">
@@ -515,7 +541,7 @@ function Detecciones({ m, dets }: { m: FacialMatch; dets: FacialDetection[] }) {
             </dl>
           </article>
         ))}
-      </div>
+      </div>}
     </>
   );
 }
