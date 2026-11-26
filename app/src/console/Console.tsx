@@ -7,13 +7,13 @@
    Abrir algo nunca cambia de pantalla: el mapa se mueve hacia ello. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SCENARIO_LABEL, SECTOR, eventStatus, forOperator, sessionFor, setScenario, useApi, type Scenario } from '../api';
+import { INCIDENT_LABEL, SCENARIO_LABEL, SECTOR, eventStatus, forOperator, inScope, openStory, sessionFor, setScenario, snapshot, useApi, type Scenario } from '../api';
 import { useFacial } from '../api/facial';
 import { dateTime, hhmm, hhmmss } from '../api/format';
 import { KIND_LABEL, KIND_PHRASE } from '../api/labels';
 import { nearZone } from '../api/place';
 import { ROLE_LABEL } from '../api/labels';
-import type { LngLat, Role } from '../api/types';
+import type { LayerKey, LngLat, Role } from '../api/types';
 import type { GoogleBase } from '../map/google';
 import { AirHex, AlertMark, AlertTile, CameraNode, UnitHex } from '../map/icons';
 import { coverageAt } from '../api/coverage';
@@ -24,17 +24,18 @@ import { Icon, useNow, PanelSkeleton, SheetSkeleton } from '../ui/kit';
 import { P33Logo } from '../ui/Logo';
 import { Menu } from '../jules/ds/Menu';
 import { boundsOf, useZoneSeverity } from '../views/shared';
-import { ConsoleProvider, TOOLS, useConsole } from './ctx';
+import { ConsoleProvider, TOOLS, canOpenSheet, useConsole } from './ctx';
 import { Search } from './Search';
 import { VideoWall } from './VideoWall';
 import { StatusPanel } from './panels/StatusPanel';
 import { QueuePanel } from './panels/QueuePanel';
 import { InvestigatePanel } from './panels/InvestigatePanel';
-import { EventsPanel } from './panels/EventsPanel';
 import { AuditNav, ConfigNav } from './panels/AdminPanels';
 import { AlertSheet } from './sheets/AlertSheet';
 import { ZoneSheet } from './sheets/ZoneSheet';
 import { EventSheet, EventFormSheet } from './sheets/EventSheet';
+import { MAP_TABS, type ConfigTab } from './sheets/configTabs';
+import { ADMIN_LAYERS, AdminMapLegend, AdminMapLayers, cameraPending, layersFor, ZONE_COLOR, zonePending, type AdminLayers } from './AdminMapLayers';
 import { CameraSheet } from './sheets/CameraSheet';
 import { ConfigSheet } from './sheets/ConfigSheet';
 import { AuditSheet } from './sheets/AuditSheet';
@@ -44,6 +45,11 @@ import { WhoArrives } from './WhoArrives';
 import { VehicleSheet } from './sheets/VehicleSheet';
 import { AirSheet } from './sheets/AirSheet';
 import { InvestigationDock } from './InvestigationDock';
+import { CommandBar, INCIDENT_ICON, IncidentCard, type Tool } from './CommandBar';
+import { StoryPlaybackProvider } from './story/useStory';
+import { StoryPanel } from './story/StoryPanel';
+import { StoryChapters } from './story/StoryChapters';
+import { useStoryRoute } from './story/storyRoute';
 
 /** Iniciales para el avatar (solo palabras con mayúscula: sin títulos como "Cmdte."). */
 const initials = (name: string) => name.split(' ').filter((w) => /^[A-ZÁÉÍÓÚ]/.test(w) && !/\.$/.test(w)).slice(0, 2).map((w) => w[0]).join('');
@@ -53,7 +59,7 @@ const NO_STATUS = {};
 
 export function Console() {
   const { role } = useSession();
-  return <ConsoleProvider key={role} role={role}><Layout /></ConsoleProvider>;
+  return <ConsoleProvider key={role} role={role}><StoryPlaybackProvider><Layout /></StoryPlaybackProvider></ConsoleProvider>;
 }
 
 function Layout() {
@@ -75,30 +81,71 @@ function Layout() {
   /* Analista con una investigación abierta: el mapa pasa a modo histórico. Muestra solo las alertas de la
      ventana del hecho; el calor de personas y las unidades son en vivo, así que se apagan. */
   const inv = role === 'analyst' && c.invId ? investigations.find((x) => x.id === c.invId) ?? null : null;
+  /* Analista con una historia abierta: a la izquierda el sujeto, a la derecha los capítulos y abajo el
+     reproductor. La investigación (si la hay) sigue abierta debajo: al salir se vuelve a ella. */
+  const stories = useApi((s) => s.stories);
+  const story = role === 'analyst' && c.storyId ? stories.find((x) => x.id === c.storyId) ?? null : null;
+  // En el mapa, la historia es un recorrido controlado: sigue al capítulo que se está mirando.
+  const sr = useStoryRoute(story);
+  // Solo en desarrollo: abrir una historia desde la consola del navegador (window.__p33).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return undefined;
+    const w = window as unknown as { __p33?: unknown };
+    w.__p33 = { openStory, setStoryId: c.setStoryId, setInvId: c.setInvId, user, stories: () => snapshot().stories,
+      openPlate: (plate: string, invId?: string) => { const st = openStory({ k: 'placa', plate }, 'Prueba de desarrollo', user, invId ? { invId } : undefined); if (st) c.setStoryId(st.id); return st; } };
+    return () => { delete w.__p33; };
+  }, [c.setStoryId, c.setInvId, user]);
   const facial = useFacial();
   const sevOf = useZoneSeverity(alerts);
 
-  const [layers, setLayers] = useState<MapLayers>({ zones: true, events: true, alerts: true, units: false, cameras: role === 'admin' || role === 'analyst', fov: false, hex: 'personas', drones: true, helis: true });
+  /* Capas de cada rol: se configuran en Configuración → Roles. "Al entrar" = prendida al abrir;
+     "No la ve" = no aparece en la franja. */
+  const roleCfg = useApi((s) => s.roleConfigs.find((r) => r.role === role)!);
+  const seen = (k: LayerKey) => roleCfg.layers[k] !== 'oculta';
+  const [layers, setLayers] = useState<MapLayers>(() => {
+    const on = (k: LayerKey) => roleCfg.layers[k] === 'inicio';
+    return { zones: on('zones'), events: on('events'), alerts: on('alerts'), units: on('units'), cameras: on('cameras'), fov: false, hex: on('hex') ? 'personas' : null, drones: on('drones'), helis: on('helis') };
+  });
+  /* Administrador: su propio mapa, el de configuración (ver AdminMapLayers). */
+  const admin = role === 'admin';
+  const [adm, setAdmRaw] = useState<AdminLayers>(ADMIN_LAYERS);
+  const setAdm = (p: Partial<AdminLayers>) => setAdmRaw((l) => ({ ...l, ...p }));
+  /* Cada sección abre con sus capas (Zonas → zonas, Eventos → eventos…); la ficha de un elemento cuenta
+     como su sección. Las otras capas se prenden a mano y quedan hasta cambiar de sección. */
+  const adminTab = !admin || !c.sheet ? null : c.sheet.k === 'config' ? c.sheet.tab ?? 'zonas'
+    : c.sheet.k === 'evento' || c.sheet.k === 'evento-form' ? 'eventos' : c.sheet.k === 'zona' ? 'zonas' : c.sheet.k === 'camara' ? 'camaras' : null;
+  useEffect(() => { if (admin) setAdmRaw(layersFor(adminTab)); }, [admin, adminTab]);
+  const pendingCams = cameras.filter(cameraPending);
+  const pendingZones = zones.filter((z) => zonePending(z, cameras));
   /** Última lectura elegida para los hexágonos: al volver a prenderlos, vuelven con esa. */
   const [hexPick, setHexPick] = useState<HexMetric>('personas');
   /* Medir cobertura alrededor de un punto: se activa, se hace clic en el mapa y se ve el radio,
      las unidades dentro y cuánto tardaría en llegar cada una. */
   const [wallOpen, setWallOpen] = useState(false);
-  const [measuring, setMeasuring] = useState(false);
+  /* Barra de comandos: la herramienta activa del mapa. "medir" es ¿Quién llega?; "incidente" espera un clic
+     para registrar lo que pasó ahí (o Alt + clic con cualquier herramienta). */
+  const [tool, setToolRaw] = useState<Tool>('mover');
+  const measuring = tool === 'medir';
+  const [incAt, setIncAt] = useState<LngLat | null>(null);
+  const setTool = (t: Tool) => { setToolRaw(t); setMeasureAt(null); if (t !== 'incidente') setIncAt(null); };
+  const setMeasuring = (on: boolean) => setTool(on ? 'medir' : 'mover');
+  const incidents = useApi((s) => s.incidents);
+  const canIncident = role === 'operator_911' || role === 'command';
   const [measureAt, setMeasureAt] = useState<LngLat | null>(null);
   const [radius, setRadius] = useState(500);
   const [base, setBase] = useState<GoogleBase>('mapa');
   const [baseStatus, setBaseStatus] = useState<'google' | 'local' | null>(null);
   const [pointer, setPointer] = useState<LngLat | null>(null);
 
-  const wide = c.sheet?.k === 'config' || c.sheet?.k === 'bitacora';
+  /* Configuración: las secciones de lugar y eventos dejan el mapa a la vista; las tablas anchas lo tapan. */
+  const wide = (c.sheet?.k === 'config' && !MAP_TABS.includes((c.sheet.tab ?? 'zonas') as ConfigTab)) || c.sheet?.k === 'bitacora';
   // Indicador de pestaña: se mueve (no salta) a la pestaña activa.
   const tabsRef = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     const nav = tabsRef.current; if (!nav) return undefined;
     const place = () => { const b = nav.querySelector<HTMLElement>(`[data-tab="${c.panel}"]`); if (!b) return; nav.style.setProperty('--ti-x', `${b.offsetLeft}px`); nav.style.setProperty('--ti-w', `${b.offsetWidth}px`); };
     place(); const ro = new ResizeObserver(place); ro.observe(nav); return () => ro.disconnect();
-  }, [c.panel, role]);
+  }, [c.panel, role, !!story]);
   // Configuración (admin) y bitácora (auditor) son tablas y formularios: el mapa no suma nada ahí
   // y repetía lo mismo que la lista. Con esas fichas abiertas, la ficha ocupa el lugar del mapa
   // (el mapa queda montado pero oculto, para volver a Estado o Eventos sin recargarlo).
@@ -107,13 +154,18 @@ function Layout() {
   const julesDock = role === 'command' && !c.sheet;
   // Jules minimizado (franja de 64 px) o con el ancho que eligió la persona arrastrando su borde.
   const julesW = c.jules.minimizado && !c.jules.maximizado ? '64px' : c.jules.ancho ? `${c.jules.ancho}px` : null;
-  const rw = c.sheet ? (wide ? 'min(860px, 52vw)' : c.sheet.k === 'jules' && julesW ? julesW : c.sheet.k === 'alerta' ? '500px' : '440px') : julesDock ? julesW ?? '400px' : '0px';
+  const rw = story ? '400px' : c.sheet ? (wide ? 'min(860px, 52vw)' : c.sheet.k === 'jules' && julesW ? julesW : c.sheet.k === 'alerta' ? '500px' : c.sheet.k === 'config' ? 'min(480px, 36vw)' : '440px') : julesDock ? julesW ?? '400px' : '0px';
 
   // Encuadre: al abrir una ficha el mapa va hacia lo abierto; al inicio, al sector.
-  // Zona → evento en curso que la incluye (un evento puede abarcar varias zonas)
+  // Zona → evento en curso que la incluye (un evento puede abarcar varias zonas). Si no hay ninguno en
+  // curso, el próximo programado: el mapa también muestra su área, marcada como "programado".
   const eventOf = useMemo(() => {
     const live = events.filter((e) => eventStatus(e, now) === 'en_curso');
-    return (zoneId: string) => { const e = live.find((x) => x.zoneIds.includes(zoneId)); return e ? { id: e.id, name: e.name, end: e.end } : null; };
+    const next = events.filter((e) => eventStatus(e, now) === 'programado').sort((a, b) => a.start - b.start);
+    return (zoneId: string) => {
+      const e = live.find((x) => x.zoneIds.includes(zoneId)) ?? next.find((x) => x.zoneIds.includes(zoneId));
+      return e ? { id: e.id, name: e.name, start: e.start, end: e.end, live: live.includes(e), venueZone: e.zoneIds[0], cells: e.cells } : null;
+    };
   }, [events, Math.floor(now / 60000)]); // eslint-disable-line react-hooks/exhaustive-deps
   // El sector son las zonas con cámaras: las que no tienen (lejos del centro) no agrandan el encuadre inicial.
   const sectorPts = useMemo(() => zones.filter((z) => z.cameras.length).flatMap((z) => z.ring).concat(cameras.map((x) => [x.lon, x.lat] as LngLat)), [zones, cameras]);
@@ -151,7 +203,7 @@ function Layout() {
   const focusLabel = !focusSel ? '' : focusSel.k === 'zona' ? zones.find((z) => z.id === focusSel.id)?.name ?? focusSel.id
     : focusSel.k === 'camara' ? `cámara ${focusSel.id}`
     : (() => { const al = alerts.find((x) => x.id === focusSel.id); return al ? `${KIND_LABEL[al.kind].toLowerCase()}${al.plate ? ` ${al.plate.listed}` : ''}` : focusSel.id; })();
-  const openAlerts = alerts.filter((a) => forOperator(a) && (a.review === 'por_revisar' || a.dispatch === 'en_camino'));
+  const openAlerts = alerts.filter((a) => forOperator(a) && inScope(a, user) && (a.review === 'por_revisar' || a.dispatch === 'en_camino'));
   // En el mapa, las alertas abiertas: las que esperan decisión y las confirmadas con refuerzos en camino
   // (se ven con "Refuerzos en camino" hasta que llegan). Las descartadas y las ya resueltas no se dibujan.
   // La alerta abierta en el lateral se ve siempre, aunque ya esté resuelta.
@@ -162,8 +214,14 @@ function Layout() {
   const pending = openAlerts.filter((a) => a.review === 'por_revisar').length;
   const badge = (id: string) => (id === 'alertas' ? pending : id === 'verificacion' ? facial.filter((m) => m.status === 'por_revisar').length : 0);
 
-  const measure = useMemo(() => (measuring && measureAt ? { p: measureAt, ...coverageAt(measureAt, radius, policeSource ? units : null) } : null), [measuring, measureAt, radius, units, policeSource]);
-  useEffect(() => { if (!measuring) return; const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { setMeasuring(false); setMeasureAt(null); } }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [measuring]);
+  // ¿Quién llega? mide en el punto elegido: el de la medición o el del incidente que se está registrando.
+  const measurePt = measuring ? measureAt : tool === 'incidente' ? incAt : null;
+  const measure = useMemo(() => (measurePt ? { p: measurePt, ...coverageAt(measurePt, radius, policeSource ? units : null) } : null), [measurePt, radius, units, policeSource]);
+  const whoArrives = measure && (<>
+    <div className="seg" role="group" aria-label="Radio"><span className="seg-lbl">Radio</span>{[250, 500, 1000].map((r) => <button key={r} className={radius === r ? 'on' : ''} onClick={() => setRadius(r)}>{r < 1000 ? `${r} m` : '1 km'}</button>)}</div>
+    <p className={`mc2-state ${measure.state}`}><i />{measure.state === 'cubierta' ? `Cubierta: ${measure.within.length} ${measure.within.length === 1 ? 'unidad' : 'unidades'} en el radio` : measure.state === 'cerca' ? `Sin unidades en el radio; la más cercana llega en ${Math.round(measure.nearest!.eta)} min` : 'Sin cobertura: ninguna unidad llega en menos de 4 min'}</p>
+    {policeSource && <WhoArrives key={measure.p.join(',')} p={measure.p} />}
+  </>);
   /* Capas del mapa. Cada chip lleva el MISMO ícono que ese elemento tiene en el mapa, así el chip es a la vez
      el filtro y la referencia (no hay leyenda aparte). */
   const LAYER_ICON: Record<string, ReactNode> = {
@@ -216,15 +274,15 @@ function Layout() {
   }, [c]);
 
   return (
-    <div className={`console ${noMap ? 'no-map' : ''}`} style={{ '--rw': rw } as CSSProperties}>
+    <div className={`console ${noMap ? 'no-map' : ''}`} style={{ '--rw': rw, ...(admin ? { '--lw': '272px' } : {}) } as CSSProperties}>
       <header className="cbar">
         <div className="brand"><P33Logo size={17} /></div>
         <Search />
         {/* Muro de video: flujo aparte, junto al buscador */}
-        <button className={`btn secondary sm wall-btn ${wallOpen ? 'on' : ''}`} aria-pressed={wallOpen} onClick={() => setWallOpen((w) => !w)} title="Muro de video: todas las cámaras"><Icon name="grid_view" />Muro de video</button>
+        {!admin && <button className={`btn secondary sm wall-btn ${wallOpen ? 'on' : ''}`} aria-pressed={wallOpen} onClick={() => setWallOpen((w) => !w)} title="Muro de video: todas las cámaras"><Icon name="grid_view" />Muro de video</button>}
         <div className="right">
           <span className={`chip ${maic.connected ? 'ok' : 'critica'}`} title={`Maic ${maic.mode} · último mensaje ${hhmmss(maic.lastMessageAt)}`}><span className="dot" aria-hidden />Maic</span>
-          <button className={`iconbtn sound ${c.sound ? 'on' : ''}`} onClick={() => c.setSound(!c.sound)} aria-pressed={c.sound} aria-label={c.sound ? 'Silenciar avisos' : 'Activar sonido de avisos'} title={c.sound ? 'Sonido de alertas nuevas: activado' : 'Sonido de alertas nuevas: silenciado'}><Icon name={c.sound ? 'volume_up' : 'volume_off'} /></button>
+          <button className={`iconbtn sound ${c.sound ? 'on' : ''}`} onClick={() => c.setSound(!c.sound)} aria-pressed={c.sound} aria-label={c.sound ? 'Silenciar avisos' : 'Activar sonido de avisos'} title={c.sound ? 'Sonido de alertas nuevas y mensajes de Jules: activado' : 'Sonido de alertas nuevas y mensajes de Jules: silenciado'}><Icon name={c.sound ? 'volume_up' : 'volume_off'} /></button>
           <span className="clock">{hhmmss(now)}</span>
           {/* Cuenta: quién tiene la sesión, los roles de la demostración y, al final, cerrar sesión.
               Menú del sistema de diseño (src/jules/ds/Menu.tsx), no el select del navegador. */}
@@ -252,7 +310,8 @@ function Layout() {
         </div>
       </header>
 
-      <aside className="lcol" aria-label="Lista">
+      <aside className="lcol" aria-label={story ? 'Historia' : 'Lista'}>
+        {story ? <StoryPanel key={story.id} story={story} /> : <>
         <nav className="ltabs" role="tablist" aria-label="Tareas" ref={tabsRef}>
           {/* Indicador que se desliza a la pestaña activa (posición medida abajo, en tabsRef). */}
           <span className="ti" aria-hidden />
@@ -271,31 +330,36 @@ function Layout() {
           {c.panel === 'estado' && <StatusPanel />}
           {c.panel === 'alertas' && <QueuePanel />}
           {c.panel === 'investigar' && <InvestigatePanel />}
-          {c.panel === 'eventos' && <EventsPanel />}
           {c.panel === 'config' && <ConfigNav />}
           {c.panel === 'bitacora' && <AuditNav />}
           {c.panel === 'verificacion' && <FacialPanel />}
           </>}
         </div>
+        </>}
       </aside>
 
       <section className="mcol" aria-label="Mapa">
         <div className="mapwrap">
           <MapView
-            zones={zones} zoneStatus={inv ? NO_STATUS : loading ? undefined : status} cameras={cameras} units={policeSource && !inv ? units : null} alerts={mapAlerts}
-            layers={{ ...layers, hex: layers.hex && !hexOff(layers.hex) ? layers.hex : null, units: layers.units && policeSource && !inv }} severityOf={sevOf} eventOf={inv ? undefined : eventOf} selectedZone={selectedZone} focusSel={mapFocus} hoverAlert={c.hoverAlert} onAlertHover={c.setHoverAlert} freshAlerts={c.fresh}
-            highlightZones={c.overlay.highlightZones} route={c.overlay.route} routeLabel={c.overlay.routeLabel} sketch={c.overlay.sketch} pin={c.pin} signal={c.signal}
+            zones={zones} zoneStatus={admin ? undefined : inv ? NO_STATUS : loading ? undefined : status} cameras={admin && adm.pending ? pendingCams : cameras} units={admin ? null : policeSource && !inv ? units : null} alerts={admin ? [] : mapAlerts}
+            zonePaint={admin ? { color: () => ZONE_COLOR, dim: (z) => adm.pending && !pendingZones.includes(z) } : undefined}
+            layers={admin ? { zones: adm.zones, events: adm.events, cameras: adm.cameras, fov: adm.cameras && adm.fov, alerts: false, units: false, hex: null, drones: false, helis: false } : { ...layers, zones: layers.zones && seen('zones'), events: layers.events && seen('events'), alerts: layers.alerts && seen('alerts'), cameras: layers.cameras && seen('cameras'), drones: layers.drones && seen('drones'), helis: layers.helis && seen('helis'), hex: layers.hex && seen('hex') && !hexOff(layers.hex) ? layers.hex : null, units: layers.units && seen('units') && policeSource && !inv }} severityOf={sevOf} eventOf={inv ? undefined : eventOf} selectedZone={selectedZone} focusSel={mapFocus} hoverAlert={c.hoverAlert} onAlertHover={c.setHoverAlert} freshAlerts={c.fresh}
+            highlightZones={c.overlay.highlightZones} route={story ? sr.stops : c.overlay.route} routeLabel={story ? story.title : c.overlay.routeLabel} routeAt={story ? sr.at : null} routeCount={story ? sr.count : null} sketch={c.overlay.sketch} pickCells={c.overlay.pickCells} pin={c.pin} signal={c.signal}
             bounds={boundsOf(fit.points, 0.0008)} fitKey={fit.key} backOutKey={backOut} padding={{ top: 24, right: 24, bottom: 24, left: 24 }}
             base={base} onBaseStatus={setBaseStatus} onPointer={setPointer}
             region={{ lat: SECTOR.lat, lon: SECTOR.lon, title: SECTOR.name, sub: `${zones.length} zonas · ${cameras.length} cámaras`, onClick: () => setFit({ points: sectorPts, key: 'sector' + Date.now() }) }}
-            onZoneClick={c.overlay.onZoneClick ?? ((id) => c.open({ k: 'zona', id }))}
+            onZoneClick={c.overlay.onZoneClick ?? ((id) => c.open(role === 'admin' ? { k: 'config', tab: 'zonas', id } : { k: 'zona', id }))}
             onEventClick={(id) => c.open({ k: 'evento', id })}
             onAlertClick={(id) => c.open({ k: 'alerta', id })}
-            onCameraClick={(id) => c.open({ k: 'camara', id })}
-            onMapClick={measuring ? (p) => setMeasureAt(p) : c.overlay.onMapClick} onEmptyClick={() => { if (c.sheet) c.close(); }} onAirClick={(id) => c.open({ k: 'aereo', id })}
+            onCameraClick={(id) => c.open(role === 'admin' ? { k: 'config', tab: 'camaras', id } : { k: 'camara', id })}
+            onMapClick={measuring ? (p) => setMeasureAt(p) : tool === 'incidente' ? (p) => setIncAt(p) : c.overlay.onMapClick} onEmptyClick={() => { if (c.sheet) c.close(); }} onAirClick={(id) => c.open({ k: 'aereo', id })}
             measure={measure ? { p: measure.p, radius, cells: [], state: measure.state } : null}
+            incidents={inv ? undefined : [...incidents.map((x) => ({ id: x.id, lat: x.lat, lon: x.lon, label: INCIDENT_LABEL[x.kind], icon: INCIDENT_ICON[x.kind], title: `${x.id} · ${INCIDENT_LABEL[x.kind]} · ${x.address} · ${hhmm(x.at)} · ${x.by}` })),
+              ...(incAt ? [{ id: 'nuevo', lat: incAt[1], lon: incAt[0], label: 'Nuevo incidente', title: 'Punto del incidente', icon: 'add' }] : [])]}
+            onAltClick={canIncident && !inv && !c.overlay.onMapClick ? (p) => { setToolRaw('incidente'); setMeasureAt(null); setIncAt(p); } : undefined}
           />
           <ArrivalBanner />
+          {admin && !c.overlay.onMapClick && <AdminMapLegend l={adm} cameras={adm.pending ? pendingCams : cameras} />}
           {measuring && (
             <section className="measure-card" aria-live="polite">
               <div className="mc2-hd"><span className="mc2-lbl">¿Quién llega a este punto?</span><button className="iconbtn" onClick={() => { setMeasuring(false); setMeasureAt(null); }} aria-label="Cerrar medición"><Icon name="close" /></button></div>
@@ -306,12 +370,17 @@ function Layout() {
               </>)}
             </section>
           )}
+          {tool === 'incidente' && <IncidentCard p={incAt} onClose={() => setTool('mover')} onDone={(label) => c.setSignal({ lat: incAt![1], lon: incAt![0], label: `Registrado · ${label}`, key: String(Date.now()) })}>{whoArrives}</IncidentCard>}
+          {!inv && !story && !loading && !c.overlay.onMapClick && !admin && (
+            <CommandBar tool={tool} setTool={setTool} canIncident={canIncident} canMeasure={policeSource}
+              onNewEvent={canOpenSheet(role, { k: 'evento-form' }) ? () => c.open({ k: 'evento-form' }) : undefined} />
+          )}
           <div className="hud-frame" aria-hidden>
             <i className="br tl" /><i className="br tr" /><i className="br bl" /><i className="br rb" />
             <div className="hud-coords mono">{pointer ? `${pointer[1].toFixed(5)}° N   ${Math.abs(pointer[0]).toFixed(5)}° O` : SECTOR.name.toUpperCase()}</div>
           </div>
           {/* Aviso del foco: dice por qué el resto del mapa está atenuado y deja volver a verlo todo. */}
-          {focusSel && !loading && !c.overlay.route && !c.overlay.onMapClick && (
+          {focusSel && !story && !loading && !c.overlay.route && !c.overlay.onMapClick && (
             <div className={`focus-pill ${unfocus ? 'off' : ''}`} role="status">
               {unfocus ? <>
                 <span className="fp-txt">Mostrando todo · ficha de <b>{focusLabel}</b> abierta</span>
@@ -327,16 +396,17 @@ function Layout() {
           {/* Estado de los datos: cargando, o el enlace con Maic caído (los eventos le llegan cuando vuelve) */}
           {!inv && loading && <div className="map-state" role="status"><i className="spin" aria-hidden /><span><b>Cargando datos</b> · cámaras, zonas y unidades</span></div>}
           {!inv && !loading && !maic.connected && <div className={`map-state warn ${focusSel && !c.overlay.route ? 'below' : ''}`} role="alert"><Icon name="warning" /><span><b>Sin conexión con Maic</b> desde las {hhmm(maic.lastMessageAt)} · las confirmaciones quedan en cola</span></div>}
-          {inv && <div className="hist-pill" role="status"><Icon name="history" /><span>Histórico · <b>{dateTime(inv.from)} → {hhmm(inv.to)}</b>{c.invPick ? ' · haz clic en el mapa para mover el lugar' : ' · solo lo que pasó en esa ventana'}</span></div>}
-          {c.overlay.onMapClick && !inv && role !== 'analyst' && <div className="chip" style={{ position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--surface-panel)' }}><Icon name="edit_note" />Haz clic en el mapa para marcar vértices</div>}
+          {inv && !story && <div className="hist-pill" role="status"><Icon name="history" /><span>Histórico · <b>{dateTime(inv.from)} → {hhmm(inv.to)}</b>{c.invPick ? ' · haz clic en el mapa para mover el lugar' : ' · solo lo que pasó en esa ventana'}</span></div>}
+          {c.overlay.onMapClick && !inv && role !== 'analyst' && <div className="chip" style={{ position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--surface-panel)' }}><Icon name="edit_note" />{c.overlay.pickCells ? 'Haz clic en un hexágono para sumarlo o quitarlo · acércate para ver la grilla' : 'Haz clic en el mapa para marcar el punto'}</div>}
         </div>
         {/* Tocar cualquier capa con una ficha abierta suelta el foco: así la capa se ve al instante. */}
         <div className="mstrip" role="group" aria-label="Capas del mapa" onClickCapture={() => { if (focusSel && !unfocus) setUnfocus(true); }}>
+          {admin ? <AdminMapLayers l={adm} set={setAdm} pendingZones={pendingZones.length} pendingCams={pendingCams.length} /> : <>
           {/* Mapa de calor + qué muestra: un solo control, como Cámaras + Visión. Por dentro son hexágonos
               (la forma de tomar el dato); para el usuario es un mapa de calor. Las lecturas aparecen pegadas
               cuando está prendido y se elige una por vez. Solo texto: el ícono (la escala de la lectura
               elegida) va una vez, en el chip Mapa de calor. */}
-          <div className={`lchip-group ${layers.hex ? 'on' : ''}`} role="group" aria-label="Mapa de calor">
+          {seen('hex') && <div className={`lchip-group ${layers.hex ? 'on' : ''}`} role="group" aria-label="Mapa de calor">
             <button className={`lchip ${layers.hex && !hexOff(layers.hex) ? 'on' : ''}`} aria-pressed={!!layers.hex && !hexOff(layers.hex)}
               title="Mapa de calor sobre toda la ciudad: elegí qué muestra" onClick={() => setLayers((l) => ({ ...l, hex: l.hex && !hexOff(l.hex) ? null : !hexOff(hexPick) ? hexPick : inv ? 'alertas' : 'personas' }))}>
               {hexIcon(layers.hex && !hexOff(layers.hex) ? layers.hex : hexPick)}Mapa de calor
@@ -347,13 +417,13 @@ function Layout() {
                 {label}
               </button>
             ))}
-          </div>
-          {chips.map(([k, label, icon, disabled]) => (
+          </div>}
+          {chips.map(([k, label, icon, disabled]) => !seen(k) ? null : (
             <button key={k} className={`lchip ${chipOn(k) && !disabled ? 'on' : ''}`} aria-pressed={!!chipOn(k) && !disabled} disabled={disabled}
               title={disabled && !inv && k === 'units' ? 'Sin acceso a la ubicación policial' : icon} onClick={() => toggleChip(k)}>
               {LAYER_ICON[k]}{label}
             </button>
-          )).flatMap((el, i) => (i === 3 ? [el, (
+          )).flatMap((el, i) => (i === 3 && seen('cameras') ? [el, (
             // Cámaras + Visión: un solo control. Visión es un filtro de Cámaras y aparece pegado cuando están prendidas.
             <div key="cams" className={`lchip-group ${layers.cameras ? 'on' : ''}`} role="group" aria-label="Cámaras">
               <button className={`lchip ${layers.cameras ? 'on' : ''}`} aria-pressed={layers.cameras} onClick={() => setLayers((l) => ({ ...l, cameras: !l.cameras, fov: l.cameras ? false : l.fov }))}>
@@ -366,9 +436,7 @@ function Layout() {
               )}
             </div>
           )] : [el]))}
-          <span className="sep" />
-          <button className={`lchip ${measuring ? 'on' : ''}`} aria-pressed={measuring} disabled={!policeSource}
-            onClick={() => { setMeasuring((m) => !m); setMeasureAt(null); }}><Icon name="location_on" />¿Quién llega?</button>
+          </>}
           <span className="sep" />
           <div className="seg" role="group" aria-label="Base del mapa">
             <button className={base === 'mapa' ? 'on' : ''} onClick={() => setBase('mapa')}>Mapa</button>
@@ -378,8 +446,9 @@ function Layout() {
         </div>
       </section>
 
-      {julesDock && <aside className="rcol" aria-label="Jules"><JulesSheet docked /></aside>}
-      {c.sheet && (
+      {story && <aside className="rcol" aria-label="Capítulos"><StoryChapters key={story.id} story={story} /></aside>}
+      {!story && julesDock && <aside className="rcol" aria-label="Jules"><JulesSheet docked /></aside>}
+      {!story && c.sheet && (
         <aside className="rcol" aria-label="Detalle">
           <div key={sheetKey} className="sheet-swap">
           {loading && !['config', 'bitacora', 'jules', 'evento-form'].includes(c.sheet.k) ? <SheetSkeleton /> : <>
@@ -389,7 +458,7 @@ function Layout() {
           {c.sheet.k === 'evento-form' && <EventFormSheet key={c.sheet.id ?? 'nuevo'} id={c.sheet.id} />}
           {c.sheet.k === 'camara' && <CameraSheet key={c.sheet.id} id={c.sheet.id} />}
           {c.sheet.k === 'aereo' && <AirSheet key={c.sheet.id} id={c.sheet.id} />}
-          {c.sheet.k === 'config' && <ConfigSheet tab={c.sheet.tab} />}
+          {c.sheet.k === 'config' && <ConfigSheet key={`${c.sheet.tab}.${c.sheet.id ?? ''}`} tab={c.sheet.tab} id={c.sheet.id} />}
           {c.sheet.k === 'bitacora' && <AuditSheet action={c.sheet.tab} />}
           {c.sheet.k === 'jules' && <JulesSheet />}
           {c.sheet.k === 'facial' && <FacialSheet key={c.sheet.id} id={c.sheet.id} />}
@@ -399,7 +468,7 @@ function Layout() {
         </aside>
       )}
       {/* Fila propia: la línea de tiempo ocupa el ancho del mapa y de la ficha */}
-      {inv && <InvestigationDock key={inv.id} id={inv.id} />}
+      {story ? <div className="story-player-slot" /> : inv && <InvestigationDock key={inv.id} id={inv.id} />}
       {wallOpen && <VideoWall onClose={() => setWallOpen(false)} />}
     </div>
   );
@@ -418,7 +487,7 @@ function ArrivalBanner() {
   const where = zones.find((z) => z.id === a.zoneId)?.name ?? cameras.find((x) => x.id === a.cameraId)?.street ?? a.cameraId;
   return (
     <div className="arrival" role="alert" key={a.id + ':' + (a.kind === 'persona_en_lista' ? a.observations : a.sightings?.length ?? 1)}>
-      <AlertTile kind={a.kind} size={34} />
+      <AlertTile kind={a.kind} size={34} severity={a.severity} />
       <div className="arrival-txt">
         {/* Una placa que vuelve a leerse no es una alerta nueva: es una lectura más de la misma. */}
         <span className="arrival-lbl">{a.kind === 'persona_en_lista' && a.observations > 1 ? `Nueva detección · ${hhmm(a.updatedAt)}` : (a.sightings?.length ?? 1) > 1 ? `Nueva lectura · ${hhmm(a.updatedAt)}` : `Nueva alerta · ${hhmm(a.createdAt)}`}</span>

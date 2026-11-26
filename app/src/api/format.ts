@@ -21,7 +21,7 @@ export function inTime(t: number, now = Date.now()) {
   const m = Math.max(0, Math.round((t - now) / 60000));
   if (m < 60) return `en ${m} min`;
   const h = Math.floor(m / 60), r = m % 60;
-  if (h >= 48) return `en ${Math.round(h / 24)} d`;
+  if (h >= 48) return `en ${Math.round(h / 24)} días`;
   return r ? `en ${h} h ${r} min` : `en ${h} h`;
 }
 export function ago(t: number, now = Date.now()) {

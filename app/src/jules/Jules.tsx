@@ -434,9 +434,8 @@ export function Jules({ store, nombre, intro, saludo, tarjetas, preguntas = [], 
           </TurnoJules>
         )}
 
-        {/* Antes de preguntar, al pie (o debajo del campo en la bienvenida); después, siguen a la
-            última respuesta. Aparecen cuando Jules terminó de escribir. */}
-        {sugeridas}
+        {/* En la bienvenida (maximizado), debajo del campo. En el lateral van en el pie (ver abajo). */}
+        {bienvenida && sugeridas}
         {/* Botón para volver a lo último, pegado abajo de la charla. */}
         {lejos && (
           <Button variant="secondary" size="sm" iconOnly className="jules-lateral__abajo svx-entrar" aria-label={TEXTOS.irAbajo} data-tip={TEXTOS.irAbajo} onClick={irAbajo}>
@@ -447,7 +446,8 @@ export function Jules({ store, nombre, intro, saludo, tarjetas, preguntas = [], 
       </div>
 
       {/* En la bienvenida el campo está en el medio de la charla. */}
-      {!bienvenida && <div className="jules-lateral__pie" hidden={chico}>{campo}</div>}
+      {/* Pie: las preguntas sugeridas como chips, justo arriba del campo. */}
+      {!bienvenida && <div className="jules-lateral__pie" hidden={chico}>{sugeridas}{campo}</div>}
 
       <OpinionGeneral
         open={opinando}

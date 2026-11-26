@@ -10,10 +10,14 @@ import { useSyncExternalStore } from 'react';
 import seedJson from '../data/generated/seed.json';
 import * as seed from './seed';
 import { normalizePlate } from './format';
-import { KIND_LABEL } from './labels';
+import { KIND_LABEL, ROLE_LABEL, SEVERITY_RANK, SEVERITY_TARGET_MIN } from './labels';
 import { etaMin } from './coverage';
+import { buildChapters } from './story';
+import type { Other, Prior, Sight } from './story';
+import { cameraClip } from './video';
+import type { FacialList, FacialMatch, FacialDetection } from './facial';
 import type {
-  Alert, AuditEntry, Camera, InvPlace, Investigation, MaicLink, MassEvent, PlateRead, Role, Rule, Sighting, Unit, User, WatchList, Zone, ZoneStatus,
+  Alert, AuditEntry, Camera, Evidence, Incident, IncidentKind, InvPlace, Investigation, ListMode, MaicLink, MassEvent, PlateRead, Role, RoleConfig, Rule, RuleOverride, Severity, Sighting, Story, StoryChapter, StorySubject, Territory, Unit, User, WatchList, Zone, ZoneStatus,
 } from './types';
 
 const MIN = 60_000;
@@ -30,12 +34,22 @@ interface State {
   rules: Rule[];
   lists: WatchList[];
   users: User[];
+  /** Sectores del territorio: agrupan zonas. */
+  territories: Territory[];
+  /** Capas y alcance de alertas de cada arquetipo (Configuración → Roles). */
+  roleConfigs: RoleConfig[];
+  /** Tiempo objetivo para decidir, por criticidad (minutos). */
+  severityTargets: Record<Severity, number>;
   audit: AuditEntry[];
   maic: MaicLink;
   /** ¿Hay acceso a la plataforma de ubicación policial? Sin ella no hay capa de unidades ni brecha de presencia. */
   policeSource: boolean;
   /** Investigaciones de los analistas. */
   investigations: Investigation[];
+  /** Historias del analista. */
+  stories: Story[];
+  /** Incidentes registrados a mano desde el mapa (barra de comandos). */
+  incidents: Incident[];
   /** Escenario en que se muestra la consola (para revisar cada estado de la interfaz). */
   scenario: Scenario;
   /** Todavía llegan los primeros datos: paneles y mapa muestran el estado de carga. */
@@ -72,10 +86,15 @@ let state: State = {
   rules: seed.rules,
   lists: seed.lists,
   users: seed.users,
+  territories: seed.territories,
+  roleConfigs: seed.roleConfigs,
+  severityTargets: { ...SEVERITY_TARGET_MIN },
   audit: seed.audit,
   maic: { connected: true, lastMessageAt: Date.now(), mode: 'producción' },
   policeSource: true,
   investigations: [],
+  stories: [],
+  incidents: [],
   scenario: 'normal',
   loading: false,
 };
@@ -299,10 +318,31 @@ export function unitOptions(p: { lat: number; lon: number }): UnitOption[] {
     const dist = metersBetween(unit, p), eta = etaMin(unit, [p.lon, p.lat]);
     const avail: UnitAvail = unit.status === 'sin_reporte' ? 'sin_reporte' : unit.status === 'desconocida' ? 'desconocida' : unit.enRoute ? 'asignada' : dist < ALREADY_M ? 'en_lugar' : unit.status === 'en_servicio' ? 'ocupada' : 'disponible';
     const zone = unit.zoneId ? state.zones.find((z) => z.id === unit.zoneId)?.name : undefined;
-    const detail = avail === 'asignada' ? unit.enRoute!.label : avail === 'ocupada' ? (zone ? `cuida ${zone}` : 'en servicio') : undefined;
+    const detail = avail === 'asignada' ? unit.enRoute!.label : avail === 'ocupada' ? (zone ? `cuida ${zone}` : unit.task ? unit.task.label : 'en servicio') : undefined;
     const free = avail === 'disponible' || avail === 'ocupada';
     return { unit, eta, dist, avail, free, detail, why: free ? undefined : AVAIL_LABEL[avail] };
   }).sort((a, b) => a.eta - b.eta);
+}
+/** A qué está asignada una unidad, de lo más urgente a lo más general:
+    · alerta: va como refuerzo (despacho desde la consola);
+    · evento: cuida una zona que es parte de un evento en curso;
+    · tarea: su jefatura le dio una tarea (control, custodia);
+    · zona: cuida su zona, sin evento;
+    · libre: sin asignar. */
+export type UnitAssignment =
+  | { k: 'alerta'; label: string; alertId?: string; since: number }
+  | { k: 'evento'; label: string; eventId: string; zone: string }
+  | { k: 'tarea'; label: string; since: number }
+  | { k: 'zona'; label: string }
+  | { k: 'libre' };
+export function unitAssignment(u: Unit, now = Date.now()): UnitAssignment {
+  if (u.enRoute) return { k: 'alerta', label: u.enRoute.label, alertId: u.enRoute.alertId, since: u.enRoute.since };
+  const zone = u.zoneId ? state.zones.find((z) => z.id === u.zoneId) : undefined;
+  const ev = zone ? state.events.find((e) => e.zoneIds.includes(zone.id) && eventStatus(e, now) === 'en_curso') : undefined;
+  if (ev && zone) return { k: 'evento', label: ev.name, eventId: ev.id, zone: zone.name };
+  if (u.task) return { k: 'tarea', label: u.task.label, since: u.task.since };
+  if (zone) return { k: 'zona', label: zone.name };
+  return { k: 'libre' };
 }
 /** Las `n` más cercanas que se pueden mandar: primero las disponibles; si no alcanzan, las ocupadas. */
 export const nearestFree = (p: { lat: number; lon: number }, n: number) => {
@@ -452,6 +492,113 @@ export function saveZone(zone: Zone, user: User) {
   audit(user, exists ? 'Editar zona' : 'Crear zona', zone.id, `${zone.name} · ${Math.round(zone.areaM2)} m²`);
 }
 export const newZoneId = () => 'Z-' + String(state.zones.length + 1).padStart(2, '0');
+export const newCameraId = () => 'CAM-' + String(state.cameras.length + 1).padStart(3, '0');
+/** POST /v1/cameras (una) · POST /v1/cameras/import (CSV o Excel, con plantilla). Quedan sin presets hasta asociarlos. */
+export function addCameras(cams: Camera[], user: User, via: 'manual' | 'csv') {
+  const ids = new Set(state.cameras.map((c) => c.id));
+  const fresh = cams.filter((c) => !ids.has(c.id));
+  const cameras = [...state.cameras, ...fresh];
+  commit({ cameras, zoneStatus: measure({ ...state, cameras }) });
+  audit(user, via === 'csv' ? 'Importar cámaras' : 'Crear cámara', fresh.length === 1 ? fresh[0].id : `${fresh.length} cámaras`, via === 'csv' ? 'Carga masiva desde archivo' : fresh[0]?.street ?? '');
+  return fresh.length;
+}
+/** POST /v1/zones/import — varias zonas a la vez, desde CSV. */
+export function importZones(zones: Zone[], user: User) {
+  for (const z of zones) { seed.zoneBase[z.id] = 0; level[z.id] = 0; history[z.id] = Array(30).fill(0); }
+  const all = [...state.zones, ...zones];
+  commit({ zones: all, zoneStatus: measure({ ...state, zones: all }) });
+  audit(user, 'Importar zonas', `${zones.length} zonas`, zones.map((z) => z.name).join(', '));
+}
+/** PUT /v1/rules/{id}/overrides — umbral propio de una zona o evento (reemplaza al global mientras aplica). */
+export function setRuleOverrides(id: string, overrides: RuleOverride[], user: User) {
+  commit({ rules: state.rules.map((x) => (x.id === id ? { ...x, overrides } : x)) });
+  audit(user, 'Editar excepciones de regla', id, overrides.length ? overrides.map((o) => `${o.targetId}: ${o.threshold}`).join(' · ') : 'Sin excepciones');
+}
+/** PUT /v1/settings/severity-targets — tiempo objetivo para decidir, por criticidad. */
+export function setSeverityTargets(t: Record<Severity, number>, user: User) {
+  Object.assign(SEVERITY_TARGET_MIN, t); // lo leen la bandeja y los íconos del mapa
+  commit({ severityTargets: { ...t } });
+  audit(user, 'Editar tiempos objetivo', 'Criticidad', `Crítica ${t.critica} · Media ${t.media} · Baja ${t.baja} min`);
+}
+/** PUT /v1/roles/{role} — capas y alcance de alertas del arquetipo. */
+export function updateRoleConfig(role: Role, patch: Partial<RoleConfig>, user: User) {
+  commit({ roleConfigs: state.roleConfigs.map((r) => (r.role === role ? { ...r, ...patch, layers: { ...r.layers, ...patch.layers } } : r)) });
+  audit(user, 'Editar rol', ROLE_LABEL[role], Object.keys(patch).join(', '));
+}
+/** Territorio de un punto: el de su zona, o si no tiene, el de la zona más cercana (toda alerta tiene dirección). */
+export function territoryAt(lat: number, lon: number, zoneId?: string | null): string {
+  const z = (zoneId && state.zones.find((x) => x.id === zoneId))
+    || [...state.zones].sort((a, b) => Math.hypot(a.lat - lat, a.lon - lon) - Math.hypot(b.lat - lat, b.lon - lon))[0];
+  return z?.territory ?? 'Nacional';
+}
+/** ¿Le llega esta alerta al usuario? Según su rol (alcance y criticidad mínima) y su territorio. */
+export function inScope(a: Alert, user: User): boolean {
+  const cfg = state.roleConfigs.find((r) => r.role === user.role);
+  if (!cfg) return true;
+  if (cfg.minSeverity && SEVERITY_RANK[a.severity] > SEVERITY_RANK[cfg.minSeverity]) return false;
+  if (cfg.alertScope === 'territorio' && user.territory !== 'Nacional') return territoryAt(a.lat, a.lon, a.zoneId) === user.territory;
+  return true;
+}
+export const roleConfigOf = (role: Role) => state.roleConfigs.find((r) => r.role === role)!;
+/** Alcance de quien ve todo el país (no es un territorio). */
+export const NATIONAL = 'Nacional';
+/** POST /v1/territories */
+export function addTerritory(t: Territory, user: User) {
+  commit({ territories: [...state.territories, t] });
+  audit(user, 'Crear territorio', t.name, t.note);
+}
+/** PATCH /v1/territories/{name} — renombrar actualiza sus zonas y sus usuarios. */
+export function updateTerritory(name: string, next: Territory, user: User) {
+  commit({
+    territories: state.territories.map((t) => (t.name === name ? next : t)),
+    zones: state.zones.map((z) => (z.territory === name ? { ...z, territory: next.name } : z)),
+    users: state.users.map((u) => (u.territory === name ? { ...u, territory: next.name } : u)),
+  });
+  audit(user, 'Editar territorio', name, name !== next.name ? `Ahora se llama ${next.name}` : next.note);
+}
+/** DELETE /v1/territories/{name} — solo si no le quedan zonas ni usuarios. */
+export function deleteTerritory(name: string, user: User) {
+  commit({ territories: state.territories.filter((t) => t.name !== name) });
+  audit(user, 'Eliminar territorio', name, '');
+}
+/** PATCH /v1/cameras/{id} — ubicación, tipo, zona, presets, cómputo. */
+export function updateCamera(id: string, patch: Partial<Camera>, user: User) {
+  const cameras = state.cameras.map((c) => (c.id === id ? { ...c, ...patch } : c));
+  // La zona lleva la lista de sus cámaras: se mantiene igual a lo que dice cada cámara.
+  const zones = 'zoneId' in patch ? state.zones.map((z) => {
+    const has = z.cameras.includes(id), should = patch.zoneId === z.id;
+    return has === should ? z : { ...z, cameras: should ? [...z.cameras, id] : z.cameras.filter((x) => x !== id) };
+  }) : state.zones;
+  commit({ cameras, zones, zoneStatus: measure({ ...state, cameras, zones }) });
+  audit(user, 'Editar cámara', id, Object.keys(patch).join(', '));
+}
+/** DELETE /v1/zones/{id} — no se borra una zona que usa un evento. */
+export function deleteZone(id: string, user: User) {
+  const z = state.zones.find((x) => x.id === id)!;
+  const zones = state.zones.filter((x) => x.id !== id);
+  const cameras = state.cameras.map((c) => (c.zoneId === id ? { ...c, zoneId: null } : c));
+  commit({ zones, cameras, rules: state.rules.map((r) => ({ ...r, overrides: r.overrides.filter((o) => o.targetId !== id) })), zoneStatus: measure({ ...state, zones, cameras }) });
+  audit(user, 'Eliminar zona', id, z.name);
+}
+export const zoneEvents = (id: string) => state.events.filter((e) => e.zoneIds.includes(id));
+/** POST /v1/lists */
+export function addList(l: Omit<WatchList, 'id' | 'entries' | 'lastSyncAt'>, user: User) {
+  const id = 'L-' + String(state.lists.length + 1).padStart(2, '0');
+  commit({ lists: [...state.lists, { ...l, id, entries: 0, lastSyncAt: Date.now() }] });
+  audit(user, 'Crear lista', id, `${l.name} · ${l.mode}`);
+  return id;
+}
+/** PUT /v1/lists/{id}/entries — carga manual: el archivo reemplaza el contenido de la lista. */
+export function loadListEntries(id: string, entries: number, user: User) {
+  commit({ lists: state.lists.map((l) => (l.id === id ? { ...l, entries, lastSyncAt: Date.now() } : l)) });
+  audit(user, 'Cargar lista', id, `${entries} entradas desde archivo`);
+}
+export const LIST_MODES: ListMode[] = ['API', 'Copia periódica', 'Carga manual'];
+/** PATCH /v1/users/{id} { territory } */
+export function setUserTerritory(id: string, territory: string, user: User) {
+  commit({ users: state.users.map((u) => (u.id === id ? { ...u, territory } : u)) });
+  audit(user, 'Asignar territorio', id, territory);
+}
 /** PATCH /v1/users/{id} */
 export function setUserActive(id: string, active: boolean, user: User) {
   commit({ users: state.users.map((u) => (u.id === id ? { ...u, active } : u)) });
@@ -532,6 +679,17 @@ export function vehicleProfile(plate: string): VehicleProfile {
     .map(([p, e]) => ({ plate: p, times: e.reads.size, cameras: e.cams.size, listed: !!seed.plateWatch[p] })).sort((a, b) => b.times - a.times);
 
   return { plate: canon, reads: rs, listed, seen, mismatch, cameras, usualHours, companions };
+}
+
+/* ---------------- Incidentes ---------------- */
+export const INCIDENT_LABEL: Record<IncidentKind, string> = { robo: 'Robo', rina: 'Riña', accidente: 'Accidente de tránsito', sospechoso: 'Persona o vehículo sospechoso', otro: 'Otro' };
+let incSeq = 4410;
+/** POST /v1/incidents → auditado. Lo registra un operador desde el mapa: tipo, punto, dirección y nota. */
+export function registerIncident(n: Omit<Incident, 'id' | 'at' | 'by'>, user: User): Incident {
+  const k: Incident = { ...n, id: 'INC-' + incSeq++, at: Date.now(), by: user.name };
+  commit({ incidents: [k, ...state.incidents] });
+  audit(user, 'Registrar incidente', k.id, `${INCIDENT_LABEL[k.kind]} · ${k.address}`);
+  return k;
 }
 
 /* ---------------- Investigaciones ---------------- */
@@ -624,4 +782,128 @@ export const forOperator = (a: Alert) => a.kind !== 'camara_caida';
     reemplaza las que había, así la bandeja y el mapa las muestran junto a las demás. */
 export function syncFaceAlerts(list: Alert[]) {
   commit({ alerts: [...state.alerts.filter((a) => a.kind !== 'persona_en_lista'), ...list] });
+}
+
+/* ---------------- Historia del analista ----------------
+   Una historia es la reconstrucción de por dónde anduvo una placa o una persona: capítulos en orden, cada
+   uno con su evidencia. Lo que el sistema vio se calcula de las lecturas y detecciones; lo que agrega el
+   analista y los momentos clave que marca se guardan en la historia. */
+interface FaceSource { matches: () => FacialMatch[]; unknown: () => { id: string; label: string; capture: string; sights: FacialDetection[]; seenWith: string }[]; listName: (l: FacialList) => string }
+let faces: FaceSource | null = null;
+/** Lo llama api/facial.ts al cargarse (index no lo importa: se evita el ciclo). */
+export function registerFaces(f: FaceSource) { faces = f; }
+const faceMatches = () => faces?.matches() ?? [];
+const unknownFaces = () => faces?.unknown() ?? [];
+
+const sameSubject = (a: StorySubject, b: StorySubject) =>
+  a.k === 'placa' ? b.k === 'placa' && normalizePlate(a.plate) === normalizePlate(b.plate)
+    : a.k === 'persona' ? b.k === 'persona' && a.matchId === b.matchId
+      : b.k === 'sin_identificar' && a.faceId === b.faceId;
+
+/** ¿Se puede abrir la historia? No la de una coincidencia descartada ni la de una que no existe. */
+export function canOpenStory(s: StorySubject): boolean {
+  if (s.k === 'persona') { const m = faceMatches().find((x) => x.id === s.matchId); return !!m && m.status !== 'descartada'; }
+  if (s.k === 'sin_identificar') return unknownFaces().some((u) => u.id === s.faceId);
+  return true;
+}
+
+/** Cómo se nombra el sujeto. Del analista nunca sale el riesgo de la persona. */
+export function storySubjectLabel(s: StorySubject): { title: string; sub: string; photos?: string[]; facts: [string, string][] } {
+  if (s.k === 'persona') {
+    const m = faceMatches().find((x) => x.id === s.matchId);
+    if (!m) return { title: 'Persona', sub: 'Sin datos', facts: [] };
+    const list = faces!.listName(m.list);
+    return { title: m.name, sub: `${m.docId} · ${list}`, photos: m.listPhotos.map((p) => p.src), facts: [['Documento', m.docId], ['Lista', `${list} · ${m.listRef}`], ['Motivo de la lista', m.reason]] };
+  }
+  if (s.k === 'sin_identificar') {
+    const u = unknownFaces().find((x) => x.id === s.faceId);
+    return { title: u?.label ?? 'Sin identificar', sub: 'Sin nombre ni documento', facts: u ? [['Detecciones', String(u.sights.length)], ['Visto junto a', u.seenWith]] : [] };
+  }
+  const p = vehicleProfile(s.plate);
+  return { title: p.plate, sub: p.seen ? `${p.seen.type} · ${p.seen.color}` : 'Sin lecturas', facts: [['Lecturas en 7 días', String(p.reads.length)], ...(p.listed ? [['En lista', 'Sí'] as [string, string]] : [])] };
+}
+
+let storySeq = 1;
+/** POST /v1/stories → auditado. Pide motivo, salvo que venga de una investigación (hereda el suyo y su ventana). */
+export function openStory(s: StorySubject, reason: string, user: User, from?: { invId: string }): Story | null {
+  const inv = from ? state.investigations.find((k) => k.id === from.invId) : undefined;
+  const why = inv ? inv.reason : reason.trim();
+  if (!why || !canOpenStory(s)) return null;
+  const had = state.stories.find((x) => sameSubject(x.subject, s));
+  if (had) return had;
+  const st: Story = {
+    id: 'HIS-' + String(storySeq++).padStart(4, '0'), subject: s, title: storySubjectLabel(s).title, reason: why,
+    createdAt: Date.now(), createdBy: user.name, invId: inv?.id, window: inv ? { from: inv.from, to: inv.to } : undefined, added: [], keyOverrides: {},
+  };
+  commit({ stories: [st, ...state.stories] });
+  audit(user, 'Abrir historia', st.id, st.title, why);
+  return st;
+}
+
+const camOf = (id?: string) => (id ? state.cameras.find((c) => c.id === id) : undefined);
+const near2 = (a: number, b: number) => Math.abs(a - b) < 120_000;
+/** Los capítulos de la historia, en orden. `ventana` limita a lo de la investigación; `todo` no. */
+export function storyChapters(st: Story, range: 'ventana' | 'todo'): StoryChapter[] {
+  const s = st.subject;
+  const window = range === 'ventana' ? st.window : undefined;
+  let sights: Sight[] = [], priors: Prior[] = [], others: Other[] = [], alertAt: { at: number; alertId: string } | undefined;
+  const sightsOf = (list: FacialDetection[]): Sight[] => list.map((d) => ({
+    at: d.at, cameraId: d.cameraId, place: d.place, lat: d.lat, lon: d.lon, confidence: d.score,
+    evidence: d.capture ? { type: 'imagen', src: d.capture, caption: 'Captura del punto de control' } : { type: 'pendiente', caption: 'Captura del punto de control' },
+  }));
+  if (s.k === 'placa') {
+    const np = normalizePlate(s.plate);
+    const p = vehicleProfile(s.plate);
+    sights = p.reads.map((x) => ({ at: x.at, cameraId: x.cameraId, place: x.street, lat: x.lat, lon: x.lon, confidence: x.confidence, evidence: x.evidence }));
+    const inv = st.invId ? state.investigations.find((k) => k.id === st.invId) : undefined;
+    const plates = inv ? inv.plates.filter((q) => normalizePlate(q) !== np) : p.companions.map((c) => c.plate);
+    others = plates.map((q) => ({ label: q, sights: readsOf(q).map((x) => ({ at: x.at, cameraId: x.cameraId })) }));
+  } else if (s.k === 'persona') {
+    const m = faceMatches().find((x) => x.id === s.matchId);
+    if (m) {
+      sights = sightsOf(m.detections);
+      priors = m.story.map((e) => {
+        const c = camOf(e.src);
+        return { at: e.at, label: e.label, src: e.src ?? 'Historial', camera: c ? { id: c.id, lat: c.lat, lon: c.lon, place: c.street } : undefined };
+      });
+      const al = state.alerts.find((a) => a.id === m.id);
+      if (al) alertAt = { at: al.createdAt, alertId: al.id };
+    }
+  } else {
+    const u = unknownFaces().find((x) => x.id === s.faceId);
+    if (u) sights = sightsOf(u.sights);
+  }
+
+  const chs = buildChapters(sights, priors, st.added, { alertAt, others, keyOverrides: st.keyOverrides, window });
+
+  // Con quién se lo vio: la otra cara (sin identificar o de lista) en la misma cámara a menos de 2 min.
+  const twin: { mentions: StorySubject; sights: { at: number; cameraId: string }[] }[] = [];
+  if (s.k === 'persona') for (const u of unknownFaces()) if (u.seenWith === s.matchId) twin.push({ mentions: { k: 'sin_identificar', faceId: u.id }, sights: u.sights });
+  if (s.k === 'sin_identificar') {
+    const u = unknownFaces().find((x) => x.id === s.faceId), m = u && faceMatches().find((x) => x.id === u.seenWith);
+    if (m) twin.push({ mentions: { k: 'persona', matchId: m.id }, sights: m.detections });
+  }
+  return chs.map((c) => {
+    const clip = c.cameraId ? cameraClip(c.cameraId) : null;
+    const evidence: Evidence[] = clip && !c.evidence.some((e) => e.type === 'clip' && e.src === clip.src)
+      ? [...c.evidence, { type: 'clip', src: clip.src, poster: clip.poster, caption: 'Video de la cámara ' + c.cameraId }] : c.evidence;
+    const hit = c.cameraId ? twin.find((t) => t.sights.some((x) => x.cameraId === c.cameraId && near2(x.at, c.at))) : undefined;
+    return { ...c, evidence, ...(hit ? { mentions: hit.mentions } : {}) };
+  });
+}
+
+const patchStory = (id: string, f: (x: Story) => Story) => commit({ stories: state.stories.map((x) => (x.id === id ? f(x) : x)) });
+let evSeq = 1;
+/** POST /v1/stories/{id}/evidence → auditado: el analista suma un capítulo propio. */
+export function addStoryEvidence(id: string, ch: Omit<StoryChapter, 'id' | 'source' | 'addedBy' | 'reads'>, user: User): void {
+  const st = state.stories.find((x) => x.id === id); if (!st) return;
+  const c: StoryChapter = { ...ch, id: `analista-${ch.at}-${evSeq++}`, source: 'analista', addedBy: user.name, reads: 0 };
+  patchStory(id, (x) => ({ ...x, added: [...x.added, c] }));
+  audit(user, 'Agregar evidencia', id, `${c.place} · ${c.evidence[0]?.caption ?? ''}`, st.reason);
+}
+/** PATCH /v1/stories/{id}/key-moments/{chapterId}: marca o desmarca un momento clave. */
+export function toggleKeyMoment(id: string, chapterId: string): void {
+  const st = state.stories.find((x) => x.id === id); if (!st) return;
+  const cur = storyChapters(st, 'todo').find((c) => c.id === chapterId); if (!cur) return;
+  patchStory(id, (x) => ({ ...x, keyOverrides: { ...x.keyOverrides, [chapterId]: !cur.key } }));
 }

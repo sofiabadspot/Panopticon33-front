@@ -10,6 +10,7 @@ import { cameraClip } from '../api/video';
 import { hhmmss } from '../api/format';
 import { AIRCRAFT, airAt, compass } from '../api/aircraft';
 import { AirGlyph } from './icons';
+import { unitAssignment, useApi, type UnitAssignment } from '../api';
 
 /* ---------- Geometría de cámara ---------- */
 export const CAM_FOV = 62;      // grados
@@ -91,12 +92,11 @@ export function MapCard({ h, units, cameras, zones, alerts }: { h: Hover; units:
     body = (<>
       <div className="mc-hd"><span className="mc-eyebrow">Unidad PNC · MAIC</span>{u.enRoute ? <span className="mc-state go"><i />En camino</span> : <span className={`mc-state ${u.status === 'en_servicio' ? 'busy' : u.status === 'disponible' ? '' : 'off'}`}><i />{UNIT_STATUS[u.status]}</span>}</div>
       <div className="mc-title"><span className="mc-ic"><UnitGlyph type={u.type} /></span><div><b>{u.type}</b><small>{u.id}</small></div></div>
+      <UnitAssigned u={u} />
       <div className="mc-grid">
         <Row k="Placa" v={u.plate ? <span className="plate">{u.plate}</span> : '—'} />
         <Row k="Agentes" v={AGENTS[u.type]} />
-        {u.enRoute
-          ? <Row k="Despacho" v={<b className="mc-go">{u.enRoute.label}</b>} />
-          : <Row k="Zona" v={zoneName(u.zoneId) ?? 'Patrullaje libre'} />}
+        <Row k="Zona" v={zoneName(u.zoneId) ?? 'Sin zona'} />
         <Row k="Último GPS" v={ago(u.lastReportAt)} />
       </div>
       <div className="mc-foot">{u.lat.toFixed(5)}, {u.lon.toFixed(5)}</div>
@@ -132,8 +132,25 @@ export function MapCard({ h, units, cameras, zones, alerts }: { h: Hover; units:
     }
   }
   const w = h.kind === 'camera' ? 320 : 280;
-  const left = Math.min(h.x + 18, window.innerWidth - w - 12), top = Math.min(h.y + 18, window.innerHeight - (h.kind === 'camera' ? 200 : 280));
+  const left = Math.min(h.x + 18, window.innerWidth - w - 12), top = Math.min(h.y + 18, window.innerHeight - (h.kind === 'camera' ? 200 : h.kind === 'unit' ? 350 : 280));
   return <div className="mapcard" role="tooltip" style={{ left, top, width: w }}>{body}</div>;
+}
+
+/** A qué está asignada la unidad: lo primero que se lee en su ficha (si se la puede mandar o ya tiene algo).
+    Los eventos vienen del estado vivo, así que la ficha se actualiza al empezar o terminar uno. */
+const ASSIGN_LABEL: Record<UnitAssignment['k'], string> = { alerta: 'Asignada a una alerta', evento: 'Asignada a un evento', tarea: 'Asignada a una tarea', zona: 'Cuida su zona', libre: 'Sin asignar' };
+function UnitAssigned({ u }: { u: Unit }) {
+  useApi((s) => s.events); // se vuelve a leer al cambiar los eventos
+  const a = unitAssignment(u);
+  const what = a.k === 'libre' ? 'Disponible para despacho' : a.label;
+  const sub = a.k === 'alerta' ? `En camino ${ago(a.since)}` : a.k === 'evento' ? `Cubre ${a.zone}` : a.k === 'tarea' ? `Desde ${ago(a.since)}` : a.k === 'zona' ? 'Sin evento en curso' : null;
+  return (
+    <div className={`mc-assign k-${a.k}`}>
+      <span className="mc-assign-lbl"><Icon name={a.k === 'alerta' ? 'local_police' : a.k === 'evento' ? 'flag' : a.k === 'tarea' ? 'edit_note' : a.k === 'zona' ? 'location_on' : 'check_circle'} />{ASSIGN_LABEL[a.k]}</span>
+      <b>{what}</b>
+      {sub && <small>{sub}</small>}
+    </div>
+  );
 }
 
 /** Ficha de monitoreo de un dron o helicóptero (al pasar el mouse): se refresca cada segundo porque se mueve

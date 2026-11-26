@@ -12,7 +12,7 @@
    Datos de ejemplo ficticios y sin imágenes: las capturas y fotos se muestran como lugar reservado.
    Endpoints previstos: GET /v1/checkpoints/matches · POST /v1/checkpoints/matches/{id}/confirm · /discard */
 import { useSyncExternalStore } from 'react';
-import { audit, snapshot, syncFaceAlerts } from './index';
+import { audit, registerFaces, snapshot, syncFaceAlerts } from './index';
 import { placeAlert } from './place';
 import type { Alert, User } from './types';
 
@@ -106,6 +106,8 @@ export interface FacialMatch {
   status: FacialStatus; reviewedBy?: string; discardReason?: string;
   agent: string; timeline: { at: number; label: string; by?: string }[];
 }
+/** Las coincidencias del escenario actual (la fuente de la «Historia del analista»). */
+export const facialMatches = (): FacialMatch[] => matches;
 export const lastDetection = (m: FacialMatch) => m.detections[m.detections.length - 1];
 export const scoreOf = (m: FacialMatch) => lastDetection(m).score;
 
@@ -305,3 +307,17 @@ export function requestFieldCheck(id: string, user: User) {
   audit(user, 'Pedir verificación en terreno', id, 'Reconocimiento facial · documento');
 }
 export const FACIAL_DISCARD = ['No es la misma persona', 'Imagen insuficiente', 'Duplicada'] as const;
+
+/* Una persona sin identificar: su rostro se vio en 4 puntos de control, pero no coincide con ninguna lista.
+   `capture` es el identificador de la captura (no hay archivos en el prototipo). Se vio junto a la persona
+   de la coincidencia de LB-0291, en la misma cámara y a menos de 2 min (para mostrar el vínculo). */
+export const UNKNOWN_FACES: { id: string; label: string; capture: string; sights: FacialDetection[]; seenWith: string }[] = (() => {
+  const capture = 'CAP-2291';
+  const lead = rawMatches().find((m) => m.listRef === 'LB-0291');
+  return [{
+    id: 'SI-0007', label: `Sin identificar · rostro de la captura ${capture}`, capture,
+    sights: [det(4, NOW - 175 * MIN, 0.81), det(7, NOW - 40 * MIN, 0.83), det(2, NOW - 18.5 * MIN, 0.86), det(0, NOW - 3.5 * MIN, 0.88)],
+    seenWith: lead?.id ?? 'FC-7301',
+  }];
+})();
+registerFaces({ matches: facialMatches, unknown: () => UNKNOWN_FACES, listName: (l) => FACIAL_LISTS[l].name });

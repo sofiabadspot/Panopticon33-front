@@ -62,7 +62,7 @@ export function ZoneSheet({ id }: { id: string }) {
         </div>
         <div className="box"><div className="bh"><h3>Personas en la última hora</h3></div><div className="bb"><Sparkline values={s?.trend ?? []} threshold={(zone.capacity * occMax) / 100} height={160} /></div></div>
 
-        {role !== 'admin' && role !== 'auditor' && (
+        {role !== 'admin' && (
           <div className="box flush">
             <div className="bh"><h3>Alertas de la zona</h3><span className="sub">{zalerts.length}</span></div>
             <ul className="list bb">

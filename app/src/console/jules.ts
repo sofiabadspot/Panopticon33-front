@@ -1,10 +1,10 @@
-/* Jules (fase 2): consulta y recomienda, nunca ejecuta. Humano en el circuito.
+/* Jules: respuestas a las preguntas del chat. Lo que Jules hace solo (reversible) y lo que propone
+   para aprobar está en julesAgent.ts. Lo que mueve policías siempre lo aprueba una persona.
    Responde con los datos vivos de la consola y propone a dónde mirar (abrir una zona,
    una alerta, un panel). En producción la respuesta la da el agente en el backend
    (POST /v1/jules/ask); aquí es una respuesta por reglas sobre los mismos datos.
    Cada consulta queda en la bitácora. */
 import { audit, forOperator, sessionFor, snapshot } from '../api';
-import { zoneCoverage } from '../api/coverage';
 import { fmt, fmtCrowd, normalizePlate, pct } from '../api/format';
 import { KIND_LABEL } from '../api/labels';
 import type { Role } from '../api/types';
@@ -47,7 +47,7 @@ export function answerJules(raw: string, role: Role): JulesMsg {
     const worst = measured.filter((z) => s.zoneStatus[z.id].perOfficer != null).sort((a, b) => s.zoneStatus[b.id].perOfficer! - s.zoneStatus[a.id].perOfficer!)[0];
     if (!worst) return { from: 'jules', text: 'No hay zonas con presencia policial medida ahora.' };
     const st = s.zoneStatus[worst.id];
-    return { from: 'jules', text: `La brecha más grande está en ${worst.name}: ${fmt(st.perOfficer!)} personas por policía (${st.officers} policías para unas ${fmtCrowd(st.count!)} personas). Recomiendo evaluar un refuerzo ahí. El refuerzo se manda desde la alerta o con «¿Quién llega?»; yo no lo ejecuto.`,
+    return { from: 'jules', text: `La brecha más grande está en ${worst.name}: ${fmt(st.perOfficer!)} personas por policía (${st.officers} policías para unas ${fmtCrowd(st.count!)} personas). Recomiendo un refuerzo ahí: si querés, te lo dejo propuesto arriba para que lo apruebes, o lo mandás con «¿Quién llega?».`,
       datos: [{ valor: fmt(st.perOfficer!), etiqueta: 'Personas por policía' }, { valor: fmt(st.officers ?? 0), etiqueta: 'Policías' }],
       actions: [{ label: `Ver ${worst.name}`, sheet: { k: 'zona', id: worst.id } }] };
   }
@@ -81,23 +81,3 @@ export function answerJules(raw: string, role: Role): JulesMsg {
 }
 
 export const JULES_SUGGESTIONS = ['¿Dónde hay más gente?', '¿Dónde falta policía?', '¿Qué alerta atiendo primero?', '¿Qué cámaras fallan?'];
-
-/* Resumen del momento para el mando (lo que Jules dice al saludar). Se arma con los datos vivos.
-   Cada punto lleva un tono (crítico, atención, ok) y, si corresponde, a dónde mirar. */
-export interface BriefPoint { text: string; tone: 'crit' | 'warn' | 'ok'; action?: { label: string; sheet?: JulesMsg['actions'] extends (infer A)[] | undefined ? A extends { sheet?: infer S } ? S : never : never; panel?: 'alertas' | 'estado' } }
-export function julesBriefing(role: Role): { lead: string; points: BriefPoint[] } {
-  void role;
-  const s = snapshot();
-  const measured = s.zones.filter((z) => s.zoneStatus[z.id]?.count != null);
-  const total = measured.reduce((n, z) => n + s.zoneStatus[z.id].count!, 0);
-  const pending = s.alerts.filter((a) => forOperator(a) && a.review === 'por_revisar').sort(byUrgency);
-  const top = [...measured].sort((a, b) => s.zoneStatus[b.id].occupancy! - s.zoneStatus[a.id].occupancy!)[0];
-  const uncovered = s.policeSource ? s.zones.filter((z) => zoneCoverage(z, s.units).state === 'sin_cobertura') : [];
-  const down = s.cameras.filter((c) => c.status === 'caida');
-  const points: BriefPoint[] = [];
-  if (top) { const occ = s.zoneStatus[top.id].occupancy!; points.push({ text: `${top.name} está al ${pct(occ)} de su capacidad.`, tone: occ >= 1 ? 'crit' : occ >= 0.75 ? 'warn' : 'ok', action: { label: 'Ver zona', sheet: { k: 'zona', id: top.id } } }); }
-  points.push(pending.length ? { text: `${pending.length} ${pending.length === 1 ? 'alerta espera' : 'alertas esperan'} la decisión del operador 911. La más urgente: ${KIND_LABEL[pending[0].kind].toLowerCase()}.`, tone: 'warn', action: { label: 'Ver alertas', panel: 'alertas' } } : { text: 'No hay alertas esperando decisión.', tone: 'ok' });
-  if (s.policeSource) points.push(uncovered.length ? { text: `${uncovered.length === 1 ? `${uncovered[0].name} no tiene` : `${uncovered.length} zonas no tienen`} una patrulla a menos de 4 minutos.`, tone: 'crit', action: { label: 'Ver zona', sheet: { k: 'zona', id: uncovered[0].id } } } : { text: 'Todas las zonas tienen presencia policial o una patrulla cerca.', tone: 'ok' });
-  if (down.length) points.push({ text: `${down.length === 1 ? `La cámara ${down[0].id} está` : `${down.length} cámaras están`} sin video.`, tone: 'warn', action: { label: 'Ver cámara', sheet: { k: 'camara', id: down[0].id } } });
-  return { lead: `Hay unas ${fmtCrowd(total)} personas en las zonas vigiladas. Esto es lo que hay que mirar ahora:`, points };
-}

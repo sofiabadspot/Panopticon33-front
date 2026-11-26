@@ -1,14 +1,19 @@
-/* Jules en la columna derecha (fase 2: consulta y recomienda, no ejecuta).
+/* Jules en la columna derecha. Agente con autonomía acotada (julesAgent.ts): hace solo lo reversible,
+   propone lo que mueve policías y lo hace con aprobación.
    Diseño e interacciones: los de Sync (src/jules, copia de sync-front/src/components/jules).
    Acá va solo lo propio de Panóptico 33:
-   · Para mando: saludo con el nombre de la persona y el resumen del momento (julesBriefing),
+   · Para mando: saludo con el nombre y, debajo, la lectura del momento, lo que propone, lo que ya hizo
+     y lo que vigila (runAgent),
      arriba de la charla; en la bienvenida maximizada, el saludo es el título y el resumen va
      debajo del campo.
    · Los demás roles: una intro con lo que se le puede preguntar.
    · Las respuestas salen de answerJules (c.askJules) y sus botones abren fichas o paneles. */
+import { useEffect } from 'react';
 import { Jules } from '../../jules/Jules';
 import type { AccionJules } from '../../jules/store';
-import { JULES_SUGGESTIONS, julesBriefing } from '../jules';
+import { JULES_SUGGESTIONS } from '../jules';
+import { agentTick, type Look } from '../julesAgent';
+import { AgentFeed } from './AgentFeed';
 import { useConsole } from '../ctx';
 import { useApi } from '../../api';
 import { useSession } from '../../shell/session';
@@ -23,26 +28,14 @@ function greeting(now = new Date()) {
 export function JulesSheet({ docked = false }: { docked?: boolean }) {
   const c = useConsole();
   const { user, role } = useSession();
-  useApi((s) => s.alerts); useApi((s) => s.zoneStatus); // el resumen se actualiza con los datos en vivo
-  const brief = julesBriefing(role);
+  const alerts = useApi((s) => s.alerts); const zs = useApi((s) => s.zoneStatus); const cams = useApi((s) => s.cameras);
+  // Lo que Jules hace solo (reversible) corre fuera del render, cada vez que cambian los datos.
+  useEffect(() => { if (role === 'command') agentTick(role); }, [alerts, zs, cams, role]);
   const nombre = firstName(user.name);
   const saludo = `${greeting()}, ${nombre}.`;
-
-  const go = (a: AccionJules) => { if (a.panel) c.setPanel(a.panel); if (a.sheet) c.open(a.sheet); };
-
-  const resumen = (
-    <>
-      <p className="jlead">{brief.lead}</p>
-      <ul className="jpoints svx-escalonado">
-        {brief.points.map((p, i) => (
-          <li key={i} className={p.tone}>
-            <i aria-hidden /><span>{p.text}</span>
-            {p.action && <button className="linklike" onClick={() => go(p.action!)}>{p.action.label}</button>}
-          </li>
-        ))}
-      </ul>
-    </>
-  );
+  const go = (a: AccionJules | Look) => { if (a.panel) c.setPanel(a.panel); if (a.sheet) c.open(a.sheet); };
+  // Mando: Jules trabajando en vivo (revisa, encuentra, propone, responde y sigue).
+  const resumen = <AgentFeed user={user} saludo={saludo} onLook={go} />;
 
   const mando = role === 'command';
   return (
@@ -50,7 +43,7 @@ export function JulesSheet({ docked = false }: { docked?: boolean }) {
       store={c.jules}
       nombre={nombre}
       intro={mando
-        ? <section className="jbrief svx-entrar"><h3 className="jules-saludo">{saludo}</h3>{resumen}</section>
+        ? <section className="jbrief svx-entrar">{resumen}</section>
         : 'Pregúntame por el estado de las zonas, la presencia policial, las alertas o una placa. Las decisiones siguen siendo tuyas.'}
       saludo={mando ? saludo : undefined}
       tarjetas={mando ? <section className="jbrief">{resumen}</section> : undefined}

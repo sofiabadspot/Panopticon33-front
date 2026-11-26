@@ -1,7 +1,9 @@
 /* Ficha de evento masivo y su alta/edición. El mapa encuadra las zonas del evento;
    en el formulario, las zonas se eligen haciendo clic en el mismo mapa. */
 import { useState, type FormEvent } from 'react';
-import { eventStatus, newEventId, saveEvent, useApi } from '../../api';
+import { eventStatus, newEventId, newZoneId, saveEvent, saveZone, territoryAt, useApi } from '../../api';
+import { cellsArea, cellsShape, toggleCell, zoneHexes, zonesTouching } from '../../api/coverage';
+import { closeUp, HexPicker } from './configPlace';
 import { dateShort, fmt, fmtCrowd, fromLocalInput, hhmm, pct, toLocalInput, inTime } from '../../api/format';
 import { KIND_PHRASE } from '../../api/labels';
 import type { MassEvent } from '../../api/types';
@@ -24,7 +26,8 @@ export function EventSheet({ id }: { id: string }) {
   const policeSource = useApi((s) => s.policeSource);
   const sevOf = useZoneSeverity(alerts);
   const ev = events.find((e) => e.id === id);
-  useOverlay({ highlightZones: ev?.zoneIds }, [ev?.id]);
+  // Con área propia (hexágonos), el mapa muestra esa área; los eventos anteriores, sus zonas.
+  useOverlay(ev?.cells?.length ? { fit: { points: cellsShape(ev.cells).ring, key: 'ev' + ev.id } } : { highlightZones: ev?.zoneIds }, [ev?.id]);
   if (!ev) return <SheetHead kicker="Evento" title="No encontrado" />;
 
   const st = eventStatus(ev, now);
@@ -50,8 +53,8 @@ export function EventSheet({ id }: { id: string }) {
         </div>
         <div className="kpis" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
           <div className={`kpi ${st !== 'en_curso' ? 'nodata' : ''}`}><div className="v">{st === 'en_curso' ? fmtCrowd(sum('count')) : st === 'programado' ? 'Aún no empieza' : 'Finalizado'}</div><div className="l">Personas ahora</div>{st === 'en_curso' && <div className="x">entre {fmtCrowd(sum('low'))} y {fmtCrowd(sum('high'))}</div>}</div>
-          <div className="kpi"><div className="v">{fmtCrowd(ev.expected)}</div><div className="l">Esperadas</div>{st === 'en_curso' && <div className="x">{pct(sum('count') / ev.expected)} de lo esperado</div>}</div>
-          <div className={`kpi ${officers == null ? 'nodata' : ''}`}><div className="v">{officers == null ? 'Sin fuente' : fmt(officers)}<small>/ {fmt(ev.plannedOfficers)}</small></div><div className="l">Policías presentes / planificados</div></div>
+          <div className="kpi"><div className="v">{fmtCrowd(ev.expected)}<small>/ {fmtCrowd(ev.capacity ?? ez.reduce((n, z) => n + z.capacity, 0))}</small></div><div className="l">Esperadas / aforo máximo</div>{st === 'en_curso' && <div className="x">{pct(sum('count') / ev.expected)} de lo esperado</div>}</div>
+          <div className={`kpi ${officers == null ? 'nodata' : ''}`}><div className="v">{officers == null ? 'Sin fuente' : fmt(officers)}<small>/ {fmt(ev.plannedOfficers)}</small></div><div className="l">Policías presentes / previstos</div></div>
           <div className={`kpi ${evAlerts.some((a) => a.review === 'por_revisar') ? 'alert' : ''}`}><div className="v">{evAlerts.filter((a) => a.review === 'por_revisar').length}</div><div className="l">Alertas por revisar</div></div>
         </div>
         <div className="box flush">
@@ -88,30 +91,47 @@ export function EventFormSheet({ id }: { id?: string }) {
   const ex = events.find((e) => e.id === id);
   const base = Date.now() + 24 * 3600e3;
   const [f, setF] = useState({
-    name: ex?.name ?? '', venue: ex?.venue ?? '', zoneIds: ex?.zoneIds ?? [] as string[],
+    name: ex?.name ?? '', venue: ex?.venue ?? '',
+    // El área del evento son hexágonos. Un evento anterior arranca con los hexágonos de sus zonas.
+    cells: ex?.cells ?? (ex ? zoneHexes(zones.filter((z) => ex.zoneIds.includes(z.id))) : [] as string[]),
     start: toLocalInput(ex?.start ?? base), end: toLocalInput(ex?.end ?? base + 5 * 3600e3),
-    expected: String(ex?.expected ?? ''), planned: String(ex?.plannedOfficers ?? ''), own: !!ex?.thresholds,
+    expected: String(ex?.expected ?? ''), planned: String(ex?.plannedOfficers ?? ''), capacity: ex?.capacity != null ? String(ex.capacity) : '', own: !!ex?.thresholds,
     occ: String(ex?.thresholds?.occupancyPct ?? 110), per: String(ex?.thresholds?.perOfficer ?? 2000), pers: String(ex?.thresholds?.persistenceMin ?? 3),
   });
   const [tried, setTried] = useState(false);
-  const toggleZone = (zid: string) => setF((p) => ({ ...p, zoneIds: p.zoneIds.includes(zid) ? p.zoneIds.filter((x) => x !== zid) : [...p.zoneIds, zid] }));
-  useOverlay({ onZoneClick: toggleZone, highlightZones: f.zoneIds.length ? f.zoneIds : undefined, fit: { points: zones.flatMap((z) => z.ring), key: 'form' } }, [f.zoneIds.join()]);
+  const setCells = (cells: string[]) => setF((p) => ({ ...p, cells }));
+  // Encuadre al abrir: el área del evento si ya tiene, o de cerca el centro del sector (para ver la grilla).
+  const [fitPts] = useState(() => (f.cells.length ? cellsShape(f.cells).ring : closeUp(zones)));
+  useOverlay({ pickCells: f.cells, onMapClick: (pt) => setCells(toggleCell(f.cells, pt)), fit: { points: fitPts, key: 'form' } }, [f.cells.join()]);
+  /** Las zonas del evento son las que toca su área: ahí se cuenta la gente y los policías. */
+  const touched = zonesTouching(f.cells, zones);
+  /** Sumar una zona entera al área (atajo para no elegir hexágono por hexágono). */
+  const addZone = (zid: string) => { const z = zones.find((x) => x.id === zid); if (z) setCells([...new Set([...f.cells, ...zoneHexes([z])])]); };
 
   const errors: Record<string, string> = {};
   if (!f.name.trim()) errors.name = 'Escribe el nombre del evento.';
-  if (!f.zoneIds.length) errors.zones = 'Elige al menos una zona en el mapa o en la lista.';
+  if (!f.cells.length) errors.zones = 'Elige en el mapa los hexágonos donde ocurre el evento.';
   if (fromLocalInput(f.end) <= fromLocalInput(f.start)) errors.end = 'El fin debe ser posterior al inicio.';
   if (!(Number(f.expected) > 0)) errors.expected = 'Indica la asistencia esperada.';
-  if (f.planned === '' || !(Number(f.planned) >= 0)) errors.planned = 'Indica los policías planificados.';
+  if (f.planned === '' || !(Number(f.planned) >= 0)) errors.planned = 'Indica cuántos policías habrá.';
+  if (f.capacity !== '' && !(Number(f.capacity) > 0)) errors.capacity = 'El aforo tiene que ser un número mayor que 0.';
+  const zonesCap = touched.length ? touched.reduce((n, z) => n + z.capacity, 0) : Math.round((cellsArea(f.cells) * 4) / 100) * 100;
   const err = (k: string) => (tried && errors[k] ? <span className="err"><Icon name="error" />{errors[k]}</span> : null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
   const submit = (e: FormEvent) => {
     e.preventDefault(); setTried(true); if (Object.keys(errors).length) return;
-    const ev: MassEvent = { id: ex?.id ?? newEventId(), name: f.name.trim(), venue: f.venue.trim() || f.name.trim(), zoneIds: f.zoneIds, start: fromLocalInput(f.start), end: fromLocalInput(f.end),
-      expected: Number(f.expected), plannedOfficers: Number(f.planned), createdBy: ex?.createdBy ?? user.name,
+    // Si el área no toca ninguna zona, se crea una con esos hexágonos: sin zona no se cuenta la gente.
+    let zoneIds = touched.map((z) => z.id);
+    if (!zoneIds.length) {
+      const shape = cellsShape(f.cells), a = cellsArea(f.cells), zid = newZoneId();
+      saveZone({ id: zid, name: f.venue.trim() || f.name.trim(), lat: shape.lat, lon: shape.lon, ring: shape.ring, cells: f.cells, areaM2: a, capacity: Math.round((a * 4) / 100) * 100, cameras: [], territory: territoryAt(shape.lat, shape.lon) }, user); // hoy siempre San Salvador
+      zoneIds = [zid];
+    }
+    const ev: MassEvent = { id: ex?.id ?? newEventId(), name: f.name.trim(), venue: f.venue.trim() || f.name.trim(), cells: f.cells, zoneIds, start: fromLocalInput(f.start), end: fromLocalInput(f.end),
+      expected: Number(f.expected), plannedOfficers: Number(f.planned), capacity: f.capacity === '' ? null : Number(f.capacity), createdBy: ex?.createdBy ?? user.name,
       thresholds: f.own ? { occupancyPct: Number(f.occ), perOfficer: Number(f.per), persistenceMin: Number(f.pers) } : null };
-    saveEvent(ev, user); toast(ex ? 'Evento actualizado' : 'Evento registrado'); c.open({ k: 'evento', id: ev.id });
+    saveEvent(ev, user); toast(ex ? 'Evento guardado' : 'Evento registrado. Sus zonas usan su aforo y sus umbrales mientras dure.'); c.open({ k: 'evento', id: ev.id });
   };
 
   return (
@@ -123,23 +143,39 @@ export function EventFormSheet({ id }: { id?: string }) {
         <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <div className="field"><label htmlFor="es">Inicio</label><input id="es" type="datetime-local" className="fld sm" value={f.start} onChange={set('start')} /></div>
           <div className="field"><label htmlFor="ee">Fin</label><input id="ee" type="datetime-local" className="fld sm" value={f.end} onChange={set('end')} aria-invalid={tried && !!errors.end} />{err('end')}</div>
-          <div className="field"><label htmlFor="ex">Asistencia esperada</label><input id="ex" inputMode="numeric" className="fld sm mono" value={f.expected} onChange={set('expected')} aria-invalid={tried && !!errors.expected} />{err('expected')}</div>
-          <div className="field"><label htmlFor="ep">Policías planificados</label><input id="ep" inputMode="numeric" className="fld sm mono" value={f.planned} onChange={set('planned')} aria-invalid={tried && !!errors.planned} />{err('planned')}</div>
         </div>
-        <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
-          <legend style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-muted)', marginBottom: 6 }}>Zonas · haz clic en el mapa o marca aquí</legend>
-          <div className="grid" style={{ gap: 6 }}>
-            {zones.map((z) => <label key={z.id} className="check"><input type="checkbox" checked={f.zoneIds.includes(z.id)} onChange={() => toggleZone(z.id)} /><span>{z.name} <span className="dim" style={{ fontSize: 'var(--fs-xs)' }}>· capacidad {fmt(z.capacity)}</span></span></label>)}
-          </div>{err('zones')}
-        </fieldset>
-        <label className="toggle"><input type="checkbox" checked={f.own} onChange={(e) => setF({ ...f, own: e.target.checked })} />Umbrales propios (reemplazan a los de cada zona)</label>
-        {f.own && <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-          <div className="field"><label htmlFor="to">Ocupación %</label><input id="to" className="fld sm mono" value={f.occ} onChange={set('occ')} /></div>
-          <div className="field"><label htmlFor="tp">Pers./policía</label><input id="tp" className="fld sm mono" value={f.per} onChange={set('per')} /></div>
-          <div className="field"><label htmlFor="tm">Persist. min</label><input id="tm" className="fld sm mono" value={f.pers} onChange={set('pers')} /></div>
-        </div>}
+        <div className="box"><div className="bh"><h3>Dónde ocurre</h3><span className="sub">{f.cells.length} hexágonos</span></div><div className="bb grid">
+          <HexPicker cells={f.cells} onChange={setCells} allowSplit hint="Puede abarcar varias zonas, y también lugares separados." />
+          {err('zones')}
+          <div className="field"><label htmlFor="eaz">Sumar una zona entera</label>
+            <select id="eaz" className="fld sm" value="" onChange={(e) => addZone(e.target.value)}>
+              <option value="">Elegir zona…</option>
+              {zones.filter((z) => !touched.includes(z)).map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
+            </select></div>
+          <div className="dim" style={{ fontSize: 'var(--fs-sm)' }}>
+            {touched.length ? <>Zonas que toca: <b style={{ color: 'var(--ink)', fontWeight: 500 }}>{touched.map((z) => z.name).join(', ')}</b>. Ahí se cuentan las personas y los policías.</>
+              : f.cells.length ? 'No toca ninguna zona: al guardar se crea una con estos hexágonos para poder contar a la gente.' : null}
+          </div>
+        </div></div>
+        <div className="box"><div className="bh"><h3>Personas y policías</h3></div><div className="bb grid">
+          <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <div className="field"><label htmlFor="ecap">Aforo máximo (personas)</label><input id="ecap" inputMode="numeric" className="fld sm mono" value={f.capacity} onChange={set('capacity')} placeholder={zonesCap ? fmt(zonesCap) : ''} aria-invalid={tried && !!errors.capacity} />
+              {err('capacity') ?? <span className="hint dim" style={{ fontSize: 'var(--fs-xs)' }}>{f.capacity === '' ? (zonesCap ? `Vacío: la suma de sus zonas (${fmt(zonesCap)})` : 'Vacío: la suma de sus zonas') : 'Reemplaza a la capacidad de sus zonas'}</span>}</div>
+            <div className="field"><label htmlFor="ex">Asistencia esperada</label><input id="ex" inputMode="numeric" className="fld sm mono" value={f.expected} onChange={set('expected')} aria-invalid={tried && !!errors.expected} />{err('expected')}</div>
+            <div className="field"><label htmlFor="ep">Policías previstos</label><input id="ep" inputMode="numeric" className="fld sm mono" value={f.planned} onChange={set('planned')} aria-invalid={tried && !!errors.planned} />{err('planned') ?? <span className="hint dim" style={{ fontSize: 'var(--fs-xs)' }}>Se muestran si no hay ubicación policial en vivo</span>}</div>
+          </div>
+        </div></div>
+        <div className="box"><div className="bh"><h3>Cuándo avisar durante el evento</h3></div><div className="bb grid">
+          <label className="toggle"><input type="checkbox" checked={f.own} onChange={(e) => setF({ ...f, own: e.target.checked })} />Usar umbrales propios mientras dure</label>
+          {!f.own && <span className="dim" style={{ fontSize: 'var(--fs-sm)' }}>Apagado: sus zonas usan los umbrales de Reglas y criticidad.</span>}
+          {f.own && <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+            <div className="field"><label htmlFor="to">Aglomeración desde (% del aforo)</label><input id="to" inputMode="numeric" className="fld sm mono" value={f.occ} onChange={set('occ')} /></div>
+            <div className="field"><label htmlFor="tp">Falta policía desde (personas por policía)</label><input id="tp" inputMode="numeric" className="fld sm mono" value={f.per} onChange={set('per')} /></div>
+            <div className="field"><label htmlFor="tm">Tiene que durar (min)</label><input id="tm" inputMode="numeric" className="fld sm mono" value={f.pers} onChange={set('pers')} /></div>
+          </div>}
+        </div></div>
       </form>
-      <div className="pf"><button type="button" className="btn ghost sm" onClick={() => (ex ? c.open({ k: 'evento', id: ex.id }) : c.close())}>Cancelar</button><button type="submit" form="evform" className="btn solid sm" style={{ marginLeft: 'auto' }}>{ex ? 'Guardar cambios' : 'Registrar evento'}</button></div>
+      <div className="pf"><button type="button" className="btn ghost sm" onClick={() => (ex ? c.open({ k: 'evento', id: ex.id }) : c.open({ k: 'config', tab: 'eventos' }))}>Cancelar</button><button type="submit" form="evform" className="btn solid sm" style={{ marginLeft: 'auto' }}>{ex ? 'Guardar cambios' : 'Registrar evento'}</button></div>
     </>
   );
 }

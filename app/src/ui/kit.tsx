@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import icons from '../data/generated/icons.json';
 import { Trend } from './Trend';
 import type { Alert, Coverage, Evidence as Ev, Severity } from '../api/types';
@@ -60,14 +61,16 @@ export function Dialog({ title, onClose, children, footer }: { title: string; on
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   }, [onClose]);
-  return (
+  // Al body: una ficha animada (transform) no debe atrapar el diálogo.
+  return createPortal(
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog" role="dialog" aria-modal aria-label={title}>
         <div className="hd"><h2>{title}</h2><button className="iconbtn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Cerrar"><Icon name="close" /></button></div>
         <div className="bd">{children}</div>
         {footer && <div className="ft">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

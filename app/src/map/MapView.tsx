@@ -10,14 +10,16 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import geo from '../data/generated/geo.json';
 import type { Alert, Camera, Evidence as Ev, LngLat, Unit, Zone, ZoneStatus } from '../api/types';
-import { fmtCrowd, hhmm } from '../api/format';
+import { fmtCrowd, hhmm, inTime } from '../api/format';
 import { Evidence, Icon } from '../ui/kit';
 import { streetRoute } from './streets';
-import { cellsAtRes, HEX_TIERS, hexesOutline, zoneHexes, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
+import { cellAt, cellsAtRes, HEX_TIERS, hexesInView, hexesOutline, zoneHexes, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
 import { drawHexLayer, makeHexLayer, unmeasured, type HexColors, type HexLayer } from './hexCanvas';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
 import { AirSprite, AlertMark, GroupChip, UnitHex } from './icons';
 import { AIRCRAFT, airAt, airTrail } from '../api/aircraft';
+import { SEVERITY_RANK } from '../api/labels';
+import { waitingSince } from '../views/shared';
 
 /** Confirmada con refuerzos en camino: se ve gestionada (gris con tick) y lo dice, hasta que llegan. */
 const goingTo = (a: Alert) => a.review === 'confirmada' && a.dispatch === 'en_camino';
@@ -38,7 +40,11 @@ export interface MapLayers { zones: boolean; cameras: boolean; units: boolean; a
   /** Medios aéreos: drones y helicópteros. Prendidos por defecto. */
   drones?: boolean; helis?: boolean }
 export interface RouteStop { lat: number; lon: number; label: string; title: string; /** Hora de la lectura, al lado del número. */ time?: string; /** Captura de la cámara que hizo la lectura: se proyecta sobre la parada. */
-  snap?: { camera: string; street: string; evidence: Ev; confidence?: number } }
+  snap?: { camera: string; street: string; evidence: Ev; confidence?: number };
+  /** 'add': evidencia agregada por el analista (rombo). Por defecto, una detección de cámara. */
+  kind?: 'det' | 'add';
+  /** Clip de la cámara: en la tarjeta de la parada actual se ve en bucle en lugar de la captura. */
+  clip?: { src: string; poster?: string } }
 
 interface Props {
   zones: Zone[];
@@ -57,7 +63,17 @@ interface Props {
   route?: RouteStop[];
   /** Nombre del recorrido (p. ej. la placa), para la lectura del HUD. */
   routeLabel?: string;
+  /** Recorrido controlado (historia del analista): índice de la parada actual. No se anima solo: se dibuja
+      lo recorrido hasta acá y lo que falta tenue, y la cámara va a la parada. null/undefined: animación de siempre. */
+  routeAt?: number | null;
+  /** Lectura del HUD en el recorrido controlado: número del capítulo actual y total de capítulos. */
+  routeCount?: { now: string; total: number } | null;
   sketch?: LngLat[];
+  /** Hexágonos elegidos para una zona o un evento (se suman y se quitan con clic). */
+  pickCells?: string[];
+  /** Mapa de configuración: cada zona pintada con su área de hexágonos y un color (su territorio);
+      `dim` la atenúa (p. ej. no le falta nada cuando se miran los pendientes). */
+  zonePaint?: { color: (z: Zone) => string; dim: (z: Zone) => boolean };
   /** Marcador del sector de la beta, visible con el mapa alejado. */
   region?: { lat: number; lon: number; title: string; sub: string; onClick: () => void };
   onZoneClick?: (id: string) => void;
@@ -67,8 +83,9 @@ interface Props {
   onEmptyClick?: () => void;
   onZoom?: (z: number) => void;
   severityOf?: (zoneId: string) => 'critica' | 'media' | null;
-  /** Evento en curso en la zona (una zona puede ser parte de un evento con varias zonas). */
-  eventOf?: (zoneId: string) => { id: string; name: string; end: number } | null;
+  /** Evento de la zona: el que está en curso o, si no hay, el próximo programado (live = false).
+      Una zona puede ser parte de un evento con varias zonas; venueZone es donde se hace (ahí va su rótulo). */
+  eventOf?: (zoneId: string) => { id: string; name: string; start: number; end: number; live: boolean; venueZone?: string; cells?: string[] } | null;
   /** Clic en el rótulo de un evento: abre su ficha. */
   onEventClick?: (id: string) => void;
   compact?: boolean;
@@ -94,6 +111,10 @@ interface Props {
   signal?: { lat: number; lon: number; label: string; key: string } | null;
   /** Punto destacado (resultado de búsqueda). */
   pin?: { lat: number; lon: number; label: string } | null;
+  /** Incidentes registrados a mano: un punto con su tipo. */
+  incidents?: { id: string; lat: number; lon: number; label: string; title: string; icon?: string }[];
+  /** Alt + clic en el mapa: atajo para registrar lo que pasó en ese punto, sin elegir herramienta. */
+  onAltClick?: (p: LngLat) => void;
 }
 
 const token = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888888';
@@ -163,6 +184,7 @@ export function MapView(p: Props) {
   const ready = useRef(false);
   const markers = useRef(new Map<string, { m: maplibregl.Marker; root: Root; el: HTMLElement; onClick?: () => void; hover?: (x: number, y: number) => Hover }>());
   const cb = useRef(p); cb.current = p;
+  const pickGridRef = useRef<() => void>(() => {});
   const [google, setGoogle] = useState<{ session: string; copyright: string | null } | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [view, setView] = useState({ bearing: p.compact ? 0 : -18, pitch: p.compact ? 0 : 45 });
@@ -175,7 +197,7 @@ export function MapView(p: Props) {
   /* Recorrido animado: se dibuja de punta a punta con una estela; cada parada se enciende al pasar. */
   /** Medios aéreos: si se dibujan, y cuándo se actualizó la estela por última vez. */
   const air = useRef({ on: false, show: [] as typeof AIRCRAFT, trailAt: 0, trailShown: false });
-  const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[] }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
+  const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[]; geo?: { key: string; pts: LngLat[]; stopAt: number[] }; eased?: string }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
   const [hud, setHud] = useState<{ reached: number; n: number; done: boolean } | null>(null);
   /* Capturas proyectadas sobre las paradas del recorrido: se pueden ocultar desde el HUD. */
   const [snaps, setSnaps] = useState(true); const snapsRef = useRef(snaps); snapsRef.current = snaps;
@@ -192,6 +214,9 @@ export function MapView(p: Props) {
       maxTileCacheSize: 1000,
     });
     if (p.compact) map.touchZoomRotate.disableRotation();
+    // Zoom con rueda y trackpad algo más ágil que el de MapLibre (1/450 y 1/100 por defecto).
+    map.scrollZoom.setWheelZoomRate(1 / 300);
+    map.scrollZoom.setZoomRate(1 / 70);
     // La perspectiva se maneja con el control propio (ViewControl, abajo): el de MapLibre aplanaba el mapa al tocar la brújula.
     map.on('rotate', () => setView((v) => ({ ...v, bearing: map.getBearing() })));
     map.on('pitch', () => setView((v) => ({ ...v, pitch: map.getPitch() })));
@@ -214,6 +239,9 @@ export function MapView(p: Props) {
       // Modo foco: con un recorrido en pantalla, la base se oscurece y lo demás se esconde.
       map.addLayer({ id: 'focus-dim', type: 'fill', source: 'focusDim', paint: { 'fill-color': '#000', 'fill-opacity': 0, 'fill-opacity-transition': { duration: 500, delay: 0 } } });
       map.addSource('sketch', { type: 'geojson', data: fc([]) });
+      map.addSource('pick', { type: 'geojson', data: fc([]) });
+      map.addSource('zonePaint', { type: 'geojson', data: fc([]) });
+      map.addSource('pickGrid', { type: 'geojson', data: fc([]) });
       map.addSource('cones', { type: 'geojson', data: fc([]) });
       map.addSource('coneHi', { type: 'geojson', data: fc([]) });
       // Hexágonos: colores del tema para pintar los lienzos (ver hexCanvas.ts y loadHexGrid).
@@ -228,13 +256,16 @@ export function MapView(p: Props) {
       map.addSource('area', { type: 'geojson', data: fc([]) });
       map.addSource('areaCells', { type: 'geojson', data: fc([]) });
       map.addLayer({ id: 'area-fill', type: 'fill', source: 'area', filter: ['!=', ['get', 'k'], 'sinmedicion'], paint: {
-        'fill-color': ink, 'fill-opacity': ['case', ['get', 'dim'], 0.02, ['match', ['get', 'k'], 'sel', 0.08, 0.06]] } });
+        'fill-color': ink, 'fill-opacity': ['case', ['get', 'dim'], 0.02, ['match', ['get', 'k'], 'sel', 0.08, 'programado', 0.035, 0.06]] } });
       map.addLayer({ id: 'area-cells', type: 'line', source: 'areaCells', minzoom: 14, paint: {
         'line-color': ink, 'line-width': 0.6, 'line-opacity': ['case', ['get', 'dim'], 0.05, 0.16] } });
       /* Zona sin medición (ninguna cámara la mide): contorno gris punteado y, adentro, sin mapa de calor. */
       map.addLayer({ id: 'nodata-line', type: 'line', source: 'area', filter: ['==', ['get', 'k'], 'sinmedicion'], layout: { 'line-join': 'round' }, paint: {
         'line-color': muted, 'line-width': 1.8, 'line-dasharray': [2, 1.6], 'line-opacity': ['case', ['get', 'dim'], 0.45, 1] } });
-      map.addLayer({ id: 'area-line', type: 'line', source: 'area', filter: ['!=', ['get', 'k'], 'sinmedicion'], layout: { 'line-join': 'round' }, paint: {
+      /* Evento programado (todavía no empezó): la misma área, con el contorno en trazos y el velo más tenue. */
+      map.addLayer({ id: 'next-line', type: 'line', source: 'area', filter: ['==', ['get', 'k'], 'programado'], layout: { 'line-join': 'round' }, paint: {
+        'line-color': ink, 'line-width': 1.4, 'line-dasharray': [3, 2], 'line-opacity': ['case', ['get', 'dim'], 0.3, 0.7] } });
+      map.addLayer({ id: 'area-line', type: 'line', source: 'area', filter: ['!', ['in', ['get', 'k'], ['literal', ['sinmedicion', 'programado']]]], layout: { 'line-join': 'round' }, paint: {
         'line-color': ink, 'line-width': ['match', ['get', 'k'], 'sel', 2, 1.4],
         'line-opacity': ['case', ['get', 'dim'], 0.3, ['match', ['get', 'k'], 'sel', 0.9, 0.7]] } });
       // Campo de visión de cada cámara: hacia dónde mira, con qué ángulo y hasta dónde llega.
@@ -255,20 +286,31 @@ export function MapView(p: Props) {
         'line-width': ['interpolate', ['linear'], ['zoom'], 13, 2, 17, 3.5],
         'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(255,255,255,0)', 0.6, 'rgba(255,255,255,0.45)', 1, 'rgba(255,255,255,0.95)'] } });
       map.addLayer({ id: 'route-ghost', type: 'line', source: 'routeGhost', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ink, 'line-width': 1.2, 'line-opacity': 0.28, 'line-dasharray': [1, 2.5] } });
-      map.addLayer({ id: 'route-glow', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ink, 'line-width': 12, 'line-blur': 9, 'line-opacity': 0.4 } });
-      map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ink, 'line-width': 2.6 } });
+      /* Entre dos detecciones no siempre hay cámara: el tramo es inferido (camino más corto por las calles,
+         ver streets.ts). Se dibuja punteado y con un halo más tenue; lo único seguro son las paradas. */
+      map.addLayer({ id: 'route-glow', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ink, 'line-width': 10, 'line-blur': 9, 'line-opacity': 0.22 } });
+      map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'butt', 'line-join': 'round' }, paint: { 'line-color': ink, 'line-width': 2.6, 'line-dasharray': [2.2, 1.6] } });
       map.addLayer({ id: 'sketch-fill', type: 'fill', source: 'sketch', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': ink, 'fill-opacity': 0.12 } });
       map.addLayer({ id: 'sketch-line', type: 'line', source: 'sketch', paint: { 'line-color': ink, 'line-width': 2 } });
+      // Grilla de hexágonos mientras se elige (zona o evento): muestra dónde cae cada uno.
+      map.addLayer({ id: 'zp-fill', type: 'fill', source: 'zonePaint', paint: { 'fill-color': ['get', 'color'], 'fill-opacity': ['case', ['get', 'dim'], 0.04, 0.2] } });
+      map.addLayer({ id: 'zp-line', type: 'line', source: 'zonePaint', layout: { 'line-join': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 1.6, 'line-opacity': ['case', ['get', 'dim'], 0.25, 0.9] } });
+      map.addLayer({ id: 'pick-grid', type: 'line', source: 'pickGrid', filter: ['==', ['get', 'k'], 'grid'], paint: { 'line-color': ink, 'line-opacity': 0.16, 'line-width': 0.8 } });
+      map.addLayer({ id: 'pick-hover', type: 'fill', source: 'pickGrid', filter: ['==', ['get', 'k'], 'hover'], paint: { 'fill-color': ink, 'fill-opacity': 0.1 } });
+      map.addLayer({ id: 'pick-fill', type: 'fill', source: 'pick', filter: ['==', ['get', 'k'], 'cell'], paint: { 'fill-color': ink, 'fill-opacity': 0.18 } });
+      map.addLayer({ id: 'pick-cells', type: 'line', source: 'pick', filter: ['==', ['get', 'k'], 'cell'], paint: { 'line-color': ink, 'line-opacity': 0.45, 'line-width': 1 } });
+      map.addLayer({ id: 'pick-line', type: 'line', source: 'pick', filter: ['==', ['get', 'k'], 'outline'], layout: { 'line-join': 'round' }, paint: { 'line-color': ink, 'line-width': 2.4 } });
       map.addLayer({ id: 'sketch-pts', type: 'circle', source: 'sketch', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 4, 'circle-color': ink } });
       map.addLayer({ id: 'measure-fill', type: 'fill', source: 'measure', filter: ['==', ['get', 'k'], 'circle'], paint: { 'fill-color': ['match', ['get', 'st'], 'cubierta', '#6cd300', 'cerca', alertC, negative], 'fill-opacity': 0.1 } });
       map.addLayer({ id: 'measure-cells', type: 'line', source: 'measure', filter: ['==', ['get', 'k'], 'cell'], paint: { 'line-color': ink, 'line-opacity': 0.25, 'line-width': 0.8 } });
       map.addLayer({ id: 'measure-center', type: 'circle', source: 'measure', filter: ['==', ['get', 'k'], 'center'], paint: { 'circle-radius': 5, 'circle-color': ink, 'circle-stroke-color': '#090909', 'circle-stroke-width': 2 } });
       map.addLayer({ id: 'measure-line', type: 'line', source: 'measure', filter: ['==', ['get', 'k'], 'circle'], paint: { 'line-color': ['match', ['get', 'st'], 'cubierta', '#6cd300', 'cerca', alertC, negative], 'line-width': 2, 'line-dasharray': [2, 1.5] } });
-      map.on('click', 'zones-fill', (e: MapLayerMouseEvent) => { if (!cb.current.onMapClick) cb.current.onZoneClick?.(String(e.features?.[0]?.properties?.id)); });
+      map.on('click', 'zones-fill', (e: MapLayerMouseEvent) => { if (!cb.current.onMapClick && !(e.originalEvent.altKey && cb.current.onAltClick)) cb.current.onZoneClick?.(String(e.features?.[0]?.properties?.id)); });
       map.on('mouseenter', 'zones-fill', () => { if (cb.current.onZoneClick && !cb.current.onMapClick) map.getCanvas().style.cursor = 'pointer'; });
       map.on('mouseleave', 'zones-fill', () => { map.getCanvas().style.cursor = cb.current.onMapClick ? 'crosshair' : ''; });
       map.on('click', (e: maplibregl.MapMouseEvent) => {
         setHover(null);
+        if (e.originalEvent.altKey && cb.current.onAltClick) { cb.current.onAltClick([e.lngLat.lng, e.lngLat.lat]); return; }
         if (cb.current.onMapClick) { cb.current.onMapClick([e.lngLat.lng, e.lngLat.lat]); return; }
         const hit = map.queryRenderedFeatures(e.point, { layers: ['zones-fill', 'cameras-hit'].filter((l) => map.getLayer(l) && map.getLayoutProperty(l, 'visibility') !== 'none') });
         if (!hit.length) cb.current.onEmptyClick?.();
@@ -276,11 +318,33 @@ export function MapView(p: Props) {
       // Al mover el mapa, la ficha flotante se va
       map.on('movestart', () => setHover(null));
       map.on('zoomend', () => cb.current.onZoom?.(map.getZoom()));
+      /* Grilla para elegir hexágonos: solo mientras se elige y con el mapa cerca (de lejos serían miles). */
+      let hoverCell: string | null = null, gridKey = '';
+      const pickGrid = () => {
+        const src = map.getSource('pickGrid') as GeoJSONSource | undefined; if (!src) return;
+        const b = map.getBounds();
+        const on = !!cb.current.pickCells && map.getZoom() >= 13.5;
+        // Solo se recalcula si cambió algo: se llama también cuando el mapa queda quieto (idle).
+        const key = on ? `${b.toArray().flat().map((x) => x.toFixed(5)).join()}|${hoverCell}` : 'off';
+        if (key === gridKey) return; gridKey = key;
+        if (!on) { src.setData(fc([])); return; }
+        const cells = hexesInView([[b.getWest(), b.getSouth()], [b.getEast(), b.getNorth()]], 5000);
+        src.setData(fc([
+          ...cells.map((c): GeoJSON.Feature => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(c)] }, properties: { k: 'grid' } })),
+          ...(hoverCell ? [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(hoverCell)] }, properties: { k: 'hover' } } as GeoJSON.Feature] : []),
+        ]));
+      };
+      pickGridRef.current = pickGrid;
+      map.on('moveend', pickGrid); map.on('idle', pickGrid);
+      map.on('mousemove', (e) => {
+        if (!cb.current.pickCells) { if (hoverCell) { hoverCell = null; pickGrid(); } return; }
+        const c = cellAt([e.lngLat.lng, e.lngLat.lat]); if (c !== hoverCell) { hoverCell = c; pickGrid(); }
+      });
       // Tamaño de las alertas: sigue al zoom en cada cuadro (una sola variable CSS, sin redibujar marcadores).
       const setAz = () => map.getContainer().style.setProperty('--az', String(alertScale(map.getZoom())));
       setAz(); map.on('zoom', setAz);
-      map.on('click', 'cameras', (e: MapLayerMouseEvent) => { if (!cb.current.onMapClick) { e.originalEvent.stopPropagation(); cb.current.onCameraClick?.(String(e.features?.[0]?.properties?.id)); } });
-      map.on('click', 'cameras-hit', (e: MapLayerMouseEvent) => { if (!cb.current.onMapClick) { e.originalEvent.stopPropagation(); cb.current.onCameraClick?.(String(e.features?.[0]?.properties?.id)); } });
+      map.on('click', 'cameras', (e: MapLayerMouseEvent) => { if (!cb.current.onMapClick && !(e.originalEvent.altKey && cb.current.onAltClick)) { e.originalEvent.stopPropagation(); cb.current.onCameraClick?.(String(e.features?.[0]?.properties?.id)); } });
+      map.on('click', 'cameras-hit', (e: MapLayerMouseEvent) => { if (!cb.current.onMapClick && !(e.originalEvent.altKey && cb.current.onAltClick)) { e.originalEvent.stopPropagation(); cb.current.onCameraClick?.(String(e.features?.[0]?.properties?.id)); } });
       // Al pasar por una cámara se resalta su cono y se abre su ficha con el video en vivo
       const camHover = (id: string | null, x = 0, y = 0) => {
         if (id !== hoverCam.current) {
@@ -323,6 +387,10 @@ export function MapView(p: Props) {
   }, [p.backOutKey]);
 
   useEffect(() => { if (mapRef.current) mapRef.current.getCanvas().style.cursor = p.onMapClick ? 'crosshair' : ''; }, [p.onMapClick]);
+  // Mientras se marca en el mapa (hexágonos, un punto), los rótulos y marcadores no se pueden tocar: el clic va al mapa.
+  useEffect(() => { mapRef.current?.getContainer().classList.toggle('map-picking', !!p.onMapClick); }, [p.onMapClick]);
+  // Al empezar o terminar de elegir hexágonos, la grilla aparece o se va.
+  useEffect(() => { pickGridRef.current(); }, [!!p.pickCells]);
 
   // Base de Google: se agrega debajo de las capas operativas; ante un fallo queda la base local.
   const LOCAL_LAYERS = ['region', 'country', 'parks', 'buildings', 'roads-minor', 'roads-major'];
@@ -408,6 +476,9 @@ export function MapView(p: Props) {
   // Datos → fuentes y marcadores
   function sync() {
     const map = mapRef.current; if (!map || !ready.current) return;
+    // Con el mapa en movimiento (zoom, arrastre, transición) no se toca nada: rearmar fuentes y marcadores
+    // a mitad de un zoom lo hace saltar. Al terminar el movimiento (moveend) se sincroniza con lo último.
+    if (map.isMoving()) return;
     const P = cb.current; const st = P.zoneStatus ?? {};
     // Selección del lateral: la alerta abierta (y su zona), la zona o la cámara.
     const selAlert = P.focusSel?.k === 'alerta' ? P.alerts?.find((x) => x.id === P.focusSel!.id) ?? null : null;
@@ -448,25 +519,35 @@ export function MapView(p: Props) {
     })) : []));
     // Áreas delimitadas: cada evento en curso (sus zonas juntas) y la zona elegida
     const area: GeoJSON.Feature[] = [], areaCells: GeoJSON.Feature[] = [];
-    const eventAreas: { id: string; name: string; end: number; top: LngLat; dim: boolean }[] = [];
+    const eventAreas: { id: string; name: string; start: number; end: number; live: boolean; top: LngLat; dim: boolean }[] = [];
     // Las celdas se dibujan al tamaño de la grilla que se ve a este zoom, para que el área calce con los hexágonos.
     const zNow = map.getZoom(), gridRes = (HEX_TIERS.find((tr) => zNow >= tr.minzoom && zNow < tr.maxzoom) ?? HEX_TIERS[0]).res;
-    const addArea = (data: string[], k: 'evento' | 'sel' | 'sinmedicion', dim: boolean) => {
+    const areaOf = (data: string[]) => {
       const key = gridRes + ':' + data.join(',');
       let hit = areaCache.get(key);
       if (!hit) { const cells = cellsAtRes(data, gridRes); hit = { cells, shape: hexesOutline(cells) }; if (areaCache.size > 40) areaCache.clear(); areaCache.set(key, hit); }
-      const { cells, shape } = hit; if (!shape.length) return null;
+      return hit;
+    };
+    /** El punto más al norte de un área, para apoyar un rótulo. */
+    const northOf = (shape: LngLat[][][]) => shape.flat(2).reduce((a, q) => (q[1] > a[1] ? q : a));
+    const addArea = (data: string[], k: 'evento' | 'programado' | 'sel' | 'sinmedicion', dim: boolean) => {
+      const { cells, shape } = areaOf(data); if (!shape.length) return null;
       area.push({ type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: shape }, properties: { k, dim } });
       if (k !== 'sinmedicion') for (const c of cells) areaCells.push({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(c)] }, properties: { dim } });
-      return shape.flat(2).reduce((a, q) => (q[1] > a[1] ? q : a)); // el punto más al norte, para el rótulo
+      return northOf(shape); // el punto más al norte, para el rótulo
     };
     if (L.events) {
-      const events = new Map<string, { id: string; end: number; zones: Zone[] }>();
-      for (const z of P.zones) { const ev = P.eventOf?.(z.id); if (ev) events.set(ev.name, { id: ev.id, end: ev.end, zones: [...(events.get(ev.name)?.zones ?? []), z] }); }
+      const events = new Map<string, { id: string; start: number; end: number; live: boolean; venueZone?: string; cells?: string[]; zones: Zone[] }>();
+      for (const z of P.zones) { const ev = P.eventOf?.(z.id); if (ev) events.set(ev.name, { id: ev.id, start: ev.start, end: ev.end, live: ev.live, venueZone: ev.venueZone, cells: ev.cells, zones: [...(events.get(ev.name)?.zones ?? []), z] }); }
       for (const [name, e] of events) {
         const dim = !!selZone && !e.zones.some((z) => z.id === selZone);
-        const top = addArea(zoneHexes(e.zones), 'evento', dim);
-        if (top) eventAreas.push({ id: e.id, name, end: e.end, top, dim });
+        // El área del evento son los hexágonos que se eligieron; los eventos anteriores, los de sus zonas.
+        const whole = addArea(e.cells?.length ? e.cells : zoneHexes(e.zones), e.live ? 'evento' : 'programado', dim);
+        // El rótulo va sobre el lugar del evento (el estadio, la plaza), no sobre la zona más al norte del área.
+        const venue = e.zones.find((z) => z.id === e.venueZone);
+        const venueShape = venue ? areaOf(zoneHexes([venue])).shape : [];
+        const top = whole && (venueShape.length ? northOf(venueShape) : whole);
+        if (top) eventAreas.push({ id: e.id, name, start: e.start, end: e.end, live: e.live, top, dim });
       }
     }
     if (L.zones && P.zoneStatus) for (const z of unmeasured({ zones: P.zones, status: st })) addArea(zoneHexes([z]), 'sinmedicion', !!selZone && selZone !== z.id);
@@ -521,15 +602,43 @@ export function MapView(p: Props) {
     (map.getSource('cameras') as GeoJSONSource).setData(fc(camSplit.singles.map((c) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, properties: { id: c.id, st: c.status, dim: !!P.focusSel && !(P.focusSel.k === 'camara' && P.focusSel.id === c.id) } }))));
     (map.getSource('cones') as GeoJSONSource).setData(fc(camSplit.singles.filter((c) => L.fov && c.status !== 'caida').map((c) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [cone(c)] }, properties: {} }))));
     // ---- Recorrido: modo foco y animación ----
-    const R = P.route && P.route.length > 1 ? P.route : null; const focus = !!R;
+    // Con `routeAt` el recorrido lo maneja quien lo muestra (historia del analista): no se anima solo y alcanza 1 parada.
+    const ctl = P.routeAt != null && P.route?.length ? Math.max(0, Math.min(P.routeAt, P.route.length - 1)) : null;
+    const R = P.route && (P.route.length > 1 || ctl !== null) ? P.route : null; const focus = !!R;
     map.setPaintProperty('focus-dim', 'fill-opacity', focus ? 0.55 : 0);
     for (const id of HEX_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', focus || !L.hex ? 'none' : 'visible');
     for (const id of ['zones-fill', 'cameras', 'cameras-hit', 'cones-fill', 'cones-line', 'cone-hi-fill', 'cone-hi-line']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', focus ? 'none' : 'visible');
     map.setPaintProperty('area-line', 'line-opacity', focus ? 0.22 : ['case', ['get', 'dim'], 0.3, ['match', ['get', 'k'], 'sel', 0.9, 0.7]]);
     if (map.getLayer('area-cells')) map.setLayoutProperty('area-cells', 'visibility', focus ? 'none' : 'visible');
-    const rkey = R ? JSON.stringify(R.map((s) => [s.lon, s.lat])) : '';
-    if (rkey !== anim.current.key) { anim.current.key = rkey; if (R) playRoute(R); else stopRoute(); }
-    (map.getSource('routeGhost') as GeoJSONSource).setData(fc(R ? [{ type: 'Feature', geometry: { type: 'LineString', coordinates: streetRoute(R.map((s) => [s.lon, s.lat])).path }, properties: {} }] : []));
+    const rkey = R ? (ctl !== null ? 'ctl:' : '') + JSON.stringify(R.map((s) => [s.lon, s.lat])) : '';
+    if (rkey !== anim.current.key) { anim.current.key = rkey; if (R && ctl === null) playRoute(R); else stopRoute(); }
+    if (R && ctl !== null) {
+      // Recorrido controlado: lo hecho hasta la parada actual va fuerte (punteado: es inferido entre cámaras);
+      // lo que falta, tenue. Con una sola parada no hay línea.
+      const { path, stopAt } = streetRoute(R.map((s) => [s.lon, s.lat] as LngLat)); const cut = stopAt[ctl];
+      const line = (c: LngLat[]) => (c.length > 1 ? [{ type: 'Feature' as const, geometry: { type: 'LineString' as const, coordinates: c }, properties: {} }] : []);
+      (map.getSource('route') as GeoJSONSource).setData(fc(line(path.slice(0, cut + 1))));
+      (map.getSource('routeGhost') as GeoJSONSource).setData(fc(line(path.slice(cut))));
+      anim.current.reached = ctl; anim.current.arrows = routeArrows(path, stopAt);
+      // La cámara va a la parada actual; si ya está cerca (zoom 15 o más) no cambia el zoom.
+      const ek = rkey + '@' + ctl;
+      if (anim.current.eased !== ek) {
+        anim.current.eased = ek; const z = map.getZoom();
+        map.easeTo({ center: [R[ctl].lon, R[ctl].lat], zoom: z >= 15 ? z : 16, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 700 });
+      }
+    } else {
+      anim.current.eased = undefined;
+      (map.getSource('routeGhost') as GeoJSONSource).setData(fc(R ? [{ type: 'Feature', geometry: { type: 'LineString', coordinates: streetRoute(R.map((s) => [s.lon, s.lat])).path }, properties: {} }] : []));
+    }
+    const zp = P.zonePaint;
+    (map.getSource('zonePaint') as GeoJSONSource).setData(fc(zp && L.zones ? P.zones.map((z): GeoJSON.Feature => ({
+      type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: hexesOutline(zoneHexes([z])) }, properties: { id: z.id, color: zp.color(z), dim: zp.dim(z) },
+    })) : []));
+    const pk = P.pickCells ?? [];
+    (map.getSource('pick') as GeoJSONSource).setData(fc(pk.length ? [
+      ...pk.map((cell): GeoJSON.Feature => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [hexRing(cell)] }, properties: { k: 'cell' } })),
+      { type: 'Feature', geometry: { type: 'MultiPolygon', coordinates: hexesOutline(pk) }, properties: { k: 'outline' } } as GeoJSON.Feature,
+    ] : []));
     const sk = P.sketch ?? [];
     (map.getSource('sketch') as GeoJSONSource).setData(fc([
       ...sk.map((c): GeoJSON.Feature => ({ type: 'Feature', geometry: { type: 'Point', coordinates: c }, properties: {} })),
@@ -580,16 +689,17 @@ export function MapView(p: Props) {
           <i className="zdot" aria-hidden />
           <span className="zl"><span className="zn">{z.name}</span><b>{nodata ? (!z.cameras.length ? 'Sin cámara' : s?.coverage === 'sin_cobertura' ? 'Sin medición' : 'Sin datos') : fmtCrowd(s.count!)}</b></span>
         </span>
-      ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'center', `Zona ${z.name}: ${nodata ? (!z.cameras.length ? 'sin cámara' : s?.coverage === 'sin_cobertura' ? 'sin medición' : 'sin datos') : fmtCrowd(s.count!) + ' personas'}${ev ? ` · evento en curso hasta ${hhmm(ev.end)}` : ''}`);
+      ), P.onZoneClick ? () => P.onZoneClick!(z.id) : undefined, 'center', `Zona ${z.name}: ${nodata ? (!z.cameras.length ? 'sin cámara' : s?.coverage === 'sin_cobertura' ? 'sin medición' : 'sin datos') : fmtCrowd(s.count!) + ' personas'}${ev?.live ? ` · evento en curso hasta ${hhmm(ev.end)}` : ''}`);
     }
     // Rótulo del evento: arriba de su área (en el punto más al norte), con su nombre y hasta qué hora dura.
     if (!focus && !P.compact && map.getZoom() >= EVENT_LABEL_Z) for (const e of eventAreas) {
+      const when = e.live ? `Evento en curso · hasta ${hhmm(e.end)}` : `Programado · empieza ${inTime(e.start)}`;
       add('ev' + e.name, e.top, (
-        <span className={`mk-event ${e.dim ? 'dimz' : ''} ${P.onEventClick ? 'link' : ''}`}>
-          <span className="el"><Icon name="flag" className="eflag" /><span className="en">{e.name}</span><em>Evento en curso · hasta {hhmm(e.end)}</em></span>
+        <span className={`mk-event ${e.live ? '' : 'next'} ${e.dim ? 'dimz' : ''} ${P.onEventClick ? 'link' : ''}`}>
+          <span className="el"><Icon name="flag" className="eflag" /><span className="en">{e.name}</span><em>{when}</em></span>
           <u className="estem" aria-hidden />
         </span>
-      ), P.onEventClick ? () => P.onEventClick!(e.id) : undefined, 'bottom', `Evento en curso: ${e.name}, hasta ${hhmm(e.end)}${P.onEventClick ? '. Abrir ficha' : ''}`);
+      ), P.onEventClick ? () => P.onEventClick!(e.id) : undefined, 'bottom', `${e.live ? `Evento en curso: ${e.name}, hasta ${hhmm(e.end)}` : `Evento programado: ${e.name}, empieza ${inTime(e.start)}`}${P.onEventClick ? '. Abrir ficha' : ''}`);
     }
     // Nombres de zona que se pisan con otro rótulo: el de la zona elegida siempre queda; después, los de
     // las zonas con más gente. Los que no entran quedan como punto hasta que hay lugar (al acercarse).
@@ -607,7 +717,7 @@ export function MapView(p: Props) {
         if (!solo) taken.push(b);
       }
     }
-    const zoomTo = (c: LngLat) => () => map.easeTo({ center: c, zoom: Math.min(17.2, zoom + 1.8), duration: 700 });
+    const zoomTo = (c: LngLat) => () => map.easeTo({ center: c, zoom: Math.min(17.2, zoom + 1.8), duration: 400 });
     const groupMk = (cat: GroupCat, g: { key: string; items: { id: string }[]; c: LngLat }) =>
       add(`g${cat}${g.key}`, g.c, <GroupChip cat={cat} n={g.items.length} />, zoomTo(g.c), 'center', `${g.items.length} agrupados · acercar`, (x, y) => ({ kind: 'group', cat, ids: g.items.map((i) => i.id), x, y }));
     if (detail) camSplit.groups.forEach((g) => groupMk('cameras', g));
@@ -633,7 +743,7 @@ export function MapView(p: Props) {
       for (const u of us.singles) add('u' + u.id, [u.lon, u.lat], <UnitHex type={u.type} status={u.status} size={22} />, undefined, 'center', `${u.id} · ${u.type}`, (x, y) => ({ kind: 'unit', id: u.id, x, y }));
       us.groups.forEach((g) => groupMk('units', g));
     }
-    // Drones y helicópteros: cada tipo con su chip de capa, nunca agrupados. La posición la mueve la animación
+    // Drones y helicópteros: siempre a la vista (son pocos y no dependen de la capa Unidades, que arranca apagada), nunca agrupados. La posición la mueve la animación
     // de cada cuadro (moveAir); acá solo se crean, con la altitud al lado si hay zoom.
     // Al pasar el mouse, la ficha de monitoreo; con un clic, su ficha en el lateral con la transmisión de la
     // cámara de a bordo (como lo vio el ministro en el sistema del Gobierno, reunión del 25/11).
@@ -654,24 +764,31 @@ export function MapView(p: Props) {
       alertSplit.groups = alertSplit.groups.map((g) => ({ ...g, items: g.items.filter((x) => x.id !== selAlert.id) })).filter((g) => g.items.length > 1 || (g.items.length === 1 && (alertSplit.singles.push(g.items[0]), false)));
       if (!alertSplit.singles.some((x) => x.id === selAlert.id)) alertSplit.singles.push(selAlert);
     }
-    alertSplit.groups.forEach((g) => groupMk('alerts', g));
+    // Grupo de alertas: la criticidad más alta y el atraso más grande de las que esperan decisión.
+    alertSplit.groups.forEach((g) => {
+      const worst = g.items.reduce((w, x) => (SEVERITY_RANK[x.severity] < SEVERITY_RANK[w] ? x.severity : w), 'baja' as Alert['severity']);
+      const info = g.items.map((x) => ({ severity: x.severity, createdAt: waitingSince(x), waiting: x.review === 'por_revisar' }));
+      add(`galerts${g.key}`, g.c, <GroupChip cat="alerts" n={g.items.length} severity={worst} alerts={info} />, zoomTo(g.c), 'center', `${g.items.length} alertas agrupadas · acercar`, (x, y) => ({ kind: 'group', cat: 'alerts', ids: g.items.map((i) => i.id), x, y }));
+    });
     if (P.alerts) for (const a of alertSplit.singles) {
-      // Pin rojo con la punta en el lugar exacto. Todas iguales: el dibujo dice el tipo.
+      // Chapa con la punta en el lugar exacto: el dibujo dice el tipo, las barras la criticidad y el borde la espera.
       // .mk-alert-scale crece con el zoom del mapa (variable --az, ver onZoom), sin esperar a que termine.
-      add('a' + a.id, [a.lon, a.lat], <span className={`mk-alert-scale ${P.freshAlerts?.includes(a.id) ? 'is-new' : ''}`} onMouseEnter={() => P.onAlertHover?.(a.id)} onMouseLeave={() => P.onAlertHover?.(null)}><AlertMark kind={a.kind} size={34} muted={a.review !== 'por_revisar'} />{a.review !== 'por_revisar' && <i className={`mk-done ${a.review === 'confirmada' ? 'ok' : ''}`} aria-label="Gestionada" />}{goingTo(a) && <i className="mk-go-tag">Refuerzos en camino</i>}{P.freshAlerts?.includes(a.id) && <><i className="new-ring" /><i className="new-ring r2" /><i className="new-ring r3" /></>}</span>, P.onAlertClick ? () => P.onAlertClick!(a.id) : undefined, 'bottom', `Alerta ${a.id}${goingTo(a) ? ' · refuerzos en camino' : ''}`);
+      add('a' + a.id, [a.lon, a.lat], <span className={`mk-alert-scale ${P.freshAlerts?.includes(a.id) ? 'is-new' : ''}`} onMouseEnter={() => P.onAlertHover?.(a.id)} onMouseLeave={() => P.onAlertHover?.(null)}><AlertMark kind={a.kind} severity={a.severity} since={waitingSince(a)} state={a.review === 'por_revisar' ? 'espera' : a.review === 'confirmada' ? 'confirmada' : 'descartada'} units={P.units?.filter((u) => u.enRoute?.alertId === a.id).length ?? 0} size={34} />{a.review === 'descartada' && <i className="mk-done" aria-label="Descartada" />}{goingTo(a) && <i className="mk-go-tag">Refuerzos en camino</i>}{P.freshAlerts?.includes(a.id) && <><i className="new-ring" /><i className="new-ring r2" /><i className="new-ring r3" /></>}</span>, P.onAlertClick ? () => P.onAlertClick!(a.id) : undefined, 'bottom', `Alerta ${a.id}${goingTo(a) ? ' · refuerzos en camino' : ''}`);
     }
     if (selCam && !focus) add('csel' + selCam.id, [selCam.lon, selCam.lat], <span className="mk-camsel" aria-hidden><i /><i className="r2" /><b>{selCam.id}</b></span>);
     if (P.signal) add('sig' + P.signal.key, [P.signal.lon, P.signal.lat], <span className="mk-signal" aria-hidden><i /><i /><i /><s /><b /><em>{P.signal.label}</em></span>);
+    if (P.incidents && !focus) for (const x of P.incidents) add('inc' + x.id, [x.lon, x.lat], <span className={`mk-incident ${x.id === 'nuevo' ? 'new' : ''}`} title={x.title}><i><Icon name={x.icon ?? 'report'} /></i><b>{x.label}</b></span>, undefined, 'bottom', x.title);
     if (P.pin) add('pin', [P.pin.lon, P.pin.lat], <span className="mk-pin"><i /><b>{P.pin.label}</b></span>, undefined, 'bottom');
     if (R) {
       const reached = anim.current.reached;
       // Pasar el mouse por una parada (o por su captura) pone esa captura adelante de las demás.
       const front = (i: number, on: boolean) => markers.current.get(`rs${i}`)?.el.classList.toggle('is-front', on);
-      R.forEach((s, i) => add(`r${i}`, [s.lon, s.lat], <span className={`mk-stop ${i === 0 ? 'first' : ''} ${i === R.length - 1 ? 'last' : ''} ${i <= reached ? 'on' : 'pending'} ${i === reached ? 'now' : ''}`} title={s.title} onMouseEnter={() => front(i, true)} onMouseLeave={() => front(i, false)}>{s.label}{s.time && <em>{s.time}</em>}</span>));
+      // Controlado: las paradas que faltan se ven (huecas); en la animación aparecen al pasar.
+      R.forEach((s, i) => add(`r${i}`, [s.lon, s.lat], <span className={`mk-stop ${ctl !== null ? 'ctl' : ''} ${s.kind === 'add' ? 'add' : ''} ${i === 0 ? 'first' : ''} ${i === R.length - 1 ? 'last' : ''} ${i <= reached ? 'on' : ctl !== null ? 'ahead' : 'pending'} ${i === reached ? 'now' : ''}`} title={s.title} onMouseEnter={() => front(i, true)} onMouseLeave={() => front(i, false)}>{s.label}{s.time && <em>{s.time}</em>}</span>));
       // Proyección de cámara: cada lectura ya alcanzada levanta su captura sobre la parada, con un haz
       // que baja hasta el punto. Alternan de lado y de altura para no taparse entre paradas vecinas.
       if (snapsRef.current) R.forEach((s, i) => {
-        if (!s.snap || i > reached) return;
+        if (!s.snap || i > reached || (ctl !== null && i !== ctl)) return;
         add(`rs${i}`, [s.lon, s.lat], <SnapCard s={s} n={i + 1} side={i % 2 ? 'l' : 'r'} beam={SNAP_BEAM + (i % 3) * 40} now={i === reached} last={i === R.length - 1} />, undefined, 'bottom');
       });
       // Sentido del recorrido: una flecha a mitad de cada tramo ya recorrido
@@ -685,7 +802,7 @@ export function MapView(p: Props) {
     const dim = P.focusSel && !focus ? 0.4 : 1;
     for (const id of HEX_LAYERS) if (map.getLayer(id)) map.setPaintProperty(id, 'raster-opacity', dim);
     for (const [key, h] of markers.current) {
-      const keep = !P.focusSel || focus || key === 'a' + (selAlert?.id ?? '') || (selZone && key === 'z' + selZone) || key === 'pin' || key.startsWith('sig') || key.startsWith('csel') || /^r[as]?\d/.test(key);
+      const keep = !P.focusSel || focus || key === 'a' + (selAlert?.id ?? '') || (selZone && key === 'z' + selZone) || key === 'pin' || key.startsWith('inc') || key.startsWith('sig') || key.startsWith('csel') || /^r[as]?\d/.test(key);
       h.el.classList.toggle('is-dim', !keep && key !== 'a' + P.hoverAlert);
       h.el.classList.toggle('is-hover', !!P.hoverAlert && key === 'a' + P.hoverAlert);
       h.el.classList.toggle('is-sel', !!P.focusSel && !focus && (key === 'a' + (selAlert?.id ?? '') || (P.focusSel.k === 'zona' && key === 'z' + P.focusSel.id)));
@@ -763,21 +880,30 @@ export function MapView(p: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const ctlAt = p.routeAt != null && p.route?.length ? Math.max(0, Math.min(p.routeAt, p.route.length - 1)) : null;
   return (
     <>
       <div ref={el} className="map" role="region" aria-label="Mapa" />
       {!p.compact && <ViewControl view={view} map={mapRef} />}
-      {hud && p.route && p.route.length > 1 && (() => {
+      {p.route && (ctlAt !== null || (hud && p.route.length > 1)) && (() => {
+        // Controlado (historia): el HUD sigue a `routeAt` y a `routeCount`; si no, al avance de la animación.
+        const H = ctlAt !== null ? { reached: ctlAt, n: p.route.length, done: true } : hud!;
         // Un recorrido puede reemplazar a otro antes de reiniciar el HUD: el índice no debe pasarse del nuevo
-        const s = p.route[Math.min(p.route.length - 1, Math.max(0, hud.reached))];
+        const s = p.route[Math.min(p.route.length - 1, Math.max(0, H.reached))];
         return (
           <div className="route-hud" role="status" aria-live="polite">
-            <div className="rh-top"><span className="rh-eyebrow">Recorrido{p.routeLabel ? ` · ${p.routeLabel}` : ''}</span><span className="rh-count">{String(Math.max(1, hud.reached + 1)).padStart(2, '0')}<small>/{String(hud.n).padStart(2, '0')}</small></span></div>
+            <div className="rh-top"><span className="rh-eyebrow">Recorrido{p.routeLabel ? ` · ${p.routeLabel}` : ''}</span><span className="rh-count">{ctlAt !== null && p.routeCount ? p.routeCount.now : String(Math.max(1, H.reached + 1)).padStart(2, '0')}<small>/{String(ctlAt !== null && p.routeCount ? p.routeCount.total : H.n).padStart(2, '0')}</small></span></div>
             <div className="rh-now"><b>{s.time ?? ''}</b><span>{s.title.split(' · ').slice(1).join(' · ') || s.title}</span></div>
-            <div className="rh-bar"><i style={{ width: `${((Math.max(0, hud.reached) + (hud.done ? 1 : 0.5)) / hud.n) * 100}%` }} /></div>
+            <div className="rh-bar"><i style={{ width: `${((Math.max(0, H.reached) + (H.done ? 1 : 0.5)) / H.n) * 100}%` }} /></div>
+            {/* Qué es seguro y qué no: las paradas son lecturas de cámara; lo de entre medio, la ruta probable. */}
+            <div className="rh-key" aria-label="Referencia del recorrido">
+              <span><i className="rk-stop" aria-hidden />Detección de cámara</span>
+              <span title="Entre estas dos cámaras no hay otra que lo haya visto: se muestra la ruta más corta por las calles"><i className="rk-inf" aria-hidden />Tramo inferido · sin cámara</span>
+              {p.route.some((x) => x.kind === 'add') && <span title="Evidencia que agregó el analista: no es una lectura de cámara"><i className="rk-add" aria-hidden />Agregado</span>}
+            </div>
             <div className="rh-actions">
               {p.route.some((x) => x.snap) && <button className="rh-replay" onClick={() => setSnaps(!snaps)}><Icon name={snaps ? 'visibility_off' : 'image'} />{snaps ? 'Ocultar capturas' : 'Ver capturas'}</button>}
-              {hud.done && <button className="rh-replay" onClick={replay}><Icon name="refresh" />Repetir trazado</button>}
+              {ctlAt === null && H.done && <button className="rh-replay" onClick={replay}><Icon name="refresh" />Repetir trazado</button>}
             </div>
           </div>
         );
@@ -801,15 +927,53 @@ function ViewControl({ view, map }: { view: { bearing: number; pitch: number }; 
   const ease = (o: maplibregl.EaseToOptions) => map.current?.easeTo({ duration: 650, ...o });
   const is3d = view.pitch > 10;
   const card = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'][Math.round((((view.bearing % 360) + 360) % 360) / 45) % 8];
+
+  // Brújula arrastrable: mientras se mantiene apretada, mover a los lados gira el mapa y mover arriba/abajo
+  // lo inclina (como un joystick). Sigue al dedo/mouse en vivo, sin transición. Si no se movió, es un clic.
+  const [drag, setDrag] = useState(false);
+  const start = useRef<{ x: number; y: number; bearing: number; pitch: number } | null>(null);
+  const moved = useRef(false);
+  const onDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const m = map.current; if (!m || e.button !== 0) return;
+    m.stop();
+    start.current = { x: e.clientX, y: e.clientY, bearing: m.getBearing(), pitch: m.getPitch() };
+    moved.current = false;
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const s = start.current, m = map.current; if (!s || !m) return;
+    const dx = e.clientX - s.x, dy = e.clientY - s.y;
+    if (!moved.current && Math.hypot(dx, dy) < 4) return;
+    if (!moved.current) { moved.current = true; setDrag(true); }
+    // 1 px = 0,8° de giro; arrastrar hacia arriba inclina (más 3D), hacia abajo endereza (vista cenital).
+    m.jumpTo({ bearing: s.bearing + dx * 0.8, pitch: Math.max(0, Math.min(m.getMaxPitch(), s.pitch - dy * 0.5)) });
+  };
+  const onUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!start.current) return;
+    start.current = null; setDrag(false);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+  const onKey = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const step = { ArrowLeft: { bearing: view.bearing - 15 }, ArrowRight: { bearing: view.bearing + 15 }, ArrowUp: { pitch: Math.min(60, view.pitch + 10) }, ArrowDown: { pitch: Math.max(0, view.pitch - 10) } }[e.key];
+    if (!step) return;
+    e.preventDefault(); ease({ ...step, duration: 250 });
+  };
+
   return (
     <div className="viewctl" role="group" aria-label="Vista del mapa">
-      <button onClick={() => ease({ zoom: (map.current?.getZoom() ?? 14) + 1 })} aria-label="Acercar" title="Acercar"><svg viewBox="0 0 20 20" aria-hidden><path d="M10 4v12M4 10h12" /></svg></button>
-      <button onClick={() => ease({ zoom: (map.current?.getZoom() ?? 14) - 1 })} aria-label="Alejar" title="Alejar"><svg viewBox="0 0 20 20" aria-hidden><path d="M4 10h12" /></svg></button>
+      <button onClick={() => ease({ zoom: (map.current?.getZoom() ?? 14) + 1, duration: 300 })} aria-label="Acercar" title="Acercar"><svg viewBox="0 0 20 20" aria-hidden><path d="M10 4v12M4 10h12" /></svg></button>
+      <button onClick={() => ease({ zoom: (map.current?.getZoom() ?? 14) - 1, duration: 300 })} aria-label="Alejar" title="Alejar"><svg viewBox="0 0 20 20" aria-hidden><path d="M4 10h12" /></svg></button>
       <span className="viewctl-sep" />
       <button className={`viewctl-3d ${is3d ? 'on' : ''}`} aria-pressed={is3d} onClick={() => ease({ pitch: is3d ? 0 : 45 })} title={is3d ? 'Ver en 2D (desde arriba)' : 'Ver en 3D (inclinado)'}>{is3d ? '3D' : '2D'}</button>
       <button onClick={() => ease({ bearing: view.bearing - 30 })} aria-label="Girar a la izquierda" title="Girar a la izquierda"><svg viewBox="0 0 20 20" aria-hidden><path d="M6 6.5A6 6 0 1 1 4.2 11" /><path d="M6 2.8v3.7H2.3" /></svg></button>
       <button onClick={() => ease({ bearing: view.bearing + 30 })} aria-label="Girar a la derecha" title="Girar a la derecha"><svg viewBox="0 0 20 20" aria-hidden><path d="M14 6.5A6 6 0 1 0 15.8 11" /><path d="M14 2.8v3.7h3.7" /></svg></button>
-      <button className="viewctl-compass" onClick={() => ease({ bearing: 0 })} aria-label={`Mira hacia ${card}. Volver al norte`} title="Volver al norte">
+      <button
+        className={`viewctl-compass ${drag ? 'dragging' : ''}`}
+        onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+        onClick={() => { if (moved.current) { moved.current = false; return; } ease({ bearing: 0 }); }}
+        onKeyDown={onKey}
+        aria-label={`Mira hacia ${card}, inclinación ${Math.round(view.pitch)}°. Arrastrá para girar e inclinar; flechas del teclado también. Clic: volver al norte`}
+        title="Arrastrá: ↔ girar · ↕ inclinar · Clic: volver al norte">
         <svg viewBox="0 0 24 24" aria-hidden style={{ transform: `rotate(${-view.bearing}deg)` }}><path d="M12 3l3.2 9H8.8z" className="n" /><path d="M12 21l-3.2-9h6.4z" className="s" /></svg>
         <small>{card}</small>
       </button>
@@ -821,13 +985,27 @@ function ViewControl({ view, map }: { view: { bearing: number; pitch: number }; 
    Cuadro de la cámara flotando sobre la parada, unido al punto por un haz (como una proyección de
    cámara). Solo muestra evidencia real; mientras no la hay, el marcador con el logo en B/N. */
 const SNAP_W = 152, SNAP_H = 128, SNAP_GAP = 14, SNAP_BEAM = 44;
+
+/** Flecha de sentido a mitad de cada tramo del camino (por distancia), orientada como la calle en ese punto. */
+function routeArrows(pts: LngLat[], stopAt: number[]): { p: LngLat; deg: number }[] {
+  if (pts.length < 2) return [];
+  const kx = Math.cos((pts[0][1] * Math.PI) / 180);
+  const seg = pts.slice(1).map((q, i) => Math.hypot((q[0] - pts[i][0]) * kx, q[1] - pts[i][1]));
+  const cum = [0]; seg.forEach((d) => cum.push(cum[cum.length - 1] + d));
+  return stopAt.slice(1).map((ix, k) => {
+    const d = (cum[stopAt[k]] + cum[ix]) / 2; let i = 0;
+    while (i < seg.length - 1 && cum[i + 1] <= d) i++;
+    const f = seg[i] ? Math.min(1, (d - cum[i]) / seg[i]) : 0; const a = pts[i], b = pts[i + 1];
+    return { p: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f] as LngLat, deg: (Math.atan2((b[0] - a[0]) * kx, b[1] - a[1]) * 180) / Math.PI };
+  });
+}
 function SnapCard({ s, n, side, beam, now, last }: { s: RouteStop; n: number; side: 'l' | 'r'; beam: number; now: boolean; last: boolean }) {
   const sn = s.snap!; const W = 2 * (SNAP_W + SNAP_GAP); const cx = W / 2;
   const x0 = side === 'r' ? cx + SNAP_GAP : 0, x1 = x0 + SNAP_W;
   return (
     <span className={`mk-snap ${now ? 'now' : ''} ${last ? 'last' : ''}`} style={{ width: W, height: SNAP_H + beam }} role="img" aria-label={`Captura ${n}: cámara ${sn.camera}, ${s.time ?? ''}`}>
       <span className="sn-card" style={{ left: x0, width: SNAP_W }}>
-        <span className="sn-frame"><Evidence ev={sn.evidence} small /><i className="sn-scan" aria-hidden /><b className="sn-idx">{String(n).padStart(2, '0')}</b></span>
+        <span className="sn-frame">{s.clip ? <span className="thumb"><video src={s.clip.src} poster={s.clip.poster} muted loop autoPlay playsInline /></span> : <Evidence ev={sn.evidence} small />}<i className="sn-scan" aria-hidden /><b className="sn-idx">{String(n).padStart(2, '0')}</b></span>
         <span className="sn-row"><b>CAM {sn.camera}</b><em>{s.time}</em></span>
         <span className="sn-row sub"><span>{sn.street}</span>{sn.confidence != null && <em>{Math.round(sn.confidence * 100)} %</em>}</span>
       </span>

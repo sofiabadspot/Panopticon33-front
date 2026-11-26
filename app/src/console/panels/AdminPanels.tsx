@@ -1,10 +1,10 @@
 /* Columna izquierda del administrador y del auditor: navegación y filtros.
    La tabla o el formulario se abre a la derecha, con el mapa siempre visible. */
-import { isListStale, useApi } from '../../api';
+import { eventStatus, isListStale, useApi } from '../../api';
 import { useNow } from '../../ui/kit';
 import { Icon } from '../../ui/kit';
 import { useConsole } from '../ctx';
-import { TABS } from '../sheets/configSections';
+import { CONFIG_GROUPS, type ConfigTab } from '../sheets/configTabs';
 
 export function ConfigNav() {
   const c = useConsole();
@@ -14,28 +14,42 @@ export function ConfigNav() {
   const rules = useApi((s) => s.rules);
   const zones = useApi((s) => s.zones);
   const users = useApi((s) => s.users);
-  const policeSource = useApi((s) => s.policeSource);
-  const current = c.sheet?.k === 'config' ? c.sheet.tab ?? 'camaras' : null;
-  const info: Record<string, [string, 'media' | 'ok' | '']> = {
+  const events = useApi((s) => s.events);
+  /* La sección marcada sigue a lo que está abierto: un evento abierto marca Eventos, aunque sea su ficha. */
+  const s = c.sheet;
+  const current: ConfigTab | null = !s ? null : s.k === 'config' ? ((s.tab ?? 'zonas') as ConfigTab)
+    : s.k === 'evento' || s.k === 'evento-form' ? 'eventos' : s.k === 'zona' ? 'zonas' : s.k === 'camara' ? 'camaras' : null;
+  const noZones = zones.filter((z) => !z.cameras.length).length;
+  const upcoming = events.filter((e) => eventStatus(e, now) !== 'finalizado').length;
+  const staleLists = lists.filter((l) => isListStale(l, now)).length;
+  const info: Record<ConfigTab, [string, 'media' | 'ok' | '']> = {
+    zonas: [noZones ? `${zones.length} zonas · ${noZones} sin cámara` : `${zones.length} zonas`, noZones ? 'media' : 'ok'],
     camaras: [`${cameras.filter((x) => x.status === 'operativa').length} de ${cameras.length} operativas`, cameras.some((x) => x.status !== 'operativa') ? 'media' : 'ok'],
-    zonas: [`${zones.length} zonas dibujadas`, ''],
+    eventos: [upcoming ? `${upcoming} en curso o próximos` : 'Ninguno próximo', ''],
     reglas: [`${rules.filter((r) => r.source === 'supuesto').length} umbrales por confirmar`, rules.some((r) => r.source === 'supuesto') ? 'media' : 'ok'],
-    listas: [lists.some((l) => isListStale(l, now)) ? 'Lista desactualizada' : 'Al día', lists.some((l) => isListStale(l, now)) ? 'media' : 'ok'],
-    ubicacion: [policeSource ? 'Conectada' : 'Sin acceso', policeSource ? 'ok' : ''],
-    usuarios: [`${users.filter((u) => u.active).length} usuarios activos`, ''],
+    listas: [staleLists ? `${staleLists} desactualizadas` : `${lists.length} listas al día`, staleLists ? 'media' : 'ok'],
+    roles: ['Capas y alertas de cada rol', ''],
+    usuarios: [`${users.filter((u) => u.active).length} activos de ${users.length}`, ''],
   };
   return (
-    <ul className="list pb flush">
-      {TABS.map(([k, label, icon]) => (
-        <li key={k}>
-          <button className={`item ${current === k ? 'sel' : ''}`} onClick={() => c.open({ k: 'config', tab: k })}>
-            <span className="ic"><Icon name={icon} /></span>
-            <div><div className="t">{label}</div><div className="s">{info[k][0]}</div></div>
-            <div className="r">{info[k][1] === 'media' && <span className="sev media" aria-label="Requiere atención" />}{info[k][1] === 'ok' && <span className="dot" aria-label="Bien" />}</div>
-          </button>
-        </li>
+    <div className="pb flush">
+      {CONFIG_GROUPS.map((g) => (
+        <div key={g.label}>
+          <div className="sect">{g.label}</div>
+          <ul className="list flush">
+            {g.tabs.map(([k, label, icon]) => (
+              <li key={k}>
+                <button className={`item ${current === k ? 'sel' : ''}`} aria-current={current === k} onClick={() => c.open({ k: 'config', tab: k })}>
+                  <span className="ic"><Icon name={icon} /></span>
+                  <div><div className="t">{label}</div><div className="s">{info[k][0]}</div></div>
+                  <div className="r">{info[k][1] === 'media' && <span className="sev media" aria-label="Requiere atención" />}{info[k][1] === 'ok' && <span className="dot" aria-label="Bien" />}</div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       ))}
-    </ul>
+    </div>
   );
 }
 

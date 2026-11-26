@@ -49,11 +49,11 @@ export function Search() {
     const has = (s: string) => s.toLowerCase().includes(t);
     const out: Result[] = [];
     const np = normalizePlate(q);
-    if (role !== 'auditor') out.push({ group: 'Jules', icon: 'auto_awesome', label: `Preguntar a Jules: "${q.trim()}"`, sub: 'Consulta y recomienda; no ejecuta acciones', ref: 'jules:' + q.trim(), run: () => c.askJules(q.trim()) });
+    out.push({ group: 'Jules', icon: 'auto_awesome', label: `Preguntar a Jules: "${q.trim()}"`, sub: 'Consulta y recomienda; no ejecuta acciones', ref: 'jules:' + q.trim(), run: () => c.askJules(q.trim()) });
     if (PLATE_RE.test(q.trim())) {
       if (role === 'analyst' && !/[*?]/.test(q)) out.push({ group: 'Placas', icon: 'badge', label: `Ficha del vehículo ${q.trim().toUpperCase()}`, sub: 'Pide motivo; queda en la bitácora', ref: 'vehiculo:' + q.trim().toUpperCase(), run: () => openVehicle(q.trim().toUpperCase()) });
       for (const a of alerts.filter((x) => x.plate && (normalizePlate(x.plate.listed).includes(np.replace(/[*?]/g, '')) || normalizePlate(x.plate.read).includes(np.replace(/[*?]/g, ''))))) {
-        if (role === 'admin' || role === 'auditor') break;
+        if (role === 'admin') break;
         out.push({ group: 'Placas', icon: 'directions_car', label: `${a.plate!.listed} · ${KIND_PHRASE[a.kind]}`, sub: a.id, ref: 'alerta:' + a.id, run: () => c.open({ k: 'alerta', id: a.id }) });
       }
     }
@@ -95,7 +95,7 @@ export function Search() {
     <div className="search-box" ref={box}>
       <div className="search-in">
         <Icon name="search" />
-        <input ref={input} value={q} placeholder={role === 'auditor' ? 'Buscar zona, placa, alerta, cámara o evento' : 'Buscar zona, placa, cámara… o preguntarle a Jules'}
+        <input ref={input} value={q} placeholder="Buscar zona, placa, cámara… o preguntarle a Jules"
           onFocus={() => setOpen(true)} onChange={(e) => { setQ(e.target.value); setSel(0); setOpen(true); }}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(shown.length - 1, s + 1)); }

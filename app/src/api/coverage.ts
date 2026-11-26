@@ -7,7 +7,7 @@
    Una sola capa, con tres lecturas a elegir: personas, cobertura o alertas.
 
    En producción esto lo calcula el backend (mismas celdas H3). Hoy usa los datos simulados. */
-import { cellToBoundary, cellToChildren, cellToLatLng, cellToParent, cellsToMultiPolygon, getResolution, gridDisk, latLngToCell, polygonToCells } from 'h3-js';
+import { cellArea, cellToBoundary, cellToChildren, cellToLatLng, cellToParent, cellsToMultiPolygon, getResolution, gridDisk, latLngToCell, polygonToCells, UNITS } from 'h3-js';
 import type { Alert, Camera, LngLat, Unit, Zone, ZoneStatus } from './types';
 
 /** Qué muestran los hexágonos del mapa. */
@@ -180,6 +180,7 @@ export function hexValues(metric: HexMetric, g: HexGrid, d: HexData): Float64Arr
 export function zoneHexes(zones: Zone[]): string[] {
   const cells = new Set<string>();
   for (const z of zones) {
+    if (z.cells?.length) { for (const c of z.cells) cells.add(c); continue; }
     const inside = polygonToCells([z.ring.map(([lon, lat]) => [lat, lon])], HEX_RES);
     for (const c of inside.length ? inside : [latLngToCell(z.lat, z.lon, HEX_RES)]) for (const n of gridDisk(c, 1)) cells.add(n);
   }
@@ -195,6 +196,42 @@ export function cellsAtRes(cells: string[], res: number): string[] {
 }
 /** Contorno de un conjunto de celdas, unidas en una sola figura. Coordenadas GeoJSON (MultiPolygon). */
 export const hexesOutline = (cells: string[]): LngLat[][][] => (cells.length ? (cellsToMultiPolygon(cells, true) as LngLat[][][]) : []);
+
+/* ---------- Elegir hexágonos (zonas y eventos se delimitan así) ---------- */
+/** Hexágono del dato (HEX_RES) bajo un punto del mapa. */
+export const cellAt = (p: LngLat) => latLngToCell(p[1], p[0], HEX_RES);
+/** Hexágonos del dato que caen en un rectángulo del mapa ([oeste, sur], [este, norte]); como mucho `max`. */
+export function hexesInView([[w, so], [e, n]]: [LngLat, LngLat], max: number): string[] {
+  const cells = polygonToCells([[[so, w], [so, e], [n, e], [n, w], [so, w]]], HEX_RES);
+  return cells.length > max ? [] : cells;
+}
+/** Suma el hexágono del punto, o lo quita si ya estaba. */
+export const toggleCell = (cells: string[], p: LngLat) => { const c = cellAt(p); return cells.includes(c) ? cells.filter((x) => x !== c) : [...cells, c]; };
+/** Agranda la selección un anillo de hexágonos. */
+export const growCells = (cells: string[]) => [...new Set(cells.flatMap((c) => gridDisk(c, 1)))];
+/** Área de unos hexágonos (m²). */
+export const cellsArea = (cells: string[]) => cells.reduce((n, c) => n + cellArea(c, UNITS.m2), 0);
+/** Hexágonos de un círculo (centro y radio en m), para importar zonas por CSV. */
+export const cellsAround = (p: LngLat, radiusM: number) => gridDisk(cellAt(p), Math.max(0, Math.round(radiusM / HEX_STEP_M)));
+/** ¿Los hexágonos forman un solo bloque? (una zona no puede quedar partida en dos) */
+export const isContiguous = (cells: string[]) => cells.length <= 1 || hexesOutline(cells).length === 1;
+/** Contorno y centro de unos hexágonos: la forma que guarda la zona. Toma el bloque más grande. */
+export function cellsShape(cells: string[]): { ring: LngLat[]; lat: number; lon: number } {
+  const polys = hexesOutline(cells);
+  const outer = polys.map((p) => p[0]).sort((a, b) => b.length - a.length)[0] ?? [];
+  const pts = cells.map((c) => cellToLatLng(c));
+  return { ring: outer, lat: pts.reduce((n, q) => n + q[0], 0) / (pts.length || 1), lon: pts.reduce((n, q) => n + q[1], 0) / (pts.length || 1) };
+}
+/** Zonas que tocan unos hexágonos (comparten al menos uno). */
+/** Hexágonos propios de una zona, sin el anillo de margen que se dibuja alrededor de las zonas anteriores
+    (ese anillo se pisa con las vecinas). */
+export const zoneCore = (z: Zone) => {
+  if (z.cells?.length) return z.cells;
+  const inside = polygonToCells([z.ring.map(([lon, lat]) => [lat, lon])], HEX_RES);
+  return inside.length ? inside : [latLngToCell(z.lat, z.lon, HEX_RES)];
+};
+/** Zonas que tocan unos hexágonos (comparten al menos uno propio). */
+export const zonesTouching = (cells: string[], zones: Zone[]) => { const s = new Set(cells); return zones.filter((z) => zoneCore(z).some((c) => s.has(c))); };
 
 /** Contorno de un hexágono para el mapa ([lon, lat], cerrado). */
 export function hexRing(cell: string): LngLat[] { const b = cellToBoundary(cell).map(([lat, lon]) => [lon, lat] as LngLat); return [...b, b[0]]; }

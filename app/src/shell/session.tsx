@@ -6,7 +6,7 @@ import type { Role, User } from '../api/types';
    En producción el rol llega del token de Keycloak; en la demo se elige al ingresar
    (y se puede cambiar en la barra superior). La sesión se guarda en este navegador. */
 
-const ROLES: Role[] = ['command', 'operator_911', 'analyst', 'admin', 'auditor'];
+const ROLES: Role[] = ['command', 'operator_911', 'analyst', 'admin'];
 
 type SessionCtx = {
   user: User;

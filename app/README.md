@@ -26,7 +26,6 @@ npm run build      # genera dist/ para servir desde el servidor del Ministerio
 | Operador 911 (`operator_911`) | Bandeja de alertas | Bandeja (confirma C / descarta D), Estado, Verificación facial (fase 3, deshabilitada) |
 | Analista (`analyst`) | Investigar | Investigar: placas, historial de alertas y zonas; Alertas, Estado, Eventos |
 | Administrador (`admin`) | Configuración | Configuración (zonas dibujadas en el mapa), Eventos (alta y edición), Estado |
-| Auditor (`auditor`) | Bitácora | Bitácora, Estado |
 
 ## Estructura
 

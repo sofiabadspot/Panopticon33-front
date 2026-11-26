@@ -3,7 +3,7 @@
    manda desde acá, sin Maic; descartar pide un motivo de una lista corta. A Maic le llega el evento
    por el backend. Tras decidir, la ficha ofrece pasar a la siguiente alerta por revisar. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { audit, AVAIL_LABEL, confirmAlert, discardAlert, forOperator, nearestFree, openAlert, readsOf, sightingsOf, suggestedUnits, unitOptions, useApi } from '../../api';
+import { audit, AVAIL_LABEL, confirmAlert, discardAlert, forOperator, inScope, nearestFree, openAlert, readsOf, sightingsOf, suggestedUnits, unitOptions, useApi } from '../../api';
 import { ago, dateTime, dec1, fmt, fmtCrowd, hhmm, pct } from '../../api/format';
 import { DISCARD_REASONS, DISPATCH_LABEL, KIND_LABEL, KIND_PHRASE } from '../../api/labels';
 import type { Alert, PlateRead, Zone } from '../../api/types';
@@ -74,9 +74,9 @@ export function AlertSheet({ id }: { id: string }) {
 
   // Una alerta de persona se decide en la ficha facial (ahí está la verificación), no acá.
   const canDecide = !!a && role === 'operator_911' && a.review === 'por_revisar' && a.kind !== 'persona_en_lista';
-  const next = () => alerts.filter((x) => forOperator(x) && x.review === 'por_revisar' && x.id !== id).sort(byUrgency)[0];
+  const next = () => alerts.filter((x) => forOperator(x) && inScope(x, user) && x.review === 'por_revisar' && x.id !== id).sort(byUrgency)[0];
   const advance = () => { const n = next(); if (n) go({ k: 'alerta', id: n.id }); };
-  const pendingCount = alerts.filter((x) => forOperator(x) && x.review === 'por_revisar' && x.id !== id).length;
+  const pendingCount = alerts.filter((x) => forOperator(x) && inScope(x, user) && x.review === 'por_revisar' && x.id !== id).length;
   /* Confirmar: primero se eligen los refuerzos (si el tipo de alerta los lleva). Al mandarlos, la ficha
      se queda en la alerta y muestra el despacho paso a paso; en el mapa sale una emisión sobre el punto.
      El operador pasa a la siguiente cuando quiere. */

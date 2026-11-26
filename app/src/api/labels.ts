@@ -7,12 +7,11 @@ export const ROLE_LABEL: Record<Role, string> = {
   operator_911: 'Operador 911',
   analyst: 'Analista',
   admin: 'Administrador',
-  auditor: 'Auditor',
 };
 
 export const KIND_LABEL: Record<AlertKind, string> = {
   aglomeracion: 'Aglomeración',
-  brecha_presencia: 'Brecha de presencia',
+  brecha_presencia: 'Falta policía',
   placa_en_lista: 'Placa en lista',
   persona_en_lista: 'Persona en lista',
   camara_caida: 'Cámara caída',
@@ -37,6 +36,9 @@ export const KIND_ICON: Record<AlertKind, string> = {
 
 export const SEVERITY_LABEL: Record<Severity, string> = { critica: 'Crítica', media: 'Media', baja: 'Baja' };
 export const SEVERITY_RANK: Record<Severity, number> = { critica: 0, media: 1, baja: 2 };
+/** Tiempo objetivo para que el 911 decida, por criticidad (minutos). Propuesta inicial, a validar con
+    Gerardo; después se configura en Reglas y umbrales. Pasado este tiempo la alerta muestra su atraso. */
+export const SEVERITY_TARGET_MIN: Record<Severity, number> = { critica: 2, media: 5, baja: 15 };
 
 export const REVIEW_LABEL: Record<ReviewStatus, string> = { por_revisar: 'Por revisar', confirmada: 'Confirmada', descartada: 'Descartada' };
 

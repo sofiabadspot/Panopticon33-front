@@ -9,9 +9,11 @@ const KINDS: [AlertKind, string, string][] = [
   ['placa_en_lista', 'Placa en lista', 'Una cámara leyó una placa con reporte (robo, orden de captura).'],
   ['persona_en_lista', 'Persona en lista', 'Un punto de control vio a una persona de una lista (buscadas, en investigación, desaparecidas).'],
   ['aglomeracion', 'Aglomeración', 'Una zona supera su capacidad o la densidad permitida.'],
-  ['brecha_presencia', 'Brecha de presencia', 'Hay demasiadas personas por cada policía en una zona.'],
+  ['brecha_presencia', 'Falta policía', 'Hay demasiadas personas por cada policía en una zona.'],
   ['camara_caida', 'Cámara sin video', 'Una cámara dejó de enviar imagen y deja un punto ciego.'],
 ];
+/** Hora de referencia de los ejemplos de esta hoja (al abrirla). */
+const SAMPLE_AT = Date.now();
 const UNITS: [UnitType, string][] = [['Patrulla', 'Patrulla'], ['Motorizada', 'Motorizada'], ['A pie', 'Agente a pie']];
 const CAMS: [CameraStatus, string, string][] = [
   ['operativa', 'Operativa', 'Envía video y mide.'],
@@ -27,19 +29,23 @@ export function IconSheet() {
         <span className="is-lbl">Panóptico 33 · Sistema iconográfico</span>
         <h1>Cada cosa en el mapa se reconoce por su forma</h1>
         <ol className="is-rules">
-          <li><b>La forma de afuera dice la categoría.</b> Alerta: mira de fijación con asta. Unidad: hexágono. Cámara: nodo con mira.</li>
-          <li><b>El dibujo de adentro dice el tipo.</b> Placa, multitud, falta de presencia o cámara; patrulla, moto o agente.</li>
-          <li><b>El rojo es solo para alertas que esperan una decisión.</b> Todas se ven igual: no hay niveles en el mapa. Las que ya se confirmaron o se descartaron quedan en gris.</li>
+          <li><b>La forma de afuera dice la categoría.</b> Alerta: chapa cuadrada con asta. Unidad: hexágono. Cámara: nodo con mira.</li>
+          <li><b>El dibujo de adentro dice el tipo.</b> Auto, cara, tres personas, policía con un menos o cámara tachada; patrulla, moto o agente.</li>
+          <li><b>Las barras dicen la criticidad</b> (3 crítica, 2 media, 1 baja) y el marco la repite en rojo, amarillo o gris.</li>
+          <li><b>El borde blanco es la espera.</b> Se completa hasta el tiempo objetivo de su criticidad; al llegar al final se va y queda el atraso arriba (+3′), que sigue contando.</li>
         </ol>
       </header>
 
       <section className="is-sec">
-        <h2 className="is-lbl">Alertas · mira de fijación</h2>
-        <div className="is-table" style={{ gridTemplateColumns: 'minmax(220px, 1.4fr) minmax(96px, 1fr) 2fr' }}>
+        <h2 className="is-lbl">Alertas · chapa con asta</h2>
+        <div className="is-table" style={{ gridTemplateColumns: 'minmax(220px, 1.4fr) repeat(4, minmax(72px, 1fr))' }}>
+          <span /><span className="is-col">Crítica</span><span className="is-col">Media</span><span className="is-col">Baja · atrasada</span><span className="is-col">Confirmada</span>
           {KINDS.map(([k, name, desc]) => (<Fragment key={k}>
             <div key={k + 'n'} className="is-name"><b>{name}</b><span>{desc}</span></div>
-            <span className="is-cell"><AlertMark kind={k} /></span>
-            <span />
+            <span className="is-cell"><AlertMark kind={k} severity="critica" since={SAMPLE_AT - 40000} /></span>
+            <span className="is-cell"><AlertMark kind={k} severity="media" since={SAMPLE_AT - 150000} /></span>
+            <span className="is-cell"><AlertMark kind={k} severity="baja" since={SAMPLE_AT - 18 * 60000} /></span>
+            <span className="is-cell"><AlertMark kind={k} severity="media" state="confirmada" units={2} /></span>
           </Fragment>))}
         </div>
       </section>
@@ -83,7 +89,7 @@ export function IconSheet() {
       <section className="is-sec">
         <h2 className="is-lbl">Grupos · al alejar el zoom</h2>
         <div className="is-row">
-          <div className="is-item"><GroupChip cat="alerts" n={4} /><div><b>Alertas</b><span>Cuántas esperan decisión en ese lugar.</span></div></div>
+          <div className="is-item"><GroupChip cat="alerts" n={4} severity="critica" alerts={[{ severity: 'critica', createdAt: SAMPLE_AT - 5 * 60000, waiting: true }]} /><div><b>Alertas</b><span>Cuántas hay, la criticidad más alta y, si alguna se pasó, el atraso más grande. Sin dibujo: pueden ser de tipos distintos.</span></div></div>
           <div className="is-item"><GroupChip cat="units" n={12} /><div><b>Unidades</b><span>Todas las de una zona juntas.</span></div></div>
           <div className="is-item"><GroupChip cat="cameras" n={6} /><div><b>Cámaras</b></div></div>
         </div>
@@ -92,18 +98,18 @@ export function IconSheet() {
       <section className="is-sec">
         <h2 className="is-lbl">En contexto · sobre el mapa</h2>
         <div className="is-map">
-          <span style={{ left: '18%', top: '30%' }}><AlertMark kind="placa_en_lista" /></span>
+          <span style={{ left: '18%', top: '30%' }}><AlertMark kind="placa_en_lista" severity="media" since={SAMPLE_AT - 60000} /></span>
           <span style={{ left: '27%', top: '38%' }}><UnitHex type="Patrulla" /></span>
           <span style={{ left: '34%', top: '26%' }}><CameraNode status="operativa" /></span>
-          <span style={{ left: '52%', top: '48%' }}><AlertMark kind="aglomeracion" /></span>
+          <span style={{ left: '52%', top: '48%' }}><AlertMark kind="aglomeracion" severity="critica" since={SAMPLE_AT - 70000} /></span>
           <span style={{ left: '60%', top: '58%' }}><UnitHex type="A pie" /></span>
           <span style={{ left: '64%', top: '40%' }}><UnitHex type="Motorizada" /></span>
-          <span style={{ left: '74%', top: '28%' }}><AlertMark kind="brecha_presencia" /></span>
-          <span style={{ left: '82%', top: '62%' }}><AlertMark kind="camara_caida" /></span>
+          <span style={{ left: '74%', top: '28%' }}><AlertMark kind="brecha_presencia" severity="critica" since={SAMPLE_AT - 4 * 60000} /></span>
+          <span style={{ left: '82%', top: '62%' }}><AlertMark kind="camara_caida" severity="baja" since={SAMPLE_AT - 6 * 60000} /></span>
           <span style={{ left: '44%', top: '70%' }}><CameraNode status="caida" /></span>
           <span style={{ left: '12%', top: '68%' }}><GroupChip cat="units" n={12} /></span>
         </div>
-        <p className="is-note">La placa (alerta) y la patrulla (unidad) ya no se confunden: una es una mira roja con asta, la otra un hexágono negro.</p>
+        <p className="is-note">La placa (alerta) y la patrulla (unidad) ya no se confunden: una es una chapa con asta, la otra un hexágono negro.</p>
       </section>
     </main>
   );
