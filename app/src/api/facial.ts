@@ -1,4 +1,4 @@
-/* Verificación facial (fase 3): solo en puntos de control habilitados con SpotBox, contra listas
+/* Reconocimiento facial (fase 3): solo en puntos de control habilitados con SpotBox, contra listas
    autorizadas (personas buscadas, en investigación, desaparecidas). Una coincidencia nunca es una
    identificación: el operador 911 tiene el veredicto final. Los rostros que no coinciden no se guardan.
 
@@ -293,15 +293,15 @@ export function confirmFacial(id: string, user: User) {
   set((m) => ({ ...m, status: 'confirmada', reviewedBy: user.name, timeline: [...m.timeline,
     { at: Date.now(), label: 'Identidad confirmada por el operador 911: se genera la alerta', by: user.name },
     { at: Date.now(), label: 'Se avisa al agente con foto de referencia, motivo y certeza' }] }), id);
-  audit(user, 'Confirmar coincidencia facial', id, 'Verificación facial · alerta generada');
+  audit(user, 'Confirmar coincidencia facial', id, 'Reconocimiento facial · alerta generada');
 }
 export function discardFacial(id: string, reason: string, user: User) {
   set((m) => ({ ...m, status: 'descartada', reviewedBy: user.name, discardReason: reason, timeline: [...m.timeline, { at: Date.now(), label: `Descartada: ${reason}`, by: user.name }] }), id);
-  audit(user, 'Descartar coincidencia facial', id, 'Verificación facial', reason);
+  audit(user, 'Descartar coincidencia facial', id, 'Reconocimiento facial', reason);
 }
 /** El 911 le pide al agente del punto de control que verifique el documento (la confirmación más fuerte). */
 export function requestFieldCheck(id: string, user: User) {
   set((m) => ({ ...m, fieldCheck: { at: Date.now(), by: user.name }, timeline: [...m.timeline, { at: Date.now(), label: `Se pide al ${m.agent.split(' (')[0]} verificar el documento`, by: user.name }] }), id);
-  audit(user, 'Pedir verificación en terreno', id, 'Verificación facial · documento');
+  audit(user, 'Pedir verificación en terreno', id, 'Reconocimiento facial · documento');
 }
 export const FACIAL_DISCARD = ['No es la misma persona', 'Imagen insuficiente', 'Duplicada'] as const;

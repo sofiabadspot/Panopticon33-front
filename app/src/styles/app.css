@@ -1685,7 +1685,7 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 @keyframes snapin { from { opacity: 0; transform: translateY(8px) scaleY(.6); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .mk-snap { animation: none; } }
 
-/* ---------- Verificación facial ---------- */
+/* ---------- Reconocimiento facial ---------- */
 /* Reconstrucción 3D del perfil: nube de puntos en el mismo marco que la captura. El color de los puntos
    sale de `color` (tinta del tema). */
 .face-cloud { display: block; width: 100%; height: 100%; color: var(--ink-muted); background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--ink) 6%, transparent), transparent 70%); }
@@ -1744,7 +1744,7 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .av-ocupada { color: var(--status-alert); border-color: color-mix(in srgb, var(--status-alert) 45%, transparent); }
 .av-asignada { color: var(--ink); }
 
-/* ---------- Expediente de una persona (verificación facial, pantalla completa) ----------
+/* ---------- Expediente de una persona (reconocimiento facial, pantalla completa) ----------
    Lenguaje de sala de control: fondo oscuro con un halo, paneles con esquinas de mira, tipografía HUD.
    El acento (escaneo, puntos de referencia, conexiones activas) es el verde del tema. */
 .ds { --fc-accent: var(--primary); position: fixed; inset: 0; z-index: 70; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 14px; padding: 18px 22px 22px;

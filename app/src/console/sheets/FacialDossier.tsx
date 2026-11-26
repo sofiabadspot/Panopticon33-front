@@ -1,4 +1,4 @@
-/* Expediente de una persona a pantalla completa (verificación facial), para mando y para mostrar la
+/* Expediente de una persona a pantalla completa (reconocimiento facial), para mando y para mostrar la
    plataforma. Arriba: quién es y la decisión. Abajo: el mapa de la persona (ver PersonMap): la cara al centro y lo que se juntó saliendo de ella
    por categoría y por fecha, con buscador y el detalle al costado. Todo se abre en grande
    y se recorre con las flechas. Esc cierra el expediente (no la ficha). Todo es de ejemplo. */

@@ -44,7 +44,7 @@ export interface Unit { id: string; type: UnitType; status: UnitStatus; lat: num
   /** Mandada como refuerzo: va hacia un lugar (la alerta que la convocó, o un punto). Sin esto, está en su puesto. */
   enRoute?: { lat: number; lon: number; label: string; alertId?: string; since: number } | null }
 
-/** persona_en_lista: reconocimiento facial en un punto de control (sale de Verificación, api/facial.ts). */
+/** persona_en_lista: reconocimiento facial en un punto de control (sale de la pestaña Personas, api/facial.ts). */
 export type AlertKind = 'aglomeracion' | 'brecha_presencia' | 'placa_en_lista' | 'persona_en_lista' | 'camara_caida';
 export type Severity = 'critica' | 'media' | 'baja';
 export type ReviewStatus = 'por_revisar' | 'confirmada' | 'descartada';

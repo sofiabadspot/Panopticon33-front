@@ -34,7 +34,7 @@ function decode(v: string | null): Sheet | null {
 export interface Tool { id: PanelId; label: string; phase?: string }
 export const TOOLS: Record<Role, Tool[]> = {
   command: [{ id: 'estado', label: 'Estado' }, { id: 'alertas', label: 'Alertas' }, { id: 'eventos', label: 'Eventos' }],
-  operator_911: [{ id: 'alertas', label: 'Alertas' }, { id: 'verificacion', label: 'Verificación' }, { id: 'estado', label: 'Estado' }],
+  operator_911: [{ id: 'alertas', label: 'Alertas' }, { id: 'verificacion', label: 'Personas' }, { id: 'estado', label: 'Estado' }],
   analyst: [{ id: 'investigar', label: 'Investigaciones' }, { id: 'alertas', label: 'Alertas' }, { id: 'estado', label: 'Estado' }, { id: 'eventos', label: 'Eventos' }],
   admin: [{ id: 'config', label: 'Configuración' }, { id: 'eventos', label: 'Eventos' }, { id: 'estado', label: 'Estado' }],
   auditor: [{ id: 'bitacora', label: 'Bitácora' }, { id: 'estado', label: 'Estado' }],

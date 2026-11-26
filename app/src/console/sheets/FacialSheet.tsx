@@ -1,4 +1,4 @@
-/* Verificación facial (fase 3) — operador 911.
+/* Reconocimiento facial (fase 3) — operador 911.
    Panel: coincidencias de los puntos de control, filtrables por lista (buscadas, en investigación,
    desaparecidas). Una sola por persona: las detecciones nuevas se suman a la misma.
    Ficha: para decidir rápido si es la persona. Primero la coincidencia (la captura junto a la foto de la
@@ -135,7 +135,7 @@ export function FacialSheet({ id }: { id: string }) {
     return () => c.setOverlay({});
   }, [trace, m?.id, m?.detections.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!m) return <SheetHead kicker="Verificación facial" title="No encontrada" />;
+  if (!m) return <SheetHead kicker="Reconocimiento facial" title="No encontrada" />;
   const d = lastDetection(m);
   const L = FACIAL_LISTS[m.list];
   const toggleTrace = () => { if (!trace) audit(user, 'Ver recorrido de persona', m.listRef, `${m.detections.length} detecciones en el mapa`); setTrace(!trace); };
