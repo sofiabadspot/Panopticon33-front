@@ -16,7 +16,8 @@ import { streetRoute } from './streets';
 import { cellsAtRes, HEX_TIERS, hexesOutline, zoneHexes, hexRing, hexSignature, type HexData, type HexMetric } from '../api/coverage';
 import { drawHexLayer, makeHexLayer, unmeasured, type HexColors, type HexLayer } from './hexCanvas';
 import { CAM_REACH, cone, MapCard, type GroupCat, type Hover } from './markers';
-import { AlertMark, GroupChip, UnitHex } from './icons';
+import { AirSprite, AlertMark, GroupChip, UnitHex } from './icons';
+import { AIRCRAFT, airAt, airTrail } from '../api/aircraft';
 
 /** Confirmada con refuerzos en camino: se ve gestionada (gris con tick) y lo dice, hasta que llegan. */
 const goingTo = (a: Alert) => a.review === 'confirmada' && a.dispatch === 'en_camino';
@@ -33,7 +34,9 @@ export interface MapLayers { zones: boolean; cameras: boolean; units: boolean; a
   /** Campo de visión de las cámaras (ángulo y alcance). Apagado por defecto: carga mucho el mapa. */
   fov?: boolean;
   /** Hexágonos: qué muestran (personas, cobertura o alertas). null = apagados. */
-  hex?: HexMetric | null }
+  hex?: HexMetric | null;
+  /** Medios aéreos: drones y helicópteros. Prendidos por defecto. */
+  drones?: boolean; helis?: boolean }
 export interface RouteStop { lat: number; lon: number; label: string; title: string; /** Hora de la lectura, al lado del número. */ time?: string; /** Captura de la cámara que hizo la lectura: se proyecta sobre la parada. */
   snap?: { camera: string; street: string; evidence: Ev; confidence?: number } }
 
@@ -75,6 +78,8 @@ interface Props {
   /** Espacio ocupado por paneles encima del mapa, para encuadrar en la parte visible. */
   padding?: { top: number; right: number; bottom: number; left: number };
   onCameraClick?: (id: string) => void;
+  /** Clic en un dron o helicóptero: abre su ficha (transmisión y telemetría) en el lateral. */
+  onAirClick?: (id: string) => void;
   onPointer?: (p: LngLat | null) => void;
   /** Lo abierto en el lateral: se destaca y el resto del mapa queda atenuado. */
   focusSel?: { k: 'alerta' | 'zona' | 'camara'; id: string } | null;
@@ -168,6 +173,8 @@ export function MapView(p: Props) {
     metric: HexMetric | null; sig: string; at: number; timer: ReturnType<typeof setTimeout> | null; colors: HexColors | null }>(
     { grids: [], building: new Set(), metric: null, sig: '', at: 0, timer: null, colors: null });
   /* Recorrido animado: se dibuja de punta a punta con una estela; cada parada se enciende al pasar. */
+  /** Medios aéreos: si se dibujan, y cuándo se actualizó la estela por última vez. */
+  const air = useRef({ on: false, show: [] as typeof AIRCRAFT, trailAt: 0, trailShown: false });
   const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[] }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
   const [hud, setHud] = useState<{ reached: number; n: number; done: boolean } | null>(null);
   /* Capturas proyectadas sobre las paradas del recorrido: se pueden ocultar desde el HUD. */
@@ -201,6 +208,8 @@ export function MapView(p: Props) {
       map.addSource('cameras', { type: 'geojson', data: fc([]) });
       map.addSource('route', { type: 'geojson', data: fc([]) });
       map.addSource('routeGhost', { type: 'geojson', data: fc([]) });
+      // Estela de drones y helicópteros: se desvanece hacia la cola (line-progress necesita lineMetrics).
+      map.addSource('airTrail', { type: 'geojson', data: fc([]), lineMetrics: true });
       map.addSource('focusDim', { type: 'geojson', data: fc([{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]]] }, properties: {} }]) });
       // Modo foco: con un recorrido en pantalla, la base se oscurece y lo demás se esconde.
       map.addLayer({ id: 'focus-dim', type: 'fill', source: 'focusDim', paint: { 'fill-color': '#000', 'fill-opacity': 0, 'fill-opacity-transition': { duration: 500, delay: 0 } } });
@@ -239,6 +248,12 @@ export function MapView(p: Props) {
         'icon-image': ['concat', 'cam-', ['get', 'st']], 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.6, 16, 1],
         'icon-allow-overlap': true, 'icon-ignore-placement': true,
       }, paint: { 'icon-opacity': ['case', ['==', ['get', 'dim'], true], 0.25, 1] } });
+      map.addLayer({ id: 'air-trail-glow', type: 'line', source: 'airTrail', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: {
+        'line-width': ['interpolate', ['linear'], ['zoom'], 13, 5, 17, 10], 'line-blur': 6,
+        'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(0,0,0,0)', 1, 'rgba(0,0,0,0.55)'] } });
+      map.addLayer({ id: 'air-trail', type: 'line', source: 'airTrail', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: {
+        'line-width': ['interpolate', ['linear'], ['zoom'], 13, 2, 17, 3.5],
+        'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, 'rgba(255,255,255,0)', 0.6, 'rgba(255,255,255,0.45)', 1, 'rgba(255,255,255,0.95)'] } });
       map.addLayer({ id: 'route-ghost', type: 'line', source: 'routeGhost', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ink, 'line-width': 1.2, 'line-opacity': 0.28, 'line-dasharray': [1, 2.5] } });
       map.addLayer({ id: 'route-glow', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ink, 'line-width': 12, 'line-blur': 9, 'line-opacity': 0.4 } });
       map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': ink, 'line-width': 2.6 } });
@@ -531,8 +546,10 @@ export function MapView(p: Props) {
       if (!h) {
         const div = document.createElement(onClick ? 'button' : 'div');
         if (onClick) div.addEventListener('click', (e) => { e.stopPropagation(); h!.onClick?.(); });
-        div.addEventListener('mouseenter', (e) => { const me = e as MouseEvent; if (h!.hover) setHover(h!.hover(me.clientX, me.clientY)); });
-        div.addEventListener('mouseleave', () => { if (h!.hover) setHover(null); });
+        // Drones y helicópteros se mueven: al salir el cursor la ficha espera un instante, por si el ícono solo se corrió.
+        let leave = 0;
+        div.addEventListener('mouseenter', (e) => { clearTimeout(leave); const me = e as MouseEvent; if (h!.hover) setHover(h!.hover(me.clientX, me.clientY)); });
+        div.addEventListener('mouseleave', () => { if (!h!.hover) return; if (key.startsWith('air')) leave = window.setTimeout(() => setHover(null), 600); else setHover(null); });
         const root = createRoot(div);
         h = { m: new maplibregl.Marker({ element: div, anchor }).setLngLat(lngLat).addTo(map), root, el: div };
         markers.current.set(key, h);
@@ -615,6 +632,21 @@ export function MapView(p: Props) {
       const us = split(P.units.filter((u) => !u.enRoute), (u) => [u.lon, u.lat], (u) => u.zoneId, 1, { zoneBelow: 14.5, cell: zoom >= 17 ? 0 : zoom >= 13.5 ? 22 : 44 });
       for (const u of us.singles) add('u' + u.id, [u.lon, u.lat], <UnitHex type={u.type} status={u.status} size={22} />, undefined, 'center', `${u.id} · ${u.type}`, (x, y) => ({ kind: 'unit', id: u.id, x, y }));
       us.groups.forEach((g) => groupMk('units', g));
+    }
+    // Drones y helicópteros: cada tipo con su chip de capa, nunca agrupados. La posición la mueve la animación
+    // de cada cuadro (moveAir); acá solo se crean, con la altitud al lado si hay zoom.
+    // Al pasar el mouse, la ficha de monitoreo; con un clic, su ficha en el lateral con la transmisión de la
+    // cámara de a bordo (como lo vio el ministro en el sistema del Gobierno, reunión del 25/11).
+    // Cada tipo tiene su chip en la franja de capas (Drones, Helicópteros).
+    air.current.show = AIRCRAFT.filter((a) => (a.type === 'Dron' ? L.drones !== false : L.helis !== false));
+    air.current.on = detail && air.current.show.length > 0;
+    // Si se apaga el tipo con su ficha abierta, la ficha se cierra.
+    setHover((h) => (h?.kind === 'air' && !(air.current.on && air.current.show.some((x) => x.id === h.id)) ? null : h));
+    if (air.current.on) for (const a of air.current.show) {
+      const f = airAt(a, Date.now());
+      const open = P.onAirClick ? () => { setHover(null); P.onAirClick!(a.id); } : undefined;
+      add('air' + a.id, [f.lon, f.lat], <span className="mk-air"><AirSprite type={a.type} heading={f.heading} />{zoom >= 15.5 && <em className="air-tag">{f.altM} m</em>}</span>,
+        open, 'center', `${a.type} ${a.id} · ${a.mission} · ver transmisión`, (x, y) => ({ kind: 'air', id: a.id, x, y }));
     }
     const alertSplit = focus ? { singles: [] as Alert[], groups: [] } : L.alerts && P.alerts && detail && !P.compact ? split(P.alerts, (a) => [a.lon, a.lat], (a) => a.zoneId) : { singles: P.compact && L.alerts ? P.alerts ?? [] : [], groups: [] };
     // La alerta abierta en el lateral se dibuja siempre: aunque la capa Alertas esté apagada o quede dentro de un grupo.
@@ -700,6 +732,29 @@ export function MapView(p: Props) {
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setHover(null); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, []);
   const replay = () => { const R = cb.current.route; if (R && R.length > 1) playRoute(R); };
   useEffect(() => () => { cancelAnimationFrame(anim.current.raf); if (field.current.timer) clearTimeout(field.current.timer); }, []);
+  /* ---------- Drones y helicópteros: se mueven en cada cuadro, sin pasar por React ---------- */
+  useEffect(() => {
+    let raf = 0;
+    const moveAir = () => {
+      raf = requestAnimationFrame(moveAir);
+      const map = mapRef.current; if (!map || !ready.current) return;
+      const A = air.current, now = Date.now();
+      if (A.on) for (const a of A.show) {
+        const h = markers.current.get('air' + a.id); if (!h) continue;
+        const f = airAt(a, now);
+        h.m.setLngLat([f.lon, f.lat]);
+        (h.el.querySelector('.air3d') as HTMLElement | null)?.style.setProperty('--hdg', `${f.heading}deg`);
+      }
+      // La estela se recalcula unas 8 veces por segundo: alcanza para que se vea continua.
+      const src = map.getSource('airTrail') as GeoJSONSource | undefined; if (!src) return;
+      if (A.on && now - A.trailAt > 120) {
+        A.trailAt = now; A.trailShown = true;
+        src.setData(fc(A.show.map((a) => ({ type: 'Feature', geometry: { type: 'LineString', coordinates: airTrail(a, now, 0.5) }, properties: { id: a.id } }))));
+      } else if (!A.on && A.trailShown) { A.trailShown = false; src.setData(fc([])); }
+    };
+    raf = requestAnimationFrame(moveAir);
+    return () => cancelAnimationFrame(raf);
+  }, []);
   useEffect(sync);
   useEffect(() => {
     const map = mapRef.current; if (!map) return;

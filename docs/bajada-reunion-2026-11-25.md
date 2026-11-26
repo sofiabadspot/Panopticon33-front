@@ -63,7 +63,8 @@ Una por una, en este orden. Entre paréntesis, el punto del detalle más abajo.
 32. [x] "¿Quién llega?": elegir qué patrullas mandar (las 1, 2 o 3 más cercanas, o a mano) y mandarlas a ese punto; las no activas se ven apagadas con el porqué
 33. [~] Reconocimiento facial: confirmar sin "enviar a Maic" (hecho; además es un tipo de alerta "Persona en lista" con su ícono). Falta sumar las integraciones de Aduanas, Interpol, PDI y Fiscalía
 34. [ ] Tipos de alerta y criticidad con formas, no solo color (retoma 6 y 7)
-35. [ ] Drones y helicópteros como objetos que se mueven en el mapa, junto a las patrullas
+35. [x] Drones y helicópteros como objetos que se mueven en el mapa, junto a las patrullas. Ícono plano visto desde arriba (sin hexágono) que gira con el rumbo, estela que se desvanece y altitud al acercar (idea de God's Eye View). Cada tipo con su chip de capa (Drones, Helicópteros). Simulados (2 drones en órbita y 1 helicóptero recorriendo el sector, en `api/aircraft.ts`); por ahora no se despachan ni suman a la cobertura
+39. [x] Monitoreo y transmisión de drones y helicópteros (de la reunión con el Gobierno: el Gobierno ya tiene acceso al video del dron y al streaming del helicóptero; en su sistema, el ministro hacía clic en el helicóptero y veía la transmisión en vivo). Al pasar el mouse, ficha de monitoreo (misión, altitud, velocidad, rumbo, estado del video); con un clic, su ficha en el lateral (como alertas y cámaras) con la transmisión y la telemetría; la transmisión se amplía sobre el mapa con el mismo visor que la evidencia de placas y rostros. Sin video real todavía: muestra "Esperando enlace de video" hasta conectar el de la PNC (`stream` en `api/aircraft.ts`)
 36. [ ] Vista "cinematográfica" del centro de control y de reconocimiento facial, con la marca Spot Vision
 37. [ ] Administración: cargar listas de rostros y de placas, de a una o en lote
 38. [ ] Hexágonos visibles que dejen leer los nombres de las calles

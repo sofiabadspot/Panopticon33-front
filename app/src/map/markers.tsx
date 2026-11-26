@@ -8,6 +8,8 @@ import { AGENTS } from '../api/seed';
 import { Icon, useNow } from '../ui/kit';
 import { cameraClip } from '../api/video';
 import { hhmmss } from '../api/format';
+import { AIRCRAFT, airAt, compass } from '../api/aircraft';
+import { AirGlyph } from './icons';
 
 /* ---------- Geometría de cámara ---------- */
 export const CAM_FOV = 62;      // grados
@@ -73,6 +75,7 @@ export function GroupMarker({ cat, n, sev }: { cat: GroupCat; n: number; sev?: s
 /* ---------- Ficha ---------- */
 export type Hover =
   | { kind: 'unit'; id: string; x: number; y: number }
+  | { kind: 'air'; id: string; x: number; y: number }
   | { kind: 'camera'; id: string; x: number; y: number }
   | { kind: 'group'; cat: GroupCat; ids: string[]; x: number; y: number };
 
@@ -98,6 +101,9 @@ export function MapCard({ h, units, cameras, zones, alerts }: { h: Hover; units:
       </div>
       <div className="mc-foot">{u.lat.toFixed(5)}, {u.lon.toFixed(5)}</div>
     </>);
+  } else if (h.kind === 'air') {
+    const a = AIRCRAFT.find((q) => q.id === h.id); if (!a) return null;
+    body = <AirCard id={a.id} />;
   } else if (h.kind === 'camera') {
     const c = cameras.find((q) => q.id === h.id); if (!c) return null;
     const clip = c.status === 'caida' ? null : cameraClip(c.id);
@@ -128,6 +134,25 @@ export function MapCard({ h, units, cameras, zones, alerts }: { h: Hover; units:
   const w = h.kind === 'camera' ? 320 : 280;
   const left = Math.min(h.x + 18, window.innerWidth - w - 12), top = Math.min(h.y + 18, window.innerHeight - (h.kind === 'camera' ? 200 : 280));
   return <div className="mapcard" role="tooltip" style={{ left, top, width: w }}>{body}</div>;
+}
+
+/** Ficha de monitoreo de un dron o helicóptero (al pasar el mouse): se refresca cada segundo porque se mueve
+    mientras se mira. Dice si su cámara está transmitiendo; con un clic se abre la transmisión. */
+function AirCard({ id }: { id: string }) {
+  const now = useNow(1000);
+  const a = AIRCRAFT.find((q) => q.id === id)!; const f = airAt(a, now);
+  return (<>
+    <div className="mc-hd"><span className="mc-eyebrow">Monitoreo aéreo PNC · simulado</span><span className="mc-state busy"><i />En vuelo</span></div>
+    <div className="mc-title"><span className="mc-ic"><AirGlyph type={a.type} /></span><div><b>{a.type}</b><small>{a.id}</small></div></div>
+    <div className="mc-grid">
+      <Row k="Misión" v={a.mission} />
+      <Row k="Altitud" v={`${f.altM} m`} />
+      <Row k="Velocidad" v={`${a.speedKmh} km/h`} />
+      <Row k="Rumbo" v={`${compass(f.heading)} · ${Math.round(f.heading)}°`} />
+      <Row k="Video" v={a.stream ? <span className="mc-go">En vivo</span> : 'Esperando enlace'} />
+    </div>
+    <div className="mc-foot">Clic para ver la transmisión</div>
+  </>);
 }
 
 /** Hora del cuadro en vivo, como la sobreimpresión de la cámara. */

@@ -2,7 +2,7 @@
    Muestra cada categoría con todos sus tipos y estados, y una vista "en contexto" sobre fondo de mapa.
    Se revisa acá antes de aplicarlo al mapa: lo que se ve en esta hoja es exactamente lo que va al mapa. */
 import { Fragment } from 'react';
-import { AlertMark, CameraNode, GroupChip, UnitHex } from '../map/icons';
+import { AirSprite, AlertMark, CameraNode, GroupChip, UnitHex } from '../map/icons';
 import type { AlertKind, CameraStatus, UnitType } from '../api/types';
 
 const KINDS: [AlertKind, string, string][] = [
@@ -56,6 +56,20 @@ export function IconSheet() {
           </Fragment>))}
         </div>
         <p className="is-note">Todas las unidades se ven igual: el estado (disponible, en servicio), la placa y los agentes están en la ficha al pasar el mouse.</p>
+      </section>
+
+      <section className="is-sec">
+        <h2 className="is-lbl">Medios aéreos · ícono que gira con el rumbo</h2>
+        <div className="is-table" style={{ gridTemplateColumns: 'minmax(220px, 1.4fr) repeat(2, minmax(76px, 1fr)) 2fr' }}>
+          <span /><span className="is-col">Al norte</span><span className="is-col">Al este</span><span />
+          {(['Dron', 'Helicóptero'] as const).map((t) => (<Fragment key={t}>
+            <div className="is-name"><b>{t}</b></div>
+            <span className="is-cell"><AirSprite type={t} /></span>
+            <span className="is-cell"><AirSprite type={t} heading={90} /></span>
+            <span />
+          </Fragment>))}
+        </div>
+        <p className="is-note">Tienen sus propios chips de capa (Drones y Helicópteros), prendidos por defecto, y nunca se agrupan. No llevan hexágono (son de aire, no de tierra): el ícono gira con el rumbo y deja una estela que se desvanece; la altitud aparece al acercar. Su ficha se abre con un clic (al pasar el mouse se escaparían). Por ahora solo se ven: no se despachan ni suman a la cobertura.</p>
       </section>
 
       <section className="is-sec">

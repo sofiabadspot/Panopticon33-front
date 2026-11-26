@@ -14,6 +14,7 @@
 
    Todos los dibujos son de 24 × 24, en currentColor y con trazo de 1,8. */
 import type { AlertKind, CameraStatus, UnitStatus, UnitType } from '../api/types';
+import type { AirType } from '../api/aircraft';
 
 /* ---------- Dibujos de tipo ---------- */
 
@@ -67,6 +68,49 @@ export function AlertGlyph({ kind }: { kind: AlertKind }) {
       <path d="M4 3.5l16.5 17" stroke="var(--surface)" strokeWidth="3.2" strokeLinecap="round" /><path d="M4 3.5l16.5 17" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
+}
+
+/** Medios aéreos: íconos planos vistos desde arriba, con la nariz hacia arriba (rumbo 0 = norte) para girar con
+    su rumbo. Silueta llena en currentColor, como los dibujos de las unidades; los huecos toman --hole. */
+export function AirGlyph({ type }: { type: AirType }) {
+  const H = 'var(--hole, var(--surface))';
+  if (type === 'Dron') return (
+    // Cuadricóptero: cuatro hélices (aro con su motor), brazos en X y el cuerpo con la cámara adelante.
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M6.2 6.2l11.6 11.6M17.8 6.2L6.2 17.8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      {[[5.2, 5.2], [18.8, 5.2], [5.2, 18.8], [18.8, 18.8]].map(([x, y]) => (
+        <g key={`${x}${y}`}><circle cx={x} cy={y} r="3.9" fill="none" stroke="currentColor" strokeWidth="1.6" /><circle cx={x} cy={y} r="1.3" fill="currentColor" /></g>
+      ))}
+      <rect x="8.9" y="7.6" width="6.2" height="8.8" rx="2.6" fill="currentColor" />
+      <circle cx="12" cy="9.6" r="1.25" fill={H} />
+    </svg>
+  );
+  return (
+    // Helicóptero: dos palas cruzadas sobre la cabina, botalón de cola y estabilizador.
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M3.6 1.8l16.8 14.4M20.4 1.8L3.6 16.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M12 3.4c2.6 0 3.9 2.3 3.9 5.4 0 2.7-1.4 4.4-2.8 5v5.4h-2.2v-5.4c-1.4-.6-2.8-2.3-2.8-5 0-3.1 1.3-5.4 3.9-5.4z" fill="currentColor" />
+      <path d="M10.2 5.4c.5-.8 1.1-1.1 1.8-1.1s1.3.3 1.8 1.1z" fill={H} />
+      <path d="M8.6 20.4h6.8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="9" r="1.1" fill={H} />
+    </svg>
+  );
+}
+
+/** Medio aéreo en el mapa: el ícono plano, sin el hexágono de las unidades de tierra (se lee como algo que
+    vuela), girando con el rumbo. El rumbo va en la variable CSS --hdg para que el mapa lo mueva sin redibujar. */
+export function AirSprite({ type, heading = 0, size }: { type: AirType; heading?: number; size?: number; still?: boolean }) {
+  const s = size ?? (type === 'Dron' ? 24 : 30);
+  return (
+    <span className={`air3d ${type === 'Dron' ? 'is-drone' : 'is-heli'}`} style={{ width: s, height: s, ['--hdg' as string]: `${heading}deg` }}>
+      <span className="air3d-body"><AirGlyph type={type} /></span>
+    </span>
+  );
+}
+
+/** Ícono chico del medio aéreo (chips de capa, leyendas). */
+export function AirHex({ type, size = 18 }: { type: AirType; size?: number }) {
+  return <AirSprite type={type} size={size} />;
 }
 
 /** Unidades: cómo se mueve. */

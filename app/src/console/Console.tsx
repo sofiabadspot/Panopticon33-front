@@ -15,7 +15,7 @@ import { nearZone } from '../api/place';
 import { ROLE_LABEL } from '../api/labels';
 import type { LngLat, Role } from '../api/types';
 import type { GoogleBase } from '../map/google';
-import { AlertMark, AlertTile, CameraNode, UnitHex } from '../map/icons';
+import { AirHex, AlertMark, AlertTile, CameraNode, UnitHex } from '../map/icons';
 import { coverageAt } from '../api/coverage';
 import { MapView, type MapLayers } from '../map/MapView';
 import type { HexMetric } from '../api/coverage';
@@ -42,6 +42,7 @@ import { JulesSheet } from './sheets/JulesSheet';
 import { FacialPanel, FacialSheet } from './sheets/FacialSheet';
 import { WhoArrives } from './WhoArrives';
 import { VehicleSheet } from './sheets/VehicleSheet';
+import { AirSheet } from './sheets/AirSheet';
 import { InvestigationDock } from './InvestigationDock';
 
 /** Iniciales para el avatar (solo palabras con mayúscula: sin títulos como "Cmdte."). */
@@ -77,7 +78,7 @@ function Layout() {
   const facial = useFacial();
   const sevOf = useZoneSeverity(alerts);
 
-  const [layers, setLayers] = useState<MapLayers>({ zones: true, events: true, alerts: true, units: false, cameras: role === 'admin' || role === 'analyst', fov: false, hex: 'personas' });
+  const [layers, setLayers] = useState<MapLayers>({ zones: true, events: true, alerts: true, units: false, cameras: role === 'admin' || role === 'analyst', fov: false, hex: 'personas', drones: true, helis: true });
   /** Última lectura elegida para los hexágonos: al volver a prenderlos, vuelven con esa. */
   const [hexPick, setHexPick] = useState<HexMetric>('personas');
   /* Medir cobertura alrededor de un punto: se activa, se hace clic en el mapa y se ve el radio,
@@ -133,7 +134,7 @@ function Layout() {
   const [backOut, setBackOut] = useState('');
   useEffect(() => {
     const was = prevSheet.current; prevSheet.current = c.sheet;
-    if (was && !c.sheet && ['alerta', 'zona', 'evento', 'camara', 'vehiculo', 'facial'].includes(was.k)) setBackOut(String(Date.now()));
+    if (was && !c.sheet && ['alerta', 'zona', 'evento', 'camara', 'vehiculo', 'facial', 'aereo'].includes(was.k)) setBackOut(String(Date.now()));
   }, [sheetKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (c.fitReq) setFit(c.fitReq); }, [c.fitReq]);
   useEffect(() => { if (c.overlay.fit) setFit(c.overlay.fit); }, [c.overlay.fit?.key]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -171,6 +172,8 @@ function Layout() {
     events: <Icon name="flag" className="li-event" />,
     alerts: <AlertMark kind="placa_en_lista" size={18} still />,
     units: <UnitHex type="Patrulla" size={18} />,
+    drones: <AirHex type="Dron" size={18} />,
+    helis: <AirHex type="Helicóptero" size={18} />,
   };
   /* Hexágonos: una sola capa con tres lecturas. El ícono del chip es la escala de lo que se ve:
      amarillo → rojo para personas y alertas, verde → amarillo → rojo para cobertura. */
@@ -187,15 +190,18 @@ function Layout() {
   /* En histórico solo hay alertas de la ventana del hecho; personas y cobertura son en vivo. */
   const hexOff = (m: HexMetric) => (!!inv && m !== 'alertas') || (m === 'cobertura' && !policeSource);
   const hexTitle = (m: HexMetric) => (inv && m !== 'alertas' ? 'En vivo: no se muestra en modo histórico' : 'Sin acceso a la ubicación policial');
-  type ChipKey = 'zones' | 'events' | 'alerts' | 'units';
+  type ChipKey = 'zones' | 'events' | 'alerts' | 'units' | 'drones' | 'helis';
   const chips: [ChipKey, string, string, boolean?][] = [
     ['zones', 'Zonas', 'Nombre y conteo de los lugares vigilados'],
     ['events', 'Eventos', 'Eventos en curso: el área que abarcan y su nombre'],
     ['alerts', 'Alertas', inv ? 'Alertas de la ventana del hecho' : 'Alertas que esperan una decisión'],
     ['units', 'Unidades', inv ? 'En vivo: no se muestra en modo histórico' : 'Unidades policiales (MAIC)', !policeSource || !!inv],
     // Cámaras y su campo de visión van juntos: ver el grupo más abajo
+    // Medios aéreos: cada tipo se prende y apaga por separado.
+    ['drones', 'Drones', 'Drones de la PNC y su estela'],
+    ['helis', 'Helicópteros', 'Helicópteros de la PNC y su estela'],
   ];
-  const chipOn = (k: ChipKey) => layers[k];
+  const chipOn = (k: ChipKey) => !!layers[k];
   const toggleChip = (k: ChipKey) => setLayers((l) => ({ ...l, [k]: !l[k] }));
 
   // ESC vuelve al mapa: cierra el detalle abierto en el lateral
@@ -286,7 +292,7 @@ function Layout() {
             onEventClick={(id) => c.open({ k: 'evento', id })}
             onAlertClick={(id) => c.open({ k: 'alerta', id })}
             onCameraClick={(id) => c.open({ k: 'camara', id })}
-            onMapClick={measuring ? (p) => setMeasureAt(p) : c.overlay.onMapClick} onEmptyClick={() => { if (c.sheet) c.close(); }}
+            onMapClick={measuring ? (p) => setMeasureAt(p) : c.overlay.onMapClick} onEmptyClick={() => { if (c.sheet) c.close(); }} onAirClick={(id) => c.open({ k: 'aereo', id })}
             measure={measure ? { p: measure.p, radius, cells: [], state: measure.state } : null}
           />
           <ArrivalBanner />
@@ -344,7 +350,7 @@ function Layout() {
           </div>
           {chips.map(([k, label, icon, disabled]) => (
             <button key={k} className={`lchip ${chipOn(k) && !disabled ? 'on' : ''}`} aria-pressed={!!chipOn(k) && !disabled} disabled={disabled}
-              title={disabled && !inv ? 'Sin acceso a la ubicación policial' : icon} onClick={() => toggleChip(k)}>
+              title={disabled && !inv && k === 'units' ? 'Sin acceso a la ubicación policial' : icon} onClick={() => toggleChip(k)}>
               {LAYER_ICON[k]}{label}
             </button>
           )).flatMap((el, i) => (i === 3 ? [el, (
@@ -382,6 +388,7 @@ function Layout() {
           {c.sheet.k === 'evento' && <EventSheet key={c.sheet.id} id={c.sheet.id} />}
           {c.sheet.k === 'evento-form' && <EventFormSheet key={c.sheet.id ?? 'nuevo'} id={c.sheet.id} />}
           {c.sheet.k === 'camara' && <CameraSheet key={c.sheet.id} id={c.sheet.id} />}
+          {c.sheet.k === 'aereo' && <AirSheet key={c.sheet.id} id={c.sheet.id} />}
           {c.sheet.k === 'config' && <ConfigSheet tab={c.sheet.tab} />}
           {c.sheet.k === 'bitacora' && <AuditSheet action={c.sheet.tab} />}
           {c.sheet.k === 'jules' && <JulesSheet />}

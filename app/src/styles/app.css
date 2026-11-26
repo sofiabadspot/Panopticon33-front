@@ -745,6 +745,16 @@ button:hover > .mk-group, button:focus-visible > .mk-group { border-color: var(-
 .ic-unit::after { inset: 1.6px; background: color-mix(in srgb, var(--surface) 95%, transparent); }
 .ic-unit svg { position: relative; z-index: 1; width: 60%; height: 60%; }
 .ic-unit.off { opacity: .4; }
+/* Medio aéreo: ícono plano que gira con el rumbo (--hdg), blanco con el mismo contorno oscuro de los íconos de unidad. */
+.air3d { position: relative; display: inline-block; flex: none; color: var(--ink); }
+.air3d-body { position: absolute; inset: 0; transform: rotate(var(--hdg, 0deg));
+  filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000) drop-shadow(0 1px 2px #000c); }
+.air3d svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.lchip:not(.on) .air3d { opacity: .45; filter: grayscale(.6); }
+.mk-air { position: relative; display: inline-grid; place-items: center; }
+.mk-air .air-tag { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); white-space: nowrap; font: 500 var(--fs-xs) var(--font-mono); font-style: normal; color: var(--ink-muted);
+  background: color-mix(in srgb, var(--surface) 82%, transparent); padding: 1px 5px; border-radius: 3px; pointer-events: none; }
+.maplibregl-marker:has(.mk-air) { z-index: 3; }
 /* Cámara: nodo circular; la salud cambia el dibujo, no el color */
 .ic-cam { flex: none; overflow: visible; }
 .ic-cam .ring { fill: color-mix(in srgb, var(--surface) 80%, transparent); stroke: var(--ink-muted); stroke-width: 1.6; }
@@ -2112,3 +2122,10 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 .ds-score > span { display: inline-flex; align-items: center; gap: 8px; }
 .ds-score b { font-size: 28px; font-weight: 500; line-height: 1; color: var(--ink); }
 .ds-score small { font-size: var(--fs-xs); color: var(--ink-subtle); }
+
+/* ---------- Ficha de dron o helicóptero (lateral) ---------- */
+.air-sheet-ic { display: inline-grid; width: 22px; height: 22px; color: var(--ink); }
+.air-sheet-ic svg { width: 100%; height: 100%; }
+.air-tx-tag { display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; letter-spacing: .04em; }
+.air-tx-tag em { font-style: normal; opacity: .8; }
+.as-live { width: 6px; height: 6px; border-radius: 50%; background: var(--status-negative); animation: live 1.2s ease-in-out infinite; }

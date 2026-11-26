@@ -14,14 +14,16 @@ export interface InvDraft { title: string; lat: number; lon: number; label: stri
 export type PanelId = 'estado' | 'alertas' | 'investigar' | 'eventos' | 'config' | 'bitacora' | 'verificacion';
 export type Sheet =
   | { k: 'alerta'; id: string } | { k: 'zona'; id: string } | { k: 'evento'; id: string } | { k: 'evento-form'; id?: string }
-  | { k: 'camara'; id: string } | { k: 'config'; tab?: string } | { k: 'bitacora'; tab?: string } | { k: 'jules' } | { k: 'facial'; id: string } | { k: 'vehiculo'; id: string };
+  | { k: 'camara'; id: string } | { k: 'config'; tab?: string } | { k: 'bitacora'; tab?: string } | { k: 'jules' } | { k: 'facial'; id: string } | { k: 'vehiculo'; id: string }
+  /** Dron o helicóptero: telemetría y transmisión de la cámara de a bordo. */
+  | { k: 'aereo'; id: string };
 
 const encode = (s: Sheet | null) => (!s ? '' : 'id' in s && s.id ? `${s.k}.${s.id}` : 'tab' in s && s.tab ? `${s.k}.${s.tab}` : s.k);
 function decode(v: string | null): Sheet | null {
   if (!v) return null;
   const [k, ...rest] = v.split('.'); const id = rest.join('.');
   switch (k) {
-    case 'alerta': case 'zona': case 'evento': case 'camara': case 'facial': case 'vehiculo': return id ? { k, id } as Sheet : null;
+    case 'alerta': case 'zona': case 'evento': case 'camara': case 'facial': case 'vehiculo': case 'aereo': return id ? { k, id } as Sheet : null;
     case 'jules': return { k };
     case 'evento-form': return { k, id: id || undefined };
     case 'config': return { k, tab: id || undefined };
