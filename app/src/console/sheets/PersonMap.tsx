@@ -35,7 +35,11 @@ const R = [0, 250, 520, 860];
 const box = (n: Node): [number, number] => (n.level === 0 ? [180, 200] : n.card ? [196, 168] : n.level === 1 ? [70 + n.label.length * 8, 48] : [Math.min(276, 64 + Math.max(n.label.length * 7.5, (n.sub.length + 14) * 5.6)), 54]);
 const rad = (d: number) => (d * Math.PI) / 180;
 
-export function PersonMap({ m, onOpen, about }: { m: FacialMatch; onOpen: (cards: Card[], i: number) => void; about?: ReactNode }) {
+export function PersonMap({ m, onOpen, about, who = true }: {
+  m: FacialMatch; onOpen: (cards: Card[], i: number) => void; about?: ReactNode;
+  /** Muestra la persona (foto y 3D) arriba del detalle. Sin ella cuando la persona ya está a la vista al lado. */
+  who?: boolean;
+}) {
   const cards = useMemo(() => cardsOf(m), [m]);
   // Todo abierto de entrada: categorías y vínculos.
   const [open, setOpen] = useState<Set<string>>(() => new Set([...CATS.map((c) => `cat:${c.id}`), ...m.links.map((l) => `link:${l.id}`)]));
@@ -159,10 +163,10 @@ export function PersonMap({ m, onOpen, about }: { m: FacialMatch; onOpen: (cards
     <div className="pm">
       <aside className="pm-side">
         {/* La persona siempre a la vista: foto de la lista y reconstrucción 3D que se gira. */}
-        <div className="pm-who">
+        {who && <div className="pm-who">
           <span className="pm-photo"><Shot label={m.listPhotos[0] ? `${m.listPhotos[0].caption} · ${m.listPhotos[0].year}` : 'Sin foto'} /></span>
           <span className="pm-3d"><FaceCloud seed={seed} label={`Reconstrucción 3D del perfil ${m.listRef}`} interactive auto landmarks /></span>
-        </div>
+        </div>}
         <div className="pm-detail" aria-live="polite">
         {!selected ? (
           <>

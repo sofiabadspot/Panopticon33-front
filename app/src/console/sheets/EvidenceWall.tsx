@@ -29,11 +29,11 @@ export function cardsOf(m: FacialMatch): Card[] {
 }
 
 /** El material dibujado según su tipo (sin imágenes ficticias). */
-export function Artifact({ c }: { c: Card }) {
+export function Artifact({ c, short }: { c: Card; /** Solo la hora (para capturas de hoy, donde la fecha sobra). */ short?: boolean }) {
   if (c.art === 'captura' || c.art === 'video') return (
     <span className={`art cam ${c.art}`}>
       <span className="art-rec mono"><i />{c.src}</span>
-      <span className="art-ts mono">{dateShort(c.at)} · {hhmm(c.at)}</span>
+      <span className="art-ts mono">{short ? hhmm(c.at) : `${dateShort(c.at)} · ${hhmm(c.at)}`}</span>
       {c.score != null && <span className="art-score mono">{pct(c.score)}</span>}
       <span className="art-fig" aria-hidden><Icon name="person" /></span>
       {c.art === 'video' && <><span className="art-play" aria-hidden><Icon name="play_arrow" /></span><span className="art-bar" aria-hidden><i /></span></>}

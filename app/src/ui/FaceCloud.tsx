@@ -45,11 +45,21 @@ const LANDMARKS: { k: string; label: string; p: [number, number, number] }[] = [
 const LINKS: [string, string][] = [['oi', 'od'], ['oi', 'na'], ['od', 'na'], ['na', 'bi'], ['na', 'bd'], ['bi', 'bd'], ['bi', 'me'], ['bd', 'me'], ['oi', 'fr'], ['od', 'fr'], ['mi', 'me'], ['md', 'me'], ['oi', 'mi'], ['od', 'md']];
 
 export interface FaceView { yaw: number; pitch: number; zoom: number }
-export function FaceCloud({ seed, label, interactive, auto = true, landmarks, scan, resetKey }: {
+/** Dónde queda cada punto de referencia en el lienzo (px), y si mira hacia la cámara. */
+export type FaceAnchors = Record<string, { x: number; y: number; front: boolean }>;
+export function FaceCloud({ seed, label, interactive, auto = true, landmarks, scan, resetKey, tags = true, front, sway, onAnchors }: {
   seed: number; label: string; interactive?: boolean; auto?: boolean; landmarks?: boolean; scan?: boolean; resetKey?: number;
+  /** Nombre de cada punto de referencia junto al punto (en la interactiva). */
+  tags?: boolean;
+  /** Gira sola hasta quedar de frente (para comparar con una foto). */
+  front?: boolean;
+  /** Al girar sola, va y viene alrededor del frente en vez de dar la vuelta: la cara siempre se ve. */
+  sway?: boolean;
+  /** En cada cuadro, dónde quedan los puntos de referencia: para unir datos a la cara. */
+  onAnchors?: (a: FaceAnchors) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const opts = useRef({ auto, landmarks, scan }); opts.current = { auto, landmarks, scan };
+  const opts = useRef({ auto, landmarks, scan, tags, front, sway, onAnchors }); opts.current = { auto, landmarks, scan, tags, front, sway, onAnchors };
   const view = useRef<FaceView>({ yaw: 0.5, pitch: -0.08, zoom: 1 });
   useEffect(() => { view.current = { yaw: 0.5, pitch: -0.08, zoom: 1 }; }, [resetKey]);
   useEffect(() => {
@@ -75,6 +85,8 @@ export function FaceCloud({ seed, label, interactive, auto = true, landmarks, sc
       const v = view.current, o = opts.current;
       // Chica: va y viene (±40°). Interactiva: gira completa, despacio, si está prendido el giro y no se arrastra.
       if (!interactive) v.yaw = still ? 0.5 : Math.sin((now - t0) / 2600) * 0.7;
+      else if (o.front && !dragging) { v.yaw += (Math.round(v.yaw / (Math.PI * 2)) * Math.PI * 2 - v.yaw) * (still ? 1 : 0.12); v.pitch += (-0.08 - v.pitch) * (still ? 1 : 0.12); }
+      else if (o.auto && o.sway && !dragging && !still) { const target = Math.round(v.yaw / (Math.PI * 2)) * Math.PI * 2 + Math.sin((now - t0) / 3600) * 0.6; v.yaw += (target - v.yaw) * 0.04; }
       else if (o.auto && !dragging && !still) v.yaw += dt * 0.00035;
       const cy = Math.cos(v.yaw), sy = Math.sin(v.yaw), cp = Math.cos(v.pitch), sp = Math.sin(v.pitch);
       const sc = Math.min(W, H) * 0.36 * v.zoom, cx = W / 2, cyy = H * 0.47, cam = 3.2;
@@ -90,8 +102,9 @@ export function FaceCloud({ seed, label, interactive, auto = true, landmarks, sc
         ctx.fillRect(cx + q.x * sc * p, cyy - q.y * sc * p, sz, sz);
       }
       // Puntos de referencia y medidas: solo los que miran hacia la cámara.
-      if (o.landmarks) {
-        const P = new Map(LANDMARKS.map((l) => { const q = project(...l.p, cy, sy, cp, sp); const p = cam / (cam - q.z); return [l.k, { ...l, sx: cx + q.x * sc * p, sy: cyy - q.y * sc * p, z: q.z }]; }));
+      const P = o.landmarks || o.onAnchors ? new Map(LANDMARKS.map((l) => { const q = project(...l.p, cy, sy, cp, sp); const p = cam / (cam - q.z); return [l.k, { ...l, sx: cx + q.x * sc * p, sy: cyy - q.y * sc * p, z: q.z }]; })) : null;
+      if (P) o.onAnchors?.(Object.fromEntries([...P.values()].map((L) => [L.k, { x: L.sx, y: L.sy, front: L.z >= 0 }])));
+      if (o.landmarks && P) {
         ctx.strokeStyle = accent; ctx.lineWidth = 1;
         for (const [a, b] of LINKS) {
           const A = P.get(a)!, B = P.get(b)!; if (A.z < 0 || B.z < 0) continue;
@@ -104,7 +117,7 @@ export function FaceCloud({ seed, label, interactive, auto = true, landmarks, sc
           ctx.globalAlpha = 1; ctx.fillStyle = accent;
           ctx.beginPath(); ctx.arc(L.sx, L.sy, 3, 0, Math.PI * 2); ctx.fill();
           ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(L.sx, L.sy, 6, 0, Math.PI * 2); ctx.strokeStyle = accent; ctx.stroke();
-          if (interactive) { ctx.globalAlpha = 0.85; ctx.fillStyle = ink; ctx.fillText(L.label.toUpperCase(), L.sx + 9, L.sy - 6); }
+          if (interactive && o.tags) { ctx.globalAlpha = 0.85; ctx.fillStyle = ink; ctx.fillText(L.label.toUpperCase(), L.sx + 9, L.sy - 6); }
         }
       }
       ctx.globalAlpha = 1;

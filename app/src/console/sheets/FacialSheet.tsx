@@ -243,8 +243,8 @@ export function FacialSheet({ id }: { id: string }) {
           <Icon name="arrow_forward" />
         </button>
         {role === 'operator_911' && m.status === 'por_revisar' && !discarding && <>
-          <button className="btn positive" style={{ flex: 1 }} onClick={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta generada y agente avisado'); }}><Icon name="check" />Es la persona: confirmar</button>
-          <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />No coincide</button>
+          <button className="btn positive" style={{ flex: 1 }} onClick={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta generada y agente avisado'); }}><Icon name="check" />Confirmar identidad</button>
+          <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />No es la persona</button>
         </>}
         {role === 'operator_911' && m.status === 'por_revisar' && discarding && <>
           <div role="group" aria-labelledby="fc-discard" style={{ display: 'contents' }}>
