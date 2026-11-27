@@ -41,7 +41,7 @@ import { CameraSheet } from './sheets/CameraSheet';
 import { ConfigSheet } from './sheets/ConfigSheet';
 import { AuditSheet } from './sheets/AuditSheet';
 import { JulesSheet } from './sheets/JulesSheet';
-import { FacialPanel, FacialSheet } from './sheets/FacialSheet';
+import { FacialPanel, FacialSheet, UnknownFaceSheet } from './sheets/FacialSheet';
 import { WhoArrives } from './WhoArrives';
 import { VehicleSheet } from './sheets/VehicleSheet';
 import { AirSheet } from './sheets/AirSheet';
@@ -519,6 +519,7 @@ function Layout() {
           {c.sheet.k === 'bitacora' && <AuditSheet action={c.sheet.tab} />}
           {c.sheet.k === 'jules' && <JulesSheet />}
           {c.sheet.k === 'facial' && <FacialSheet key={c.sheet.id} id={c.sheet.id} />}
+          {c.sheet.k === 'sin-registro' && <UnknownFaceSheet key={c.sheet.id} id={c.sheet.id} />}
           {c.sheet.k === 'vehiculo' && <VehicleSheet key={c.sheet.id} id={c.sheet.id} />}
           </>}
           </ErrorBoundary>

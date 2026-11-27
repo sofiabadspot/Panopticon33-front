@@ -534,12 +534,17 @@ export function setSeverityTargets(t: Record<Severity, number>, user: User) {
    En producción: GET/PUT/POST/DELETE /v1/roles y el evento roles.updated por el canal en vivo, que hace que las
    consolas abiertas con ese rol vuelvan a pedir GET /v1/me/permissions. En la demo los roles se guardan en este
    navegador y se avisan entre pestañas abiertas (evento storage): un cambio se ve al instante en las otras. */
-const ROLES_KEY = 'p33.roles.v2';
+const ROLES_KEY = 'p33.roles.v3';
 function readRoles(): RoleConfig[] {
+  const ok = (v: unknown): v is RoleConfig[] => Array.isArray(v) && v.length > 0 && v.every((r) => r && typeof r.role === 'string' && Array.isArray(r.tabs));
   try {
-    // Clave literal: esta función corre al crear el estado, antes de que exista ROLES_KEY.
-    const v = JSON.parse(localStorage.getItem('p33.roles.v2') || 'null') as RoleConfig[] | null;
-    if (Array.isArray(v) && v.length && v.every((r) => r && typeof r.role === 'string' && Array.isArray(r.tabs))) return v;
+    // Claves literales: esta función corre al crear el estado, antes de que exista ROLES_KEY.
+    const v = JSON.parse(localStorage.getItem('p33.roles.v3') || 'null');
+    if (ok(v)) return v;
+    /* v2 → v3 (27-nov): el Operador 911 y el Analista pasan a no tener Jules. Se conservan las demás ediciones de roles;
+       después, un administrador puede volver a prenderlo desde Roles. */
+    const old = JSON.parse(localStorage.getItem('p33.roles.v2') || 'null');
+    if (ok(old)) return old.map((r) => (r.role === 'operator_911' || r.role === 'analyst' ? { ...r, jules: false } : r));
   } catch { /* sin almacenamiento o dato viejo */ }
   return seed.roleConfigs;
 }

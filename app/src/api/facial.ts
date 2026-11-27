@@ -323,6 +323,11 @@ export const UNKNOWN_FACES: { id: string; label: string; capture: string; sights
     id: 'SI-0007', label: `Sin identificar · rostro de la captura ${capture}`, capture,
     sights: [det(4, NOW - 175 * MIN, 0.81), det(7, NOW - 40 * MIN, 0.83), det(2, NOW - 18.5 * MIN, 0.86), det(0, NOW - 3.5 * MIN, 0.88)],
     seenWith: lead?.id ?? 'FC-7301',
+  }, {
+    // Otra persona sin registro: vista dos veces en la última hora, sola.
+    id: 'SI-0011', label: 'Sin identificar · rostro de la captura CAP-2317', capture: 'CAP-2317',
+    sights: [det(5, NOW - 52 * MIN, 0.84), det(1, NOW - 9 * MIN, 0.87)],
+    seenWith: '',
   }];
 })();
 registerFaces({ matches: facialMatches, unknown: () => UNKNOWN_FACES, listName: (l) => FACIAL_LISTS[l].name });

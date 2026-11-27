@@ -2779,6 +2779,9 @@ label.wa-u:hover { background: var(--surface-raised); }
 
 /* ---------- Analista: tarjetas de investigaciones y guardar ---------- */
 .ss-grp span { margin-left: var(--space-1-5); color: var(--ink-muted); }
+/* Personas: grupo «Sin registro» debajo de las coincidencias, con el mismo rótulo que los grupos de Investigaciones. */
+.fc-grp { padding: var(--space-4) var(--space-4) 0; margin-top: 0; }
+.fc-grp-note { margin: var(--space-1) var(--space-4) var(--space-2); font-size: var(--fs-sm); color: var(--ink-muted); }
 .ss-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
 .ss-card { width: 100%; display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); background: var(--surface-panel); text-align: left; transition: background .15s, border-color .15s; }
 .ss-card:hover { background: var(--surface-raised); border-color: var(--ink-muted); }

@@ -12,7 +12,7 @@ import { ConfirmDelete } from './configPlace';
 import { audit } from '../../api';
 import { cameraClip } from '../../api/video';
 import { ago, dateTime, hhmm, pct } from '../../api/format';
-import { FACIAL_DISCARD, FACIAL_LISTS, bestDetection, confirmFacial, discardFacial, reopenFacial, lastDetection, requestFieldCheck, scoreMeaning, useFacial, type FacialDetection, type FacialList, type FacialMatch } from '../../api/facial';
+import { FACIAL_DISCARD, FACIAL_LISTS, UNKNOWN_FACES, bestDetection, confirmFacial, discardFacial, reopenFacial, lastDetection, requestFieldCheck, scoreMeaning, useFacial, type FacialDetection, type FacialList, type FacialMatch } from '../../api/facial';
 import { useSession } from '../../shell/session';
 import { FacialDossier, Proofs, Shot, proofItem, type ViewItem } from './FacialDossier';
 import { ImageViewer } from '../../ui/ImageInspect';
@@ -21,6 +21,7 @@ import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
 import { SheetHead, SheetNotFound } from './SheetHead';
 import { usePermissions } from '../permissions';
+import { useOpenStory } from '../story/OpenStory';
 
 const gapMin = (ms: number) => { const mn = Math.round(ms / 60000); return mn < 60 ? `${mn} min` : `${Math.floor(mn / 60)} h${mn % 60 ? ` ${mn % 60} min` : ''}`; };
 const distM = (a: FacialDetection, b: FacialDetection) => {
@@ -63,6 +64,7 @@ export function FacialPanel() {
   const [list, setListRaw] = useState<ListFilter>(readList);
   const setList = (l: ListFilter) => { setListRaw(l); try { localStorage.setItem(LIST_KEY, l); } catch { /* sin almacenamiento */ } };
   const pending = (l: ListFilter) => all.filter((m) => m.status === 'por_revisar' && (l === 'todas' || m.list === l)).length;
+  const unknown = useMemo(() => [...UNKNOWN_FACES].sort((a, b) => b.sights[b.sights.length - 1].at - a.sights[a.sights.length - 1].at), []);
   const matches = useMemo(() => all.filter((m) => list === 'todas' || m.list === list)
     .sort((a, b) => Number(b.status === 'por_revisar') - Number(a.status === 'por_revisar') || lastDetection(b).at - lastDetection(a).at), [all, list]);
   return (
@@ -93,7 +95,27 @@ export function FacialPanel() {
           );
         })}
       </ul>
-      <div className="lfoot">Solo corre en puntos de control habilitados. Los rostros que no coinciden no se guardan.</div>
+      {/* Sin registro: rostros que no están en ninguna lista pero se repiten en varios puntos de control.
+          No hay nada que confirmar: se muestran para poder seguirlos si vuelven a aparecer. */}
+      {list === 'todas' && unknown.length > 0 && <>
+        <div className="ss-grp fc-grp">Sin registro <span>{unknown.length}</span></div>
+        <p className="fc-grp-note">No están en ninguna lista, pero el mismo rostro se vio en más de un punto de control.</p>
+        <ul className="list pb flush">
+          {unknown.map((u) => {
+            const d = u.sights[u.sights.length - 1];
+            return (
+              <li key={u.id}>
+                <button className={`item ${c.sheet?.k === 'sin-registro' && c.sheet.id === u.id ? 'sel' : ''}`} style={{ gridTemplateColumns: '44px 1fr auto' }} onClick={() => c.open({ k: 'sin-registro', id: u.id })}>
+                  <span className="fc-ph" style={{ width: 44, height: 44 }}><Shot /></span>
+                  <div><div className="t">Persona sin registro</div><div className="s mono">{u.id}</div><div className="s">{d.place} · vista en {u.sights.length} {u.sights.length === 1 ? 'punto' : 'puntos'}</div></div>
+                  <div className="r"><span>{ago(d.at, now)}</span><span className="chip nodata">Sin lista</span></div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </>}
+      <div className="lfoot">Solo corre en puntos de control habilitados. Un rostro que no está en ninguna lista solo aparece si se repite en varios puntos de control.</div>
     </>
   );
 }
@@ -265,6 +287,67 @@ export function FacialSheet({ id }: { id: string }) {
         {m.status === 'confirmada' && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> Confirmada{m.reviewedBy ? ` por ${m.reviewedBy}` : ''}. El agente en el punto de control está avisado.</span>}
         {m.status === 'descartada' && <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Descartada{m.discardReason ? `: ${m.discardReason.toLowerCase()}` : ''}. El rostro no se guarda.</span>}
       </div>
+    </>
+  );
+}
+
+/** Persona detectada que no está en ninguna lista. No hay decisión que tomar (no hay con qué comparar):
+    se ve dónde y cuándo apareció, el recorrido en el mapa y con quién se la vio. Quien investiga la abre como historia. */
+export function UnknownFaceSheet({ id }: { id: string }) {
+  const c = useConsole();
+  const perm = usePermissions();
+  const now = useNow(10000);
+  const openStory = useOpenStory();
+  const faces = useFacial();
+  const u = UNKNOWN_FACES.find((x) => x.id === id);
+  useEffect(() => {
+    if (!u) return undefined;
+    const stops: RouteStop[] = u.sights.map((d, i) => ({ lat: d.lat, lon: d.lon, label: String(i + 1), time: hhmm(d.at), title: `${dateTime(d.at)} · ${d.cameraId} · ${d.place}`,
+      snap: { camera: d.cameraId, street: d.place, evidence: { type: 'pendiente', caption: 'Captura de la detección' }, confidence: d.score } }));
+    if (stops.length === 1) {
+      const st = stops[0];
+      c.setPin({ lat: st.lat, lon: st.lon, label: st.time ?? '' }); c.focus([[st.lon - 0.0015, st.lat - 0.001], [st.lon + 0.0015, st.lat + 0.001]], 'sin-registro');
+      return () => c.setPin(null);
+    }
+    c.setOverlay({ route: stops, routeLabel: u.id, fit: { points: stops.map((st) => [st.lon, st.lat]), key: `sin-registro-${u.id}` } });
+    return () => c.setOverlay({});
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!u) return <SheetNotFound kicker="Persona sin registro" what="esta persona" />;
+  const last = u.sights[u.sights.length - 1];
+  const companion = u.seenWith ? faces.find((m) => m.id === u.seenWith) : undefined;
+  return (
+    <>
+      <SheetHead kicker={<><span className="mono">{u.id}</span>·<span>{ago(last.at, now)}</span></>} title="Persona sin registro"
+        sub={<>Vista en {u.sights.length} {u.sights.length === 1 ? 'punto' : 'puntos'} de control · última en {last.place}</>}
+        aside={<span className="chip nodata">No está en ninguna lista</span>} />
+      <div className="pb">
+        <div className="callout"><Icon name="info" /><span className="grow">Sin nombre ni documento. El mismo rostro se repitió en varios puntos de control; no hay nada que confirmar ni descartar.</span></div>
+        <div className="fc-ph" style={{ width: '100%', aspectRatio: '4 / 3' }}><Shot /></div>
+        <div className="box flush">
+          <div className="bh"><h3>Dónde se vio</h3><span className="sub">{u.sights.length}</span></div>
+          <ol className="timeline bb">
+            {u.sights.map((d, i) => (
+              <li key={i} className={i === u.sights.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden />
+                <div><span className="mono">{d.cameraId}</span> · {d.place}</div>
+                <div className="when">{dateTime(d.at)} · parecido con las otras capturas {pct(d.score)}</div></li>
+            ))}
+          </ol>
+        </div>
+        {u.seenWith && (
+          <div className="box flush">
+            <div className="bh"><h3>Visto junto a</h3></div>
+            <ul className="list bb"><li>
+              <button className="item" style={{ gridTemplateColumns: '1fr auto' }} onClick={() => c.open({ k: 'facial', id: u.seenWith })}>
+                <div><div className="t">{companion?.name ?? u.seenWith}</div><div className="s">{companion ? `${FACIAL_LISTS[companion.list].name} · ${companion.listRef}` : 'Coincidencia facial'} · misma cámara, a menos de 2 min</div></div>
+                <Icon name="arrow_forward" />
+              </button>
+            </li></ul>
+          </div>
+        )}
+      </div>
+      {perm.has('investigar') && (
+        <div className="pf"><button className="btn primary sm" style={{ marginLeft: 'auto' }} onClick={() => openStory({ k: 'sin_identificar', faceId: u.id })}><Icon name="person_search" />Investigar a esta persona</button></div>
+      )}
     </>
   );
 }

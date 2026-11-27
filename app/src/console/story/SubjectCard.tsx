@@ -84,7 +84,7 @@ function PersonCard({ story }: { story: Story }) {
             <dl className="details">
               <dt>Persona</dt><dd>Sin identificar</dd>
               <dt>Descripción</dt><dd>{u?.label ?? '—'}</dd>
-              {u && <><dt>Visto junto a</dt><dd>{faces.find((x) => x.id === u.seenWith)?.name ?? u.seenWith}</dd></>}
+              {u?.seenWith && <><dt>Visto junto a</dt><dd>{faces.find((x) => x.id === u.seenWith)?.name ?? u.seenWith}</dd></>}
             </dl>
           )}
         </div>

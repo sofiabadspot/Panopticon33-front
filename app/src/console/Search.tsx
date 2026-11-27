@@ -112,7 +112,7 @@ export function Search() {
     <div className="search-box" ref={box}>
       <div className="search-in">
         <Icon name="search" />
-        <input ref={input} value={q} placeholder="Buscar zona, placa, cámara… o preguntarle a Jules"
+        <input ref={input} value={q} placeholder={perm.jules ? 'Buscar zona, placa, cámara… o preguntarle a Jules' : 'Buscar zona, placa, cámara…'}
           onFocus={() => setOpen(true)} onChange={(e) => { setQ(e.target.value); setSel(0); setOpen(true); }}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(shown.length - 1, s + 1)); }

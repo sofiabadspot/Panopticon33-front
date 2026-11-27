@@ -18,6 +18,8 @@ export type PanelId = 'estado' | 'alertas' | 'investigar' | 'config' | 'bitacora
 export type Sheet =
   | { k: 'alerta'; id: string } | { k: 'zona'; id: string } | { k: 'evento'; id: string } | { k: 'evento-form'; id?: string }
   | { k: 'camara'; id: string } | { k: 'config'; tab?: string; id?: string } | { k: 'bitacora'; tab?: string } | { k: 'jules' } | { k: 'facial'; id: string } | { k: 'vehiculo'; id: string }
+  /** Persona detectada en puntos de control que no está en ninguna lista (SI-…). */
+  | { k: 'sin-registro'; id: string }
   /** Dron o helicóptero: telemetría y transmisión de la cámara de a bordo. */
   | { k: 'aereo'; id: string };
 
@@ -26,7 +28,7 @@ function decode(v: string | null): Sheet | null {
   if (!v) return null;
   const [k, ...rest] = v.split('.'); const id = rest.join('.');
   switch (k) {
-    case 'alerta': case 'zona': case 'evento': case 'camara': case 'facial': case 'vehiculo': case 'aereo': return id ? { k, id } as Sheet : null;
+    case 'alerta': case 'zona': case 'evento': case 'camara': case 'facial': case 'vehiculo': case 'aereo': case 'sin-registro': return id ? { k, id } as Sheet : null;
     case 'jules': return { k };
     case 'evento-form': return { k, id: id || undefined };
     case 'config': { const [tab, ...more] = rest; return { k, tab: tab || undefined, id: more.join('.') || undefined }; }
@@ -48,7 +50,7 @@ export function canOpenSheet(p: Perms, s: Sheet): boolean {
     case 'bitacora': return false;
     case 'alerta': return p.seesAlerts;
     // Facial: decide quien tiene la acción; quien ve alertas la mira en solo lectura.
-    case 'facial': return p.has('verificacion') || p.can('decidir_facial') || p.seesAlerts;
+    case 'facial': case 'sin-registro': return p.has('verificacion') || p.can('decidir_facial') || p.seesAlerts;
     case 'vehiculo': return p.has('investigar');
     case 'jules': return p.jules;
     default: return true;
