@@ -13,7 +13,8 @@ import { WorldGlobe } from './WorldGlobe';
 
 type Phase = 'login' | 'loading' | 'world' | 'zoom' | 'done';
 
-export function Login() {
+/** `onDone`: la entrada terminó de fundirse con la consola y ya se puede desmontar. */
+export function Login({ onDone }: { onDone?: () => void }) {
   const { role, signIn } = useSession();
   const cameras = useApi((s) => s.cameras);
   const maic = useApi((s) => s.maic);
@@ -46,8 +47,17 @@ export function Login() {
   const enter = () => {
     if (phase !== 'world') return;
     setPhase('zoom');
-    // Con el globo real, el vuelo hasta el sector marca el ritmo; si no, el acercamiento dibujado.
-    if (real) setFly(true); else window.setTimeout(() => { setPhase('done'); signIn(role); }, 1300);
+    // Con el globo real, la consola se monta ya debajo (tapada por la entrada) y el globo vuela hasta la
+    // cámara de su mapa; si no, el acercamiento dibujado y luego la consola.
+    if (real) { signIn(role); setFly(true); }
+    else window.setTimeout(() => { setPhase('done'); signIn(role); window.setTimeout(() => onDone?.(), 1000); }, 1300);
+  };
+  // El globo avisa cuándo fundirse (el tramo final lo termina el mapa de la consola) y cuándo llegó.
+  const faded = useRef(false);
+  const fade = () => { faded.current = true; setPhase('done'); };
+  const arrived = () => {
+    if (faded.current) { onDone?.(); return; }
+    setPhase('done'); window.setTimeout(() => onDone?.(), 950);
   };
 
   return (
@@ -75,7 +85,7 @@ export function Login() {
         )}
         {globe !== 'fail' && (
           <>
-            <WorldGlobe live={phase === 'world' || phase === 'zoom' || phase === 'done'} go={fly} cardRef={cardRef} onStatus={setGlobe} onArrived={() => { setPhase('done'); signIn(role); }} />
+            <WorldGlobe live={phase === 'world' || phase === 'zoom' || phase === 'done'} go={fly} cardRef={cardRef} onStatus={setGlobe} onFade={fade} onArrived={arrived} />
             {real && <WorldCard cameras={cameras.length} anchorRef={cardRef} />}
           </>
         )}

@@ -30,18 +30,19 @@ const makeRouter = () => createBrowserRouter([
 function Gate() {
   const { signedIn } = useSession();
   const router = useMemo(() => (signedIn ? makeRouter() : null), [signedIn]);
-  // Al entrar, el ingreso queda un momento encima de la consola para fundirse con ella (sin negro entre medio).
+  // Al entrar, la consola se monta debajo del ingreso y el ingreso se funde con ella (sin negro entre medio).
+  // El ingreso avisa cuándo terminó (onDone); por las dudas, se retira solo a los 12 s.
   // showLogin sigue en true en el primer render con sesión: así el ingreso no se desmonta ni vuelve a empezar.
   const [showLogin, setShowLogin] = useState(!signedIn);
   useEffect(() => {
     if (!signedIn) { setShowLogin(true); return undefined; }
-    const t = window.setTimeout(() => setShowLogin(false), 1000);
+    const t = window.setTimeout(() => setShowLogin(false), 12000);
     return () => window.clearTimeout(t);
   }, [signedIn]);
   return (
     <>
       {signedIn && router && <RouterProvider key="app" router={router} />}
-      {(showLogin || !signedIn) && <div key="login" className={`login-shell ${signedIn ? 'leaving' : ''}`}><Login /></div>}
+      {(showLogin || !signedIn) && <div key="login" className={`login-shell ${signedIn ? 'leaving' : ''}`}><Login onDone={() => setShowLogin(false)} /></div>}
     </>
   );
 }

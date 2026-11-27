@@ -1220,7 +1220,7 @@ body:has(.isheet) { overflow: auto; }
   opacity: 0; transform: scale(1.06); transition: opacity 1.1s ease, transform 1.6s cubic-bezier(.2, .7, .2, 1); }
 .login.globe-real.is-world .globe3d, .login.globe-real.is-zoom .globe3d { opacity: 1; transform: none; }
 /* Relevo con la consola: el globo ya está en la misma cámara que el mapa, así que basta un fundido. */
-.login.globe-real.is-done .globe3d { opacity: 0; transform: scale(1.5); filter: blur(10px); transition: opacity .75s ease, transform .9s cubic-bezier(.5, 0, .75, 0), filter .75s ease; }
+.login.globe-real.is-done .globe3d { opacity: 0; transform: none; transition: opacity 1.1s cubic-bezier(.25, .6, .3, 1); }
 .login.globe-real.is-done .login-world { opacity: 1; }
 .globe3d-host { position: absolute; inset: 0; }
 .login.is-world .globe3d-host { cursor: grab; } .login.is-world .globe3d-host:active { cursor: grabbing; }

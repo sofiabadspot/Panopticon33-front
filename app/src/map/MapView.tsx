@@ -24,6 +24,7 @@ import { waitingSince } from '../views/shared';
 /** Confirmada con refuerzos en camino: se ve gestionada (gris con tick) y lo dice, hasta que llegan. */
 const goingTo = (a: Alert) => a.review === 'confirmada' && a.dispatch === 'en_camino';
 import { GOOGLE_LOGO, googleCopyright, googleSession, googleTiles, hasGoogleKey, type GoogleBase } from './google';
+import { provideConsoleMap } from './handoff';
 // El worker del mapa se empaqueta con la app (sin CDN). Vite lo emite como archivo propio.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 maplibregl.setWorkerUrl(workerUrl);
@@ -380,17 +381,30 @@ export function MapView(p: Props) {
     mapRef.current = map;
     // Las columnas cambian de ancho (abrir o cerrar el detalle): el mapa se reajusta.
     const ro = new ResizeObserver(() => map.resize()); ro.observe(el.current!);
+    // Relevo con la entrada: el mapa principal publica su cámara para que el globo vuele hasta ella.
+    const box = el.current!;
+    const unprovide = p.compact ? () => {} : provideConsoleMap({
+      jump: (v) => map.jumpTo({ center: [v.lng, v.lat], zoom: v.zoom, pitch: v.pitch, bearing: v.bearing }),
+      camera: () => {
+        const c = map.getCenter(), r = box.getBoundingClientRect();
+        if (!r.width || !r.height) return null;
+        return { lng: c.lng, lat: c.lat, zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(),
+          fov: map.getVerticalFieldOfView() * Math.PI / 180, rect: { left: r.left, top: r.top, width: r.width, height: r.height } };
+      },
+    });
     if (import.meta.env.DEV) ((window as unknown as { __maps: MLMap[] }).__maps ??= []).push(map);
-    return () => { ro.disconnect(); markers.current.forEach(({ m, root }) => { m.remove(); setTimeout(() => root.unmount()); }); markers.current.clear(); ready.current = false; map.remove(); };
+    return () => { unprovide(); ro.disconnect(); markers.current.forEach(({ m, root }) => { m.remove(); setTimeout(() => root.unmount()); }); markers.current.clear(); ready.current = false; map.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Encuadre
+  // Encuadre. El primero es inmediato: el mapa arranca ya encuadrado (el globo de la entrada vuela hasta esa cámara).
+  const fitted = useRef(false);
   useEffect(() => {
     if (!p.bounds || !mapRef.current) return;
     const pad = p.padding ? { top: p.padding.top + 40, right: p.padding.right + 40, bottom: p.padding.bottom + 40, left: p.padding.left + 40 } : p.compact ? 24 : 60;
     const mm = mapRef.current;
-    mm.fitBounds(p.bounds, { padding: pad, duration: 800, maxZoom: 17.2, bearing: mm.getBearing(), pitch: mm.getPitch() });
+    mm.fitBounds(p.bounds, { padding: pad, duration: fitted.current ? 800 : 0, maxZoom: 17.2, bearing: mm.getBearing(), pitch: mm.getPitch() });
+    fitted.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.fitKey]);
 
