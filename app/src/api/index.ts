@@ -54,7 +54,13 @@ interface State {
   scenario: Scenario;
   /** Todavía llegan los primeros datos: paneles y mapa muestran el estado de carga. */
   loading: boolean;
+  /** Recursos que todavía no llegaron. Cada ficha espera solo los suyos (useReady). En producción,
+      cada uno sale de su propio pedido (GET /v1/alerts, /v1/zones…) y se quita de acá al responder. */
+  pending: Resource[];
 }
+
+export type Resource = 'alerts' | 'zones' | 'zoneStatus' | 'cameras' | 'units' | 'events' | 'facial' | 'air' | 'reads';
+export const ALL_RESOURCES: Resource[] = ['alerts', 'zones', 'zoneStatus', 'cameras', 'units', 'events', 'facial', 'air', 'reads'];
 
 /* ---------------- Escenarios ----------------
    La consola tiene que verse bien en todos sus estados, no solo con datos. Cada escenario
@@ -100,6 +106,7 @@ let state: State = {
   incidents: [],
   scenario: 'normal',
   loading: false,
+  pending: [],
 };
 
 const baseAlerts = seed.alerts.map((a) => placeAlert(a, seed.zones));
@@ -117,7 +124,7 @@ function alertsFor(sc: Scenario): Alert[] {
   });
 }
 function scenarioPatch(sc: Scenario, now = Date.now()): Partial<State> {
-  return { scenario: sc, loading: sc === 'cargando', alerts: alertsFor(sc), events: sc === 'sin_eventos' ? [] : seed.events,
+  return { scenario: sc, loading: sc === 'cargando', pending: sc === 'cargando' ? ALL_RESOURCES : [], alerts: alertsFor(sc), events: sc === 'sin_eventos' ? [] : seed.events,
     maic: { ...state.maic, connected: sc !== 'sin_maic', lastMessageAt: sc === 'sin_maic' ? now - 7 * 60000 : now } };
 }
 /** Cambia el escenario de la consola (queda guardado en este navegador). */
@@ -138,6 +145,12 @@ function commit(patch: Partial<State>) {
 /** Suscripción a datos vivos (en producción: WS /v1/stream, temas zones · alerts · cameras · units · maic). */
 export function useApi<T>(select: (s: State) => T): T {
   return useSyncExternalStore((cb) => { listeners.add(cb); return () => listeners.delete(cb); }, () => select(state));
+}
+
+/** ¿Ya llegaron estos recursos? Mientras no, la ficha muestra su esqueleto (nunca ceros: "sin dato no es cero"). */
+export function useReady(...keys: Resource[]): boolean {
+  const pending = useApi((s) => s.pending);
+  return keys.every((k) => !pending.includes(k));
 }
 export const snapshot = () => state;
 

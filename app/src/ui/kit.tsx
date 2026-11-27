@@ -146,9 +146,23 @@ export function ReadOnlyNote({ children }: { children: ReactNode }) {
   return <p className="ro-note"><Icon name="lock" /><span><b>Solo lectura:</b> {children}</span></p>;
 }
 
-export function EmptyState({ icon, title, children, action, tone }: { icon: string; title: string; children?: ReactNode; action?: ReactNode; tone?: 'ok' | 'warn' }) {
+/** Estado vacío. Tres formas, una por lugar (no hay otras):
+    · panel (por defecto): el panel o la ficha entera no tiene nada; ícono, título, texto y acción.
+    · inline: una franja dentro de un panel o una lista ("Todo revisado.").
+    · Ítem de lista vacía: <li className="empty"> (texto solo, dentro de .list).
+    tone 'ok' cuando estar vacío es buena noticia; 'warn' cuando falta algo que debería estar. */
+export function EmptyState({ icon, title, children, action, tone, inline = false, className = '' }: {
+  icon: string; title: string; children?: ReactNode; action?: ReactNode; tone?: 'ok' | 'warn'; inline?: boolean; className?: string;
+}) {
+  if (inline) return (
+    <div className={`es-inline ${tone ?? 'neutral'} ${className}`.trim()} role="status">
+      <span className="es-ic" aria-hidden><Icon name={icon} /></span>
+      <span><b>{title}</b>{children && <> {children}</>}</span>
+      {action}
+    </div>
+  );
   return (
-    <div className={`empty-state ${tone ?? ''}`} role="status">
+    <div className={`empty-state ${tone ?? ''} ${className}`.trim()} role="status">
       <span className="es-ic" aria-hidden><Icon name={icon} /></span>
       <b>{title}</b>
       {children && <p>{children}</p>}
@@ -181,12 +195,12 @@ export function PanelSkeleton({ kind }: { kind: 'lista' | 'imagenes' | 'estado' 
   );
 }
 /** Ficha lateral mientras llegan los datos: encabezado, imagen, cifras y filas. */
-export function SheetSkeleton() {
+export function SheetSkeleton({ media = true }: { media?: boolean }) {
   return (
     <div className="sk-sheet" aria-busy="true" aria-label="Cargando la ficha">
       <div className="sk-head"><i className="skel sk-s" style={{ width: 120 }} /><i className="skel sk-title" /><i className="skel sk-s" style={{ width: 180 }} /></div>
       <div className="pb">
-        <i className="skel sk-media" />
+        {media && <i className="skel sk-media" />}
         <div className="kpis sk-kpis">{[0, 1].map((i) => <div key={i} className="kpi"><i className="skel sk-v" /><i className="skel sk-s" /></div>)}</div>
         <div className="box flush"><SkeletonRows n={3} /></div>
       </div>

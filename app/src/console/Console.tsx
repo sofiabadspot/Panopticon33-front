@@ -7,7 +7,7 @@
    Abrir algo nunca cambia de pantalla: el mapa se mueve hacia ello. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DEMO_TOOLS, INCIDENT_LABEL, SCENARIO_LABEL, SECTOR, eventStatus, forOperator, inScope, openStory, roleName, sessionFor, setScenario, snapshot, useApi, type Scenario } from '../api';
+import { DEMO_TOOLS, useReady, type Resource, INCIDENT_LABEL, SCENARIO_LABEL, SECTOR, eventStatus, forOperator, inScope, openStory, roleName, sessionFor, setScenario, snapshot, useApi, type Scenario } from '../api';
 import { useFacial } from '../api/facial';
 import { dateTime, hhmm, hhmmss } from '../api/format';
 import { KIND_LABEL, KIND_PHRASE } from '../api/labels';
@@ -65,6 +65,26 @@ const initials = (name: string) => name.split(' ').filter((w) => /^[A-ZÁÉÍÓ�
 /** En modo histórico las zonas no muestran la medición en vivo. */
 const NO_STATUS = {};
 
+/** Qué datos necesita cada ficha para mostrarse. Las que no están (configuración, bitácora, Jules,
+    formulario de evento) leen lo que haya y no esperan. */
+const SHEET_NEEDS: Partial<Record<string, Resource[]>> = {
+  alerta: ['alerts', 'zones', 'cameras'],
+  zona: ['zones', 'zoneStatus', 'cameras', 'units'],
+  evento: ['events', 'zones', 'zoneStatus'],
+  camara: ['cameras', 'zones'],
+  aereo: ['air'],
+  facial: ['facial', 'cameras'],
+  'sin-registro': ['facial', 'cameras'],
+  vehiculo: ['reads', 'alerts'],
+};
+/** Lo mismo para los paneles de la izquierda. */
+const PANEL_NEEDS: Partial<Record<string, Resource[]>> = {
+  estado: ['zones', 'zoneStatus', 'events', 'cameras'],
+  alertas: ['alerts'],
+  verificacion: ['facial'],
+  investigar: ['reads'],
+};
+
 export function Console() {
   const { role, signOut } = useSession();
   const known = useApi((s) => s.roleConfigs.some((r) => r.role === role));
@@ -97,6 +117,8 @@ function Layout() {
   const strip = useRef<HTMLDivElement>(null);
   useOverflowEdges(strip);
   const loading = useApi((s) => s.loading);
+  const panelReady = useReady(...(PANEL_NEEDS[c.panel] ?? []));
+  const sheetReady = useReady(...(c.sheet ? SHEET_NEEDS[c.sheet.k] ?? [] : []));
   const roleConfigs = useApi((s) => s.roleConfigs);
   const scenario = useApi((s) => s.scenario);
   const policeSource = useApi((s) => s.policeSource);
@@ -379,7 +401,7 @@ function Layout() {
         {/* key: cada cambio de pestaña vuelve a montar el contenedor y dispara su entrada. */}
         <div key={c.panel} className="panel-swap">
           {/* Mientras llegan los datos, cada panel muestra su forma en gris (no ceros ni listas vacías) */}
-          {loading ? <PanelSkeleton kind={c.panel === 'estado' ? 'estado' : c.panel === 'alertas' || c.panel === 'verificacion' ? 'imagenes' : 'lista'} /> : <>
+          {!panelReady ? <PanelSkeleton kind={c.panel === 'estado' ? 'estado' : c.panel === 'alertas' || c.panel === 'verificacion' ? 'imagenes' : 'lista'} /> : <>
           {c.panel === 'estado' && <StatusPanel />}
           {c.panel === 'alertas' && <QueuePanel />}
           {c.panel === 'investigar' && <StorySearch />}
@@ -515,7 +537,8 @@ function Layout() {
         <aside className="rcol" aria-label="Detalle">
           <div key={sheetKey} className="sheet-swap">
           <ErrorBoundary scope="esta ficha" onReset={() => c.close()} resetLabel="Cerrar la ficha">
-          {loading && !['config', 'bitacora', 'jules', 'evento-form'].includes(c.sheet.k) ? <SheetSkeleton /> : <>
+          {/* Cada ficha espera solo lo que usa (SHEET_NEEDS); lo demás de la consola puede seguir cargando. */}
+          {!sheetReady ? <SheetSkeleton media={c.sheet.k !== 'evento' && c.sheet.k !== 'zona'} /> : <>
           {c.sheet.k === 'alerta' && <AlertSheet key={c.sheet.id} id={c.sheet.id} />}
           {c.sheet.k === 'zona' && <ZoneSheet key={c.sheet.id} id={c.sheet.id} />}
           {c.sheet.k === 'evento' && <EventSheet key={c.sheet.id} id={c.sheet.id} />}

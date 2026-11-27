@@ -79,7 +79,7 @@ export function FacialPanel() {
         })} />
       {/* Vacía: no hubo coincidencias. Con coincidencias pero ninguna pendiente: se dice antes de la lista. */}
       {!matches.length && <EmptyState icon="visibility" title="Sin coincidencias">{list === 'todas' ? 'Los puntos de control no encontraron rostros de las listas. Si aparece uno, llega aquí con un aviso.' : `Nada de ${FACIAL_LISTS[list].name.toLowerCase()}.`}</EmptyState>}
-      {matches.length > 0 && !matches.some((m) => m.status === 'por_revisar') && <div className="es-inline"><span className="es-ic" aria-hidden><Icon name="done_all" /></span><span><b>Todo revisado.</b> Ninguna coincidencia espera decisión.</span></div>}
+      {matches.length > 0 && !matches.some((m) => m.status === 'por_revisar') && <EmptyState inline tone="ok" icon="done_all" title="Todo revisado.">Ninguna coincidencia espera decisión.</EmptyState>}
       <ul className="list pb flush">
         {matches.map((m) => {
           const d = lastDetection(m);

@@ -30,16 +30,6 @@ export function SearchInput({ id, label, placeholder, className = '', ...props }
   );
 }
 
-/* Estado vacío (.sv-empty). sutil: sin borde, a la izquierda y con letra chica. */
-export function EmptyState({ titulo, texto, sutil = false, className = '' }: { titulo: string; texto?: string; sutil?: boolean; className?: string }) {
-  return (
-    <div className={['sv-empty', sutil && 'svx-empty--sutil', className].filter(Boolean).join(' ')}>
-      <h3>{titulo}</h3>
-      {texto && <p>{texto}</p>}
-    </div>
-  );
-}
-
 /* Badge de estado (.sv-badge). tone: neutral | positive | negative. */
 export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'positive' | 'negative'; children: ReactNode }) {
   return <span className={['sv-badge', tone !== 'neutral' && `sv-badge--${tone}`].filter(Boolean).join(' ')}>{children}</span>;

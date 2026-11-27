@@ -461,9 +461,16 @@ Quedaron armados a mano, a propósito:
 
 El selector Grabación / En vivo de Personas pasó a `Segmented`.
 
+**Estados vacíos** (`EmptyState` en `ui/kit.tsx`): quedan tres formas, una por lugar.
+- **Panel o ficha sin nada:** ícono, título, texto y acción.
+- **Franja dentro de un panel** (`inline`): por ejemplo "Todo revisado".
+- **Lista o tabla vacía:** `<li className="empty">` o `<td className="empty">`.
+
+Se borraron `.w-empty` (borde punteado), `.wa-empty`, `.ds-empty` y el `EmptyState` propio de Jules (`.sv-empty`). El muro de video y las conversaciones de Jules usan el de la consola. Las tablas de reglas y de usuarios ahora tienen estado vacío.
+
+**Carga por ficha:** cada recurso (alertas, zonas, mediciones, cámaras, unidades, eventos, facial, aéreos y lecturas) tiene su propio estado de carga (`pending`, `useReady`). Cada ficha y cada panel esperan solo lo que usan (`SHEET_NEEDS` y `PANEL_NEEDS` en `Console.tsx`), y mientras tanto muestran su esqueleto, nunca ceros. Con el backend real, cada pedido (`GET /v1/alerts`, `/v1/zones`…) quita su recurso de `pending` al responder.
+
 **Sigue pendiente**
-- Unificar los 8 estilos de estado vacío.
-- Que cada ficha tenga su propio esqueleto de carga (hoy depende de un flag global).
 - Lo que depende del backend.
-- Legal.
+- Legal: si se pueden mostrar y guardar los rostros que no están en ninguna lista.
 

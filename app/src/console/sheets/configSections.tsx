@@ -277,6 +277,7 @@ export function UsersSection() {
           <table className="tbl">
             <thead><tr><th>Usuario</th><th>Rol</th><th>Acceso</th></tr></thead>
             <tbody>
+              {!users.length && <tr><td colSpan={3} className="empty">Ningún usuario todavía. Los usuarios se dan de alta en Keycloak.</td></tr>}
               {users.map((u) => (
                 <tr key={u.id}>
                   <td>{u.name}{u.id === user.id && <span className="dim"> (tú)</span>}</td>

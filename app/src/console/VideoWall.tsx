@@ -12,7 +12,7 @@ import type { Alert, Camera } from '../api/types';
 import { cameraClip } from '../api/video';
 import { CameraNode } from '../map/icons';
 import { CAM_FOV, CAM_REACH } from '../map/markers';
-import { Evidence, Icon, useNow } from '../ui/kit';
+import { EmptyState, Evidence, Icon, useNow } from '../ui/kit';
 import { useConsole, type Sheet } from './ctx';
 import { AlertSheet } from './sheets/AlertSheet';
 import { SheetNav } from './sheets/SheetHead';
@@ -159,7 +159,9 @@ export function VideoWall({ onClose }: { onClose: () => void }) {
             <footer><span>{coords(cam)}</span><span>{cam.status === 'caida' ? '— fps' : `${cam.fps} fps`}</span><span>{time}</span></footer>
           </button>
         ))}
-        {!shown.length && <div className="w-empty">{filter === 'alert' ? 'Ninguna cámara tiene alertas esperando decisión.' : 'Ninguna cámara en este filtro.'}</div>}
+        {!shown.length && <div className="w-empty">{filter === 'alert'
+          ? <EmptyState tone="ok" icon="done_all" title="Sin alertas esperando decisión">Ninguna cámara del muro tiene alertas por revisar.</EmptyState>
+          : <EmptyState icon="filter_alt_off" title="Ninguna cámara en este filtro">Elige otro filtro para ver más cámaras.</EmptyState>}</div>}
       </div>
     </section>
   );

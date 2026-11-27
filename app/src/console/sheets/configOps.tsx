@@ -154,6 +154,7 @@ export function RulesSection() {
           <table className="tbl">
             <thead><tr><th>Regla</th><th>Alerta que crea</th><th>Criticidad</th><th className="r">Umbral</th><th className="r">Tiene que durar</th><th>Zonas con umbral propio</th><th>Origen</th><th>Activa</th><th /></tr></thead>
             <tbody>
+              {!rules.length && <tr><td colSpan={10} className="empty">Ninguna regla todavía: sin reglas, ninguna medición se vuelve alerta.</td></tr>}
               {rules.map((r) => (
                 <tr key={r.id}>
                   <td><b style={{ fontWeight: 500 }}>{r.name}</b><div className="dim" style={{ fontSize: 'var(--fs-xs)' }}>{r.scope}</div></td>

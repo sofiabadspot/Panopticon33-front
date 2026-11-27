@@ -6,7 +6,8 @@
 import { useState, type CSSProperties } from 'react';
 import { Button } from './ds/Button';
 import { Icon } from './ds/Icon';
-import { EmptyState, Eyebrow, SearchInput, SkeletonLinea } from './ds/basicos';
+import { Eyebrow, SearchInput, SkeletonLinea } from './ds/basicos';
+import { EmptyState } from '../ui/kit';
 import { useAnchoArrastrable } from './useAnchoArrastrable';
 
 export interface ItemConversacion { id: string; titulo: string; meta: string }
@@ -94,12 +95,8 @@ export function PanelConversaciones({
           </div>
         )}
         {!cargando && grupos.length === 0 && (
-          <EmptyState
-            sutil
-            className="conversaciones__vacio svx-entrar"
-            titulo={filtro ? vacio.sinResultados.titulo : vacio.titulo}
-            texto={filtro ? vacio.sinResultados.texto : vacio.texto}
-          />
+          <EmptyState inline icon={filtro ? 'search_off' : 'forum'} className="conversaciones__vacio svx-entrar"
+            title={filtro ? vacio.sinResultados.titulo : vacio.titulo}>{filtro ? vacio.sinResultados.texto : vacio.texto}</EmptyState>
         )}
         {!cargando && grupos.map((grupo) => (
           <div key={grupo.grupo} className="conversaciones__grupo svx-entrar">

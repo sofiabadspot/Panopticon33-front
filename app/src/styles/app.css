@@ -282,7 +282,7 @@ h1, h2, h3, h4 { margin: 0; font-family: var(--font-display); font-weight: 400; 
 .item .r { text-align: right; font-size: var(--fs-xs); color: var(--ink-subtle); display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); }
 /* Vacío en línea: una sublista de una ficha que no tiene nada. A la izquierda, una frase, sin ícono.
    El vacío de una lista principal es EmptyState (kit), centrado y con ícono. */
-.empty, .wa-empty { padding: var(--space-3) var(--space-4); text-align: left; color: var(--ink-muted); font-size: var(--fs-sm); line-height: 1.45; list-style: none; }
+.empty { padding: var(--space-3) var(--space-4); text-align: left; color: var(--ink-muted); font-size: var(--fs-sm); line-height: 1.45; list-style: none; }
 
 /* ---------- Tablas ---------- */
 .tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-md); }
@@ -1111,7 +1111,7 @@ body:has(.isheet) { overflow: auto; }
 .w-bar .btn.on { border-color: var(--ink-subtle); color: var(--ink); }
 .w-pager { display: inline-flex; align-items: center; gap: var(--space-1); font: 400 var(--fs-sm) var(--font-mono); color: var(--ink-muted); }
 .w-grid { flex: 1; min-height: 0; display: grid; gap: var(--space-2); }
-.w-empty { grid-column: 1 / -1; grid-row: 1 / -1; display: grid; place-items: center; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); color: var(--ink-subtle); font-size: var(--fs-md); }
+.w-empty { grid-column: 1 / -1; grid-row: 1 / -1; display: grid; place-items: center; }
 .wt { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 0; text-align: left; border: 1px solid var(--border-strong); border-radius: var(--radius-xs); background: var(--surface-panel); color: var(--ink); font: inherit; overflow: hidden; cursor: pointer; transition: border-color .15s ease; }
 .wt:hover { border-color: var(--ink-subtle); }
 .wt header { display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 var(--space-2); flex: none; border-bottom: 1px solid var(--border); color: var(--ink-muted); font-size: var(--fs-xs); }
@@ -1728,7 +1728,7 @@ body > .sv-menu .sv-menu__content { min-width: 240px; }
 @media (prefers-reduced-motion: reduce) { .skel, .map-state .spin { animation: none; } }
 .es-inline { display: flex; align-items: center; gap: var(--space-2-5); padding: var(--space-3) var(--space-4); font-size: var(--fs-sm); color: var(--ink-muted); }
 .es-inline b { color: var(--ink); font-weight: 500; }
-.es-inline .es-ic { color: var(--status-positive); font-size: 18px; display: inline-grid; }
+.es-inline.ok .es-ic { color: var(--status-positive); } .es-inline.warn .es-ic { color: var(--status-negative-text); } .es-inline .es-ic { font-size: 18px; display: inline-grid; }
 /* Tarjeta de cámara: el video en vivo arriba */
 .mc-live { position: relative; aspect-ratio: 16 / 9; margin: -1px -1px var(--space-1); background: #000; overflow: hidden; border-bottom: 1px solid var(--hud-line); }
 .mc-live video { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -1910,7 +1910,6 @@ body > .sv-menu .sv-menu__content { min-width: 240px; }
 
 /* Lugar reservado para imágenes (el prototipo no usa fotos ficticias). */
 .shot { position: relative; display: block; width: 100%; height: 100%; min-height: 100%; }
-.ds-empty { display: block; cursor: default; }
 .fc-ph { position: relative; display: block; flex: none; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .fc-ph .ph-ev img { width: 60% !important; }
 
@@ -2426,7 +2425,7 @@ label.wa-u:hover { background: var(--surface-raised); }
 .wa-eta b { font-size: var(--fs-lg); font-weight: 500; }
 .wa-eta small { font-size: var(--fs-2xs); color: var(--ink-subtle); }
 .wa-more { justify-self: start; font-size: var(--fs-xs); }
-.wa-empty { padding-left: 0; padding-right: 0; }
+.wa-list .empty { padding-left: 0; padding-right: 0; }
 
 /* =====================================================================
    Historia del analista (console/story): el sujeto a la izquierda, los capítulos a la derecha y el

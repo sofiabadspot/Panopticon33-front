@@ -58,7 +58,7 @@ export function WhoArrives({ p, onSent }: { p: LngLat;
             </li>
           );
         })}
-        {canSend && !free.length && <li className="wa-empty">Ninguna unidad libre llega a este punto.</li>}
+        {canSend && !free.length && <li className="empty">Ninguna unidad libre llega a este punto.</li>}
       </ol>
       {canSend && blocked.length > 0 && <button className="linklike wa-more" onClick={() => setShowAll(!showAll)}>{showAll ? 'Ocultar las que no pueden ir' : `Ver ${blocked.length} que no pueden ir`}</button>}
       {/* Fijo abajo de la tarjeta: la lista puede ser larga y el botón tiene que verse siempre. */}
