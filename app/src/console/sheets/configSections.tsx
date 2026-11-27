@@ -15,6 +15,7 @@ import { ALL_TABS, TAB_ICON, TAB_LABEL } from '../permissions';
 import { ConfirmDelete, SectionHead } from './configPlace';
 import { SheetHead, SheetNotFound } from './SheetHead';
 import { Segmented } from '../../ui/Segmented';
+import { Field } from '../../ui/Field';
 
 const LAYERS: [LayerKey, string, string?][] = [
   ['alerts', 'Alertas'], ['events', 'Eventos'], ['zones', 'Zonas'], ['units', 'Unidades policiales', 'La ubicación de cada agente: no todos los roles deberían verla'],
@@ -71,13 +72,12 @@ export function RolesSection() {
           </div>
         ) : (
           <form className="box" onSubmit={create} noValidate><div className="bh"><h3>Nuevo rol</h3></div><div className="bb grid">
-            <div className="field"><label htmlFor="rn">Nombre</label><input id="rn" className="fld sm" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Supervisor 911" aria-invalid={taken} autoFocus />
-              {taken && <span className="err"><Icon name="error" />Ya hay un rol que se llama así.</span>}</div>
-            <div className="field"><label htmlFor="rf">Empezar desde</label>
-              <select id="rf" className="fld sm" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })}>
+            <Field label="Nombre" error={taken ? 'Ya hay un rol que se llama así.' : null}>{(p) => <input {...p} className="fld sm" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Supervisor 911" autoFocus />}</Field>
+            <Field label="Empezar desde">{(p) => (
+              <select {...p} className="fld sm" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })}>
                 <option value="">Desde cero: solo Estado, sin acciones ni Jules</option>
                 {configs.map((r) => <option key={r.role} value={r.role}>Copia de {r.name}</option>)}
-              </select></div>
+              </select>)}</Field>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" className="btn ghost sm" onClick={() => { setAdding(false); setF({ name: '', from: '' }); }}>Cancelar</button>
               <button type="submit" className="btn primary sm" style={{ marginLeft: 'auto' }} disabled={!ok}>Crear rol</button>
@@ -150,9 +150,8 @@ export function RoleDetail({ id }: { id: string }) {
         sub={`${holders.length} ${holders.length === 1 ? 'usuario' : 'usuarios'} · abre ${opensWith(saved)}`}
         aside={<button type="button" className="btn ghost xs" onClick={duplicate}><Icon name="content_copy" />Duplicar</button>} />
       <form className="pb" id="role-form" onSubmit={save} noValidate>
-        <div className="field"><label htmlFor="rdn">Nombre</label><input id="rdn" className="fld sm" value={d.name} onChange={(e) => set({ name: e.target.value })} aria-invalid={!!nameErr} />
-          {nameErr && <span className="err"><Icon name="error" />{nameErr}</span>}</div>
-        <div className="field"><label htmlFor="rdd">Descripción</label><input id="rdd" className="fld sm" value={d.description} onChange={(e) => set({ description: e.target.value })} placeholder="Decide las alertas de su territorio" /></div>
+        <Field label="Nombre" error={nameErr}>{(p) => <input {...p} className="fld sm" value={d.name} onChange={(e) => set({ name: e.target.value })} />}</Field>
+        <Field label="Descripción">{(p) => <input {...p} className="fld sm" value={d.description} onChange={(e) => set({ description: e.target.value })} placeholder="Decide las alertas de su territorio" />}</Field>
         {!saved.system && <div className="callout"><Icon name="key" /><span className="grow">Para darle este rol a alguien, crea en Keycloak el rol <b className="mono">{saved.role}</b> y asígnaselo.</span></div>}
 
         <div className="box flush">
@@ -219,10 +218,10 @@ export function RoleDetail({ id }: { id: string }) {
             <div className="field"><span className="lbl">Qué alertas le llegan</span>
               <Segmented label="Qué alertas le llegan" style={{ alignSelf: 'flex-start' }} value={d.alertScope} onChange={(alertScope) => set({ alertScope })}
                 options={[{ value: 'todas', label: 'Todas' }, { value: 'territorio', label: 'Solo de su territorio' }]} /></div>
-            <div className="field"><label htmlFor="rds">Desde qué criticidad</label>
-              <select id="rds" className="fld sm" value={d.minSeverity ?? ''} onChange={(e) => set({ minSeverity: (e.target.value || null) as Severity | null })}>
+            <Field label="Desde qué criticidad">{(p) => (
+              <select {...p} className="fld sm" value={d.minSeverity ?? ''} onChange={(e) => set({ minSeverity: (e.target.value || null) as Severity | null })}>
                 <option value="">Todas</option><option value="media">{SEVERITY_LABEL.media} o más</option><option value="critica">Solo {SEVERITY_LABEL.critica.toLowerCase()}s</option>
-              </select></div>
+              </select>)}</Field>
             <div className="field"><span className="lbl">Qué puede hacer con una alerta</span>
               <Segmented label="Qué puede hacer con una alerta" style={{ alignSelf: 'flex-start', flexWrap: 'wrap' }} value={level}
                 onChange={(k) => { if (k === 'personalizado') setCustom(true); else { setCustom(false); set({ actions: LEVELS.find(([x]) => x === k)![2] }); } }}

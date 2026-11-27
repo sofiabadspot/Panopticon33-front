@@ -136,6 +136,16 @@ export function download(name: string, text: string, type = 'text/csv;charset=ut
 /* ---------- Estados de una lista: vacía y cargando ----------
    Vacía: un ícono, qué pasa en una frase y, si hay, qué se puede hacer. Nunca se ve como un error.
    Cargando: filas grises con la misma forma que las reales, para que nada salte cuando llegan. */
+/** Regla única de permisos en pantalla:
+    · Lo que el rol nunca va a tener se oculta (botón, sección o pestaña), sin explicar.
+    · Si la tarea principal de la vista es esa acción (decidir una alerta o una coincidencia),
+      en el lugar donde irían los botones va esta nota: "Solo lectura: tu rol no …".
+    · Lo que el rol sí puede pero hoy no se puede hacer (sin conexión, ya decidido, falta un dato)
+      se muestra deshabilitado con el motivo a la vista. */
+export function ReadOnlyNote({ children }: { children: ReactNode }) {
+  return <p className="ro-note"><Icon name="lock" /><span><b>Solo lectura:</b> {children}</span></p>;
+}
+
 export function EmptyState({ icon, title, children, action, tone }: { icon: string; title: string; children?: ReactNode; action?: ReactNode; tone?: 'ok' | 'warn' }) {
   return (
     <div className={`empty-state ${tone ?? ''}`} role="status">

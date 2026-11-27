@@ -13,6 +13,7 @@ import { useConsole } from '../ctx';
 import { playWhenOpened } from './useStory';
 import { STORY_REASON } from './StorySimple';
 import { usePermissions } from '../permissions';
+import { Field } from '../../ui/Field';
 
 /* El sujeto que espera motivo. Lo pinta <OpenStoryHost />, montado una vez en la consola. */
 let pending: StorySubject | null = null;
@@ -62,12 +63,12 @@ function ReasonDialog({ s }: { s: StorySubject }) {
     <Dialog title={s.k === 'sin_identificar' ? `Investigar a la persona sin identificar ${s.faceId}` : `Investigar ${label.title}`} onClose={close}>
       <form onSubmit={submit} noValidate style={{ display: 'grid', gap: 14 }}>
         <div className="callout"><Icon name="lock" /><span className="grow">La investigación reconstruye por dónde anduvo, capítulo por capítulo. Abrirla queda en la bitácora con su motivo.</span></div>
-        <div className="field">
-          <select className="fld sm" value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Motivo de la consulta" autoFocus>
-            <option value="">Motivo de la consulta…</option>{SEARCH_REASONS.map((r) => <option key={r}>{r}</option>)}
+        <Field label="Motivo de la consulta">{(p) => <>
+          <select {...p} className="fld sm" value={pick} onChange={(e) => setPick(e.target.value)} autoFocus>
+            <option value="">Elegir un motivo…</option>{SEARCH_REASONS.map((r) => <option key={r}>{r}</option>)}
           </select>
           <input className="fld sm" value={text} onChange={(e) => setText(e.target.value)} placeholder="Número de caso (opcional)" aria-label="Número de caso" />
-        </div>
+        </>}</Field>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="btn ghost sm" type="button" onClick={close}>Cancelar</button>
           <button className="btn primary sm" type="submit" disabled={!pick} title={pick ? undefined : 'Elige un motivo'}><Icon name="play_arrow" />Abrir y reproducir</button>

@@ -18,6 +18,7 @@ import { bearing } from '../../map/markers';
 import { CsvImport, type CsvColumn, type RowResult } from './CsvImport';
 import { SheetHead, SheetNotFound } from './SheetHead';
 import { Segmented } from '../../ui/Segmented';
+import { Field } from '../../ui/Field';
 
 /* ---------------- Comunes ---------------- */
 export function SectionHead({ group, icon, title, sub }: { group: string; icon: string; title: string; sub: string }) {
@@ -122,7 +123,7 @@ export function ZonesSection() {
           <div className="box"><div className="bh"><h3>Nueva zona</h3></div><div className="bb grid">
             <HexPicker cells={cells} onChange={setCells} />
             {overlap > 0 && <div className="callout warn"><Icon name="warning" /><span className="grow">{overlap} {overlap === 1 ? 'hexágono ya es' : 'hexágonos ya son'} de otra zona. Las personas de ahí se contarían dos veces.</span></div>}
-            <div className="field"><label htmlFor="zn">Nombre</label><input id="zn" className="fld sm" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Catedral Metropolitana" /></div>
+            <Field label="Nombre">{(p) => <input {...p} className="fld sm" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Catedral Metropolitana" />}</Field>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn ghost sm" onClick={() => { setDrawing(false); setCells([]); }}>Cancelar</button>
               <button className="btn primary sm" style={{ marginLeft: 'auto' }} onClick={finish} disabled={!ok}>Crear zona</button>
@@ -224,9 +225,8 @@ export function ZoneDetail({ id }: { id: string }) {
         aside={<>{!zcams.length ? <span className="chip media">Sin cámara: no se mide</span> : s?.coverage === 'medida' ? <span className="chip ok">Medida</span> : <span className="chip nodata">Sin medición</span>}
           <button type="button" className="btn ghost xs" onClick={() => c.open({ k: 'zona', id: z.id })}><Icon name="visibility" />Ver en vivo</button></>} />
       <form className="pb" id="zone-form" onSubmit={save} noValidate>
-        <div className="field"><label htmlFor="zdn">Nombre</label><input id="zdn" className="fld sm" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></div>
-        <div className="field"><label htmlFor="zdc">Capacidad (personas)</label><input id="zdc" inputMode="numeric" className="fld sm mono" value={f.capacity} onChange={(e) => setF({ ...f, capacity: e.target.value.replace(/\D/g, '') })} aria-invalid={!capOk} />
-            {!capOk && <span className="err"><Icon name="error" />Indica cuántas personas caben.</span>}</div>
+        <Field label="Nombre">{(p) => <input {...p} className="fld sm" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />}</Field>
+        <Field label="Capacidad (personas)" error={capOk ? null : 'Indica cuántas personas caben.'}>{(p) => <input {...p} inputMode="numeric" className="fld sm mono" value={f.capacity} onChange={(e) => setF({ ...f, capacity: e.target.value.replace(/\D/g, '') })} />}</Field>
         <span className="hint dim" style={{ fontSize: 'var(--fs-sm)' }}>La ocupación de la zona se calcula sobre esta capacidad. La fija el Ministerio; la estimación inicial es 4 personas por m².</span>
 
         <div className="box">
@@ -259,12 +259,11 @@ export function ZoneDetail({ id }: { id: string }) {
           <div className="bh"><h3>Cuándo avisar en esta zona</h3><span className="sub">umbrales propios</span></div>
           <div className="bb grid">
             {zoneRules.map((r) => (
-              <div key={r.id} className="field">
-                <label htmlFor={`zt-${r.id}`}>{r.name} <span className="dim">({r.unit})</span></label>
-                <input id={`zt-${r.id}`} inputMode="decimal" className="fld sm mono" value={thr[r.id] ?? ''} placeholder={fmt(r.threshold ?? 0)}
-                  onChange={(e) => setThr({ ...thr, [r.id]: e.target.value.replace(/[^\d.,]/g, '').replace(',', '.') })} aria-invalid={!!thr[r.id] && !(Number(thr[r.id]) > 0)} />
-                <span className="hint dim" style={{ fontSize: 'var(--fs-xs)' }}>{thr[r.id] ? `Propio de esta zona. Para todas las zonas es ${fmt(r.threshold ?? 0)}.` : `Vacío: usa el de todas las zonas (${fmt(r.threshold ?? 0)}).`}</span>
-              </div>
+              <Field key={r.id} label={<>{r.name} <span className="dim">({r.unit})</span></>}
+                hint={thr[r.id] ? `Propio de esta zona. Para todas las zonas es ${fmt(r.threshold ?? 0)}.` : `Vacío: usa el de todas las zonas (${fmt(r.threshold ?? 0)}).`}>{(p) => (
+                <input {...p} inputMode="decimal" className="fld sm mono" value={thr[r.id] ?? ''} placeholder={fmt(r.threshold ?? 0)}
+                  onChange={(e) => setThr({ ...thr, [r.id]: e.target.value.replace(/[^\d.,]/g, '').replace(',', '.') })} aria-invalid={!!thr[r.id] && !(Number(thr[r.id]) > 0)} />)}
+              </Field>
             ))}
             <span className="hint dim" style={{ fontSize: 'var(--fs-sm)' }}>Durante un evento, rigen los umbrales del evento. La criticidad de cada alerta se fija en la regla.</span>
           </div>
@@ -382,19 +381,19 @@ function NewCamera({ onSave, onClose }: { onSave: (c: Camera) => void; onClose: 
       <button className="btn primary sm" disabled={!('ok' in res)} onClick={() => 'ok' in res && onSave(res.ok)}>Agregar cámara</button>
     </>}>
       <div className="form-row">
-        <div className="field"><label htmlFor="ci">Identificador</label><input id="ci" className="fld mono" value={v.id} onChange={set('id')} /></div>
-        <div className="field"><label htmlFor="ct">Qué detecta</label>
-          <select id="ct" className="fld" value={v.tipo} onChange={set('tipo')}>{Object.entries(KIND_NAME).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+        <Field label="Identificador">{(p) => <input {...p} className="fld mono" value={v.id} onChange={set('id')} />}</Field>
+        <Field label="Qué detecta">{(p) => (
+          <select {...p} className="fld" value={v.tipo} onChange={set('tipo')}>{Object.entries(KIND_NAME).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>)}</Field>
       </div>
-      <div className="field"><label htmlFor="cu">Ubicación</label><input id="cu" className="fld" value={v.ubicacion} onChange={set('ubicacion')} placeholder="Av. Roosevelt y 49 Av. Sur" /></div>
+      <Field label="Ubicación">{(p) => <input {...p} className="fld" value={v.ubicacion} onChange={set('ubicacion')} placeholder="Av. Roosevelt y 49 Av. Sur" />}</Field>
       <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr auto', alignItems: 'end' }}>
-        <div className="field"><label htmlFor="cla">Latitud</label><input id="cla" inputMode="decimal" className="fld mono" value={v.lat} onChange={set('lat')} placeholder="13.7010" /></div>
-        <div className="field"><label htmlFor="clo">Longitud</label><input id="clo" inputMode="decimal" className="fld mono" value={v.lon} onChange={set('lon')} placeholder="-89.2240" /></div>
+        <Field label="Latitud">{(p) => <input {...p} inputMode="decimal" className="fld mono" value={v.lat} onChange={set('lat')} placeholder="13.7010" />}</Field>
+        <Field label="Longitud">{(p) => <input {...p} inputMode="decimal" className="fld mono" value={v.lon} onChange={set('lon')} placeholder="-89.2240" />}</Field>
         <button className="btn secondary sm" onClick={() => setPick(true)}><Icon name="pin_drop" />Marcar en el mapa</button>
       </div>
       <div className="form-row">
-        <div className="field"><label htmlFor="cz">Zona que mide</label>
-          <select id="cz" className="fld" value={v.zona} onChange={set('zona')}><option value="">Ninguna por ahora</option>{zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}</select></div>
+        <Field label="Zona que mide">{(p) => (
+          <select {...p} className="fld" value={v.zona} onChange={set('zona')}><option value="">Ninguna por ahora</option>{zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}</select>)}</Field>
         <label className="toggle" style={{ alignSelf: 'end', paddingBottom: 8 }}><input type="checkbox" checked={!!v.ptz} onChange={(e) => setV({ ...v, ptz: e.target.checked ? 'si' : '' })} />Se mueve (PTZ)</label>
       </div>
       {touched && 'error' in res && <span className="err"><Icon name="error" />{res.error}</span>}
@@ -445,23 +444,23 @@ export function CameraDetail({ id }: { id: string }) {
         {cam.status === 'caida' && <div className="callout danger"><Icon name="videocam_off" /><span className="grow"><b>No envía video desde hace {ago(cam.lastFrameAt, now).replace('hace ', '')}.</b> La zona que mide queda sin datos. Revisa la conexión en el sitio.</span></div>}
         {cam.status === 'fuera_de_preset' && <div className="callout warn"><Icon name="warning" /><span className="grow"><b>Fuera de su preset.</b> Mientras se mueve solo detecta: no mide la zona ni lee placas. Llévala a un preset abajo.</span></div>}
         {cam.status === 'degradada' && !cam.presets.length && <div className="callout warn"><Icon name="warning" /><span className="grow"><b>Sin presets.</b> Agrega al menos uno para que pueda medir su zona.</span></div>}
-        <div className="field"><label htmlFor="cdu">Ubicación</label><input id="cdu" className="fld sm" value={f.street} onChange={set('street')} /></div>
+        <Field label="Ubicación">{(p) => <input {...p} className="fld sm" value={f.street} onChange={set('street')} />}</Field>
         <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr auto', alignItems: 'end' }}>
-          <div className="field"><label htmlFor="cdla">Latitud</label><input id="cdla" inputMode="decimal" className="fld sm mono" value={f.lat} onChange={set('lat')} aria-invalid={!okPos} /></div>
-          <div className="field"><label htmlFor="cdlo">Longitud</label><input id="cdlo" inputMode="decimal" className="fld sm mono" value={f.lon} onChange={set('lon')} aria-invalid={!okPos} /></div>
+          <Field label="Latitud">{(p) => <input {...p} inputMode="decimal" className="fld sm mono" value={f.lat} onChange={set('lat')} aria-invalid={!okPos} aria-describedby={okPos ? undefined : 'cam-pos-err'} />}</Field>
+          <Field label="Longitud">{(p) => <input {...p} inputMode="decimal" className="fld sm mono" value={f.lon} onChange={set('lon')} aria-invalid={!okPos} aria-describedby={okPos ? undefined : 'cam-pos-err'} />}</Field>
           <button type="button" className={`btn sm ${pick ? 'primary' : 'secondary'}`} onClick={() => setPick(!pick)}><Icon name="pin_drop" />{pick ? 'Haz clic en el mapa' : 'Mover en el mapa'}</button>
         </div>
-        {!okPos && <span className="err"><Icon name="error" />Las coordenadas están fuera de El Salvador.</span>}
+        {!okPos && <span className="err" id="cam-pos-err"><Icon name="error" />Las coordenadas están fuera de El Salvador.</span>}
         <div className="form-row">
-          <div className="field"><label htmlFor="cdk">Qué detecta</label>
-            <select id="cdk" className="fld sm" value={f.kind} onChange={set('kind')}>{Object.entries(KIND_NAME).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
-          <div className="field"><label htmlFor="cdh">Hacia dónde mira (grados, 0 = norte)</label><input id="cdh" inputMode="numeric" className="fld sm mono" value={f.heading} onChange={set('heading')} /></div>
+          <Field label="Qué detecta">{(p) => (
+            <select {...p} className="fld sm" value={f.kind} onChange={set('kind')}>{Object.entries(KIND_NAME).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>)}</Field>
+          <Field label="Hacia dónde mira (grados, 0 = norte)">{(p) => <input {...p} inputMode="numeric" className="fld sm mono" value={f.heading} onChange={set('heading')} />}</Field>
         </div>
         <div className="form-row">
-          <div className="field"><label htmlFor="cdz">Zona que mide</label>
-            <select id="cdz" className="fld sm" value={f.zoneId} onChange={set('zoneId')}><option value="">Ninguna</option>{zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}</select></div>
-          <div className="field"><label htmlFor="cdc">Procesamiento</label>
-            <select id="cdc" className="fld sm" value={f.compute} onChange={set('compute')}>{[...new Set([...COMPUTE, cam.compute])].map((x) => <option key={x} value={x}>{x}</option>)}</select></div>
+          <Field label="Zona que mide">{(p) => (
+            <select {...p} className="fld sm" value={f.zoneId} onChange={set('zoneId')}><option value="">Ninguna</option>{zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}</select>)}</Field>
+          <Field label="Procesamiento">{(p) => (
+            <select {...p} className="fld sm" value={f.compute} onChange={set('compute')}>{[...new Set([...COMPUTE, cam.compute])].map((x) => <option key={x} value={x}>{x}</option>)}</select>)}</Field>
         </div>
         <label className="toggle"><input type="checkbox" checked={f.ptz} onChange={(e) => setF({ ...f, ptz: e.target.checked })} />Se mueve (PTZ): usa presets para medir</label>
 

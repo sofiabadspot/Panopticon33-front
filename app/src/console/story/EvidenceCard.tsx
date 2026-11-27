@@ -15,7 +15,7 @@ import { useSession } from '../../shell/session';
 import { Icon } from '../../ui/kit';
 import { QuickFan } from '../QuickFan';
 import { useStoryChapters, useStoryJump, useStoryPlayback, useStoryRange } from './useStory';
-import { DateTimeField, fromField, toField } from '../../ui/Field';
+import { DateTimeField, Field, fromField, toField } from '../../ui/Field';
 import { FileInput } from '../../ui/FileInput';
 
 type Mode = 'archivo' | 'titulo' | 'plataforma';
@@ -50,11 +50,11 @@ function useWhenAndSource(story: Story) {
       hint="La fecha y hora del hecho (por ejemplo, cuándo se hizo la denuncia), no la de hoy. Con esta fecha entra en su lugar del recorrido." />
   );
   const sourceField = (
-    <div className="field"><label htmlFor="ev-src">Fuente</label>
-      <select id="ev-src" className="fld sm" value={pick} onChange={(e) => setPick(e.target.value)}>
+    <Field label="Fuente">{(p) => <>
+      <select {...p} className="fld sm" value={pick} onChange={(e) => setPick(e.target.value)}>
         <option value="">Elige de dónde viene…</option>{EVIDENCE_SOURCES.map((s) => <option key={s}>{s}</option>)}<option>{OTHER}</option>
       </select>
-      {pick === OTHER && <input className="fld sm" autoFocus value={other} onChange={(e) => setOther(e.target.value)} placeholder="Nombre de la fuente" aria-label="Nombre de la fuente" />}</div>
+      {pick === OTHER && <input className="fld sm" autoFocus value={other} onChange={(e) => setOther(e.target.value)} placeholder="Nombre de la fuente" aria-label="Nombre de la fuente" />}</>}</Field>
   );
   return { t, source, whenField, sourceField };
 }
@@ -106,8 +106,8 @@ export function EvidenceFan({ story, p, xy, onClose }: { story: Story; p: LngLat
       <div className="mc2-hd"><span className="mc2-lbl">{ITEMS.find((x) => x.id === mode)?.label}</span></div>
       <form className="qf-form" noValidate onSubmit={(e) => { e.preventDefault(); save(); }}>
         {mode === 'archivo' && (
-          <div className="field"><span className="lbl">Archivo</span>
-            <FileInput label="Elegir archivo" accept="image/*,video/*,application/pdf" onFiles={(fs) => { const f = fs[0] ?? null; setFile(f); if (f && !title.trim()) setTitle(f.name.replace(/\.[^.]+$/, '')); }} /></div>
+          <Field label="Archivo">{(fp) => (
+            <FileInput id={fp.id} aria-describedby={fp['aria-describedby']} label="Elegir archivo" accept="image/*,video/*,application/pdf" onFiles={(fs) => { const f = fs[0] ?? null; setFile(f); if (f && !title.trim()) setTitle(f.name.replace(/\.[^.]+$/, '')); }} />)}</Field>
         )}
         {mode === 'plataforma' && (
           <div className="field"><span className="lbl" id="ev-cam">Cámara cercana</span>
@@ -120,8 +120,8 @@ export function EvidenceFan({ story, p, xy, onClose }: { story: Story; p: LngLat
               ))}
             </ul></div>
         )}
-        <div className="field"><label htmlFor="ev-title">Título{mode === 'plataforma' && <small className="hint"> (opcional)</small>}</label>
-          <input id="ev-title" className="fld sm" autoFocus={mode === 'titulo'} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={mode === 'plataforma' ? 'Ej.: pasa frente al portón' : 'Ej.: video de un vecino'} /></div>
+        <Field label="Título" optional={mode === 'plataforma'}>{(fp) => (
+          <input {...fp} className="fld sm" autoFocus={mode === 'titulo'} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={mode === 'plataforma' ? 'Ej.: pasa frente al portón' : 'Ej.: video de un vecino'} />)}</Field>
         {whenField}
         {mode !== 'plataforma' && sourceField}
         <button type="submit" className="btn primary sm" style={{ width: '100%' }} disabled={!ok}>Agregar a la investigación</button>
@@ -152,10 +152,10 @@ export function EvidenceLoose({ story, onClose }: { story: Story; onClose: () =>
       <div className="mc2-hd"><span className="mc2-lbl">Evidencia sin lugar en el mapa</span><button className="iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar (Esc)"><Icon name="close" /></button></div>
       <p className="qf-hint">Un documento, fotos o un informe que no pasó en un punto de la ciudad. En el recorrido aparece como una escena, en el momento en que pasó.</p>
       <form className="qf-form" noValidate onSubmit={(e) => { e.preventDefault(); save(); }}>
-        <div className="field"><span className="lbl">Archivos <small className="hint">(uno o varios)</small></span>
-          <FileInput label="Elegir archivos" multiple accept="image/*,video/*,application/pdf" onFiles={(fs) => { setFiles(fs); if (fs[0] && !title.trim()) setTitle(fs[0].name.replace(/\.[^.]+$/, '')); }} /></div>
-        <div className="field"><label htmlFor="evl-title">Qué es</label>
-          <input id="evl-title" className="fld sm" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej.: denuncia de la víctima, fotos del DUI" /></div>
+        <Field label={<>Archivos <small className="hint">(uno o varios)</small></>}>{(fp) => (
+          <FileInput id={fp.id} aria-describedby={fp['aria-describedby']} label="Elegir archivos" multiple accept="image/*,video/*,application/pdf" onFiles={(fs) => { setFiles(fs); if (fs[0] && !title.trim()) setTitle(fs[0].name.replace(/\.[^.]+$/, '')); }} />)}</Field>
+        <Field label="Qué es">{(fp) => (
+          <input {...fp} className="fld sm" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej.: denuncia de la víctima, fotos del DUI" />)}</Field>
         {whenField}
         {sourceField}
         <div className="ev-actions">

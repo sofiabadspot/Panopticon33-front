@@ -4,7 +4,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import { Button } from './ds/Button';
 import { Dialog } from './ds/Dialog';
-import { Tabs } from './ds/Tabs';
+import { Segmented } from '../ui/Segmented';
 import { Textarea } from './ds/basicos';
 
 const TEXTOS = {
@@ -41,7 +41,7 @@ export function OpinionGeneral({ open, onClose, onEnviar }: { open: boolean; onC
       <Button type="submit" size="sm" form={`${id}-form`} disabled={!texto.trim()}>{TEXTOS.enviar}</Button>
     </>}>
       <form id={`${id}-form`} className="jules-opinion-general" onSubmit={enviar}>
-        <Tabs label={TEXTOS.tipo} items={TEXTOS.tipos.map(({ value, label }) => ({ value, label }))} value={tipo} onChange={setTipo} />
+        <Segmented label={TEXTOS.tipo} options={TEXTOS.tipos.map(({ value, label }) => ({ value, label }))} value={tipo} onChange={setTipo} />
         <div className="sv-field">
           <label className="sv-label" htmlFor={id}>{actual.pregunta}</label>
           <Textarea id={id} rows={4} placeholder={actual.ayuda} value={texto} onChange={(evento) => setTexto(evento.target.value)} />

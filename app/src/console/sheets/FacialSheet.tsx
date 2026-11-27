@@ -16,7 +16,9 @@ import { FACIAL_DISCARD, FACIAL_LISTS, UNKNOWN_FACES, bestDetection, confirmFaci
 import { useSession } from '../../shell/session';
 import { FacialDossier, Proofs, Shot, proofItem, type ViewItem } from './FacialDossier';
 import { ImageViewer } from '../../ui/ImageInspect';
-import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
+import { Tabs } from '../../ui/Tabs';
+import { Segmented } from '../../ui/Segmented';
+import { EmptyState, Icon, ReadOnlyNote, useNow, useToast } from '../../ui/kit';
 import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
 import { SheetHead, SheetNotFound } from './SheetHead';
@@ -70,14 +72,11 @@ export function FacialPanel() {
   return (
     <>
       <Phase3Notice />
-      <div className="fbar" role="group" aria-label="Listas">
-        {(['todas', ...Object.keys(FACIAL_LISTS)] as ListFilter[]).map((l) => (
-          <button key={l} aria-pressed={list === l} className={`fchip ${list === l ? 'on' : ''}`} onClick={() => setList(l)}
-            aria-label={`${l === 'todas' ? 'Todas las listas' : FACIAL_LISTS[l].name}: ${pending(l)} por revisar`}>
-            {l === 'todas' ? 'Todas las listas' : FACIAL_LISTS[l].name}<b>{pending(l)}</b>
-          </button>
-        ))}
-      </div>
+      <Tabs<ListFilter> variant="chips" className="fbar" label="Listas" value={list} onChange={setList}
+        items={(['todas', ...Object.keys(FACIAL_LISTS)] as ListFilter[]).map((l) => {
+          const name = l === 'todas' ? 'Todas las listas' : FACIAL_LISTS[l].name;
+          return { id: l, label: name, count: pending(l), ariaLabel: `${name}: ${pending(l)} por revisar` };
+        })} />
       {/* Vacía: no hubo coincidencias. Con coincidencias pero ninguna pendiente: se dice antes de la lista. */}
       {!matches.length && <EmptyState icon="visibility" title="Sin coincidencias">{list === 'todas' ? 'Los puntos de control no encontraron rostros de las listas. Si aparece uno, llega aquí con un aviso.' : `Nada de ${FACIAL_LISTS[list].name.toLowerCase()}.`}</EmptyState>}
       {matches.length > 0 && !matches.some((m) => m.status === 'por_revisar') && <div className="es-inline"><span className="es-ic" aria-hidden><Icon name="done_all" /></span><span><b>Todo revisado.</b> Ninguna coincidencia espera decisión.</span></div>}
@@ -204,10 +203,9 @@ export function FacialSheet({ id }: { id: string }) {
 
         {/* Grabación de la mejor captura o la cámara en vivo donde la vieron por última vez, ahí mismo. */}
         <div className="fc-video">
-          <div className="seg fc-vseg" role="group" aria-label="Video">
-            <button aria-pressed={!live} className={!live ? 'on' : ''} onClick={() => setLive(false)}>Grabación · {hhmm(best.at)} · {best.cameraId}</button>
-            <button aria-pressed={live} className={live ? 'on' : ''} onClick={() => { if (!live) audit(user, 'Ver cámara en vivo', d.cameraId, m.listRef); setLive(true); }}><span className="live-dot" aria-hidden />En vivo · {d.cameraId}</button>
-          </div>
+          <Segmented<'rec' | 'live'> className="fc-vseg" label="Video" value={live ? 'live' : 'rec'}
+            onChange={(v) => { if (v === 'live' && !live) audit(user, 'Ver cámara en vivo', d.cameraId, m.listRef); setLive(v === 'live'); }}
+            options={[{ value: 'rec', label: <>Grabación · {hhmm(best.at)} · {best.cameraId}</> }, { value: 'live', label: <><span className="live-dot" aria-hidden />En vivo · {d.cameraId}</> }]} />
           <span className="fc-ph">
             {live
               ? (liveClip ? <video src={liveClip.src} poster={liveClip.poster} muted loop autoPlay playsInline controls aria-label={`En vivo, ${d.cameraId}`} /> : <Shot label={`En vivo · ${d.cameraId} · sin señal de video`} />)
@@ -266,7 +264,6 @@ export function FacialSheet({ id }: { id: string }) {
         onConfirm={() => { confirmFacial(m.id, user); setConfirming(false); toast('Identidad confirmada: alerta generada y agente avisado'); }}>
         Se confirma que la persona detectada es <b style={{ color: 'var(--ink)' }}>{m.name}</b> ({m.listRef}, {m.reason.toLowerCase()}). Se genera una alerta y se avisa al {m.agent.split(' (')[0]} con la foto de referencia. Queda registrado con el nombre de quien confirma.
       </ConfirmDelete>}
-      {!perm.can('decidir_facial') && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: tu rol no confirma ni descarta coincidencias.</span></div>}
       <div className="pf">
         <button className="fc-open" onClick={openDossier}>
           <i aria-hidden><Icon name="open_in_full" /></i>
@@ -284,6 +281,7 @@ export function FacialSheet({ id }: { id: string }) {
             <button className="btn ghost xs" onClick={() => setDiscarding(false)}>Cancelar</button>
           </div>
         </>}
+        {!perm.can('decidir_facial') && m.status === 'por_revisar' && <ReadOnlyNote>tu rol no confirma ni descarta coincidencias.</ReadOnlyNote>}
         {m.status === 'confirmada' && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> Confirmada{m.reviewedBy ? ` por ${m.reviewedBy}` : ''}. El agente en el punto de control está avisado.</span>}
         {m.status === 'descartada' && <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Descartada{m.discardReason ? `: ${m.discardReason.toLowerCase()}` : ''}. El rostro no se guarda.</span>}
       </div>

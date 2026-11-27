@@ -7,7 +7,7 @@
    Abrir algo nunca cambia de pantalla: el mapa se mueve hacia ello. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { INCIDENT_LABEL, SCENARIO_LABEL, SECTOR, eventStatus, forOperator, inScope, openStory, roleName, sessionFor, setScenario, snapshot, useApi, type Scenario } from '../api';
+import { DEMO_TOOLS, INCIDENT_LABEL, SCENARIO_LABEL, SECTOR, eventStatus, forOperator, inScope, openStory, roleName, sessionFor, setScenario, snapshot, useApi, type Scenario } from '../api';
 import { useFacial } from '../api/facial';
 import { dateTime, hhmm, hhmmss } from '../api/format';
 import { KIND_LABEL, KIND_PHRASE } from '../api/labels';
@@ -23,7 +23,8 @@ import { EmptyState, Icon, useNow, useOnline, PanelSkeleton, SheetSkeleton } fro
 import { P33Logo } from '../ui/Logo';
 import { Menu } from '../ui/Menu';
 import { boundsOf, useZoneSeverity } from '../views/shared';
-import { ConsoleProvider, toolsOf, canOpenSheet, useConsole } from './ctx';
+import { ConsoleProvider, toolsOf, canOpenSheet, useConsole, type PanelId } from './ctx';
+import { Tabs } from '../ui/Tabs';
 import { usePermissions } from './permissions';
 import { useRoleChangeNotice } from './roleChange';
 import { Search } from './Search';
@@ -350,8 +351,9 @@ function Layout() {
                   setRole(r.role); navigate('/');
                 } },
               })),
-              // Escenario de la consola: para revisar cada estado de la interfaz (vacía, cargando, sin Maic…)
-              ...(Object.keys(SCENARIO_LABEL) as Scenario[]).map((sc, i) => ({
+              // Escenario de la consola: para revisar cada estado de la interfaz (vacía, cargando, sin MAIC…).
+              // Solo en desarrollo o con VITE_DEMO_TOOLS=1: nunca en la build de producción.
+              ...(!DEMO_TOOLS ? [] : Object.keys(SCENARIO_LABEL) as Scenario[]).map((sc, i) => ({
                 label: SCENARIO_LABEL[sc], detalle: i === 0 ? 'Escenario' : undefined, marcado: sc === scenario, separado: i === 0,
                 onSelect: () => setScenario(sc),
               })),
@@ -367,17 +369,13 @@ function Layout() {
         {story ? <StoryPanel key={story.id} story={story} onExit={() => c.setStoryId(null)} /> : <>
         {/* En Configuración no hay barra de pestañas: si el rol también tiene pestañas, se vuelve desde acá. */}
         {admin ? (p.tabs.length > 0 && <div className="pb" style={{ paddingBottom: 0 }}><button className="btn ghost sm" onClick={() => c.go(p.tabs[0], null)}><Icon name="arrow_back" />Volver a la consola</button></div>) : (
-        <nav className="ltabs" role="tablist" aria-label="Tareas" ref={tabsRef}>
-          {/* Indicador que se desliza a la pestaña activa (posición medida abajo, en tabsRef). */}
-          <span className="ti" aria-hidden />
-          {toolsOf(p).map((t) => (
-            <button key={t.id} data-tab={t.id} role="tab" aria-selected={c.panel === t.id} className={c.panel === t.id ? 'on' : ''} onClick={() => c.setPanel(t.id)}>
-              {t.label}
-              {!loading && badge(t.id) > 0 && <span key={t.id === 'alertas' ? `n${pending}` : t.id} className={`count ${t.id === 'alertas' && c.fresh.length ? 'beat' : ''}`}>{badge(t.id)}</span>}
-              {t.phase && <small>{t.phase}</small>}
-            </button>
-          ))}
-        </nav>)}
+        <Tabs<PanelId> as="nav" className="ltabs" label="Tareas" listRef={tabsRef} value={c.panel} onChange={(t) => c.setPanel(t)}
+          // Indicador que se desliza a la pestaña activa (posición medida abajo, en tabsRef).
+          before={<span className="ti" aria-hidden />}
+          items={toolsOf(p).map((t) => ({ id: t.id, label: t.label, extra: <>
+            {!loading && badge(t.id) > 0 && <span key={t.id === 'alertas' ? `n${pending}` : t.id} className={`count ${t.id === 'alertas' && c.fresh.length ? 'beat' : ''}`}>{badge(t.id)}</span>}
+            {t.phase && <small>{t.phase}</small>}
+          </> }))} />)}
         {/* key: cada cambio de pestaña vuelve a montar el contenedor y dispara su entrada. */}
         <div key={c.panel} className="panel-swap">
           {/* Mientras llegan los datos, cada panel muestra su forma en gris (no ceros ni listas vacías) */}

@@ -1,3 +1,14 @@
+/* Anatomía única de las fichas (toda ficha nueva o revisada sigue este orden):
+   1. SheetHead: volver, qué es (kicker), título, estado (aside) y navegar a otra cosa (ver, investigar, editar).
+   2. Avisos de estado: .callout (sin medición, lista, diferencia de lectura…).
+   3. Imagen o video.
+   4. Cifras (.kpis).
+   5. Detalle (dl.details, .box).
+   6. Relacionados (alertas, unidades, cámaras, lecturas).
+   7. Línea de tiempo.
+   8. Zona de peligro (.danger-zone) al final del cuerpo: eliminar, cancelar, terminar.
+   9. Pie (.pf): decidir y guardar. Si el rol no puede decidir, ahí va ReadOnlyNote (ui/kit).
+   Ficha que no existe: SheetNotFound. Lista vacía: <li className="empty">. */
 import { createContext, useContext, type ReactNode } from 'react';
 import type { Sheet } from '../ctx';
 import { EmptyState, Icon } from '../../ui/kit';

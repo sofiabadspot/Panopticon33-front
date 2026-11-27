@@ -7,7 +7,8 @@ import { ago } from '../../api/format';
 import { KIND_LABEL, KIND_PHRASE, REVIEW_LABEL, SEVERITY_TARGET_MIN } from '../../api/labels';
 import type { Alert, ReviewStatus } from '../../api/types';
 import { useSession } from '../../shell/session';
-import { EmptyState, Evidence, Icon, StatusChip, useNow } from '../../ui/kit';
+import { Tabs } from '../../ui/Tabs';
+import { EmptyState, Evidence, Icon, ReadOnlyNote, StatusChip, useNow } from '../../ui/kit';
 import { AlertGlyph, fmtLate, overdueMin, SeverityBars } from '../../map/icons';
 import { waitingSince } from '../../views/shared';
 import { useConsole } from '../ctx';
@@ -111,16 +112,13 @@ export function QueuePanel() {
       {stale.map((l) => (
         <div key={l.id} className="notice" role="status"><Icon name="warning" /><span><b>Lista desactualizada:</b> {l.name.toLowerCase()}, sincronizada {ago(l.lastSyncAt, now)} (plazo {l.maxAgeMin} min).</span></div>
       ))}
-      <div className="fbar" role="group" aria-label="Filtros">
-        {(['por_revisar', 'confirmada', 'descartada', 'todas'] as Tab[]).map((t) => (
-          <button key={t} aria-pressed={tab === t} className={`fchip ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
-            {t === 'todas' ? 'Todas' : t === 'confirmada' ? 'Confirmadas' : t === 'descartada' ? 'Descartadas' : REVIEW_LABEL[t]}<b>{count(t)}</b>
-          </button>
-        ))}
+      <div className="fbar">
+        <Tabs<Tab> variant="chips" label="Filtrar alertas" value={tab} onChange={setTab}
+          items={(['por_revisar', 'confirmada', 'descartada', 'todas'] as Tab[]).map((t) => ({ id: t, count: count(t),
+            label: t === 'todas' ? 'Todas' : t === 'confirmada' ? 'Confirmadas' : t === 'descartada' ? 'Descartadas' : REVIEW_LABEL[t] }))} />
         <input type="search" className="fld sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar alerta, placa, zona o calle" aria-label="Buscar en las alertas" />
       </div>
       {scoped && hidden > 0 && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="layers" /><span>Alertas de <b>{user.territory}</b>{hidden > 0 && ` · ${hidden} de otros territorios no se muestran`}.</span></div>}
-      {!perm.can('decidir') && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: tu rol no confirma ni descarta alertas.</span></div>}
       {newAbove > 0 && <button className="new-above" onClick={() => listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><Icon name="arrow_upward" />{newAbove === 1 ? '1 alerta nueva arriba' : `${newAbove} alertas nuevas arriba`}</button>}
       <ul ref={listRef} className="list pb flush" onScroll={() => setScrolled((listRef.current?.scrollTop ?? 0) > 8)}>
         {shown.length === 0 && <li><QueueEmpty tab={tab} query={q.trim()} alerts={alerts} cameras={cameras.length} going={units.filter((u) => u.enRoute).length} onTab={setTab} onClearQuery={() => setQ('')} /></li>}
@@ -143,11 +141,11 @@ export function QueuePanel() {
           </li>
         ))}
       </ul>
-      {perm.can('decidir') && (
-        <div className="lfoot">
-          <span><span className="kbd">↑</span> <span className="kbd">↓</span> recorrer</span><span><span className="kbd">C</span> confirmar</span><span><span className="kbd">D</span> descartar</span>
-        </div>
-      )}
+      <div className="lfoot">
+        {perm.can('decidir')
+          ? <><span><span className="kbd">↑</span> <span className="kbd">↓</span> recorrer</span><span><span className="kbd">C</span> confirmar</span><span><span className="kbd">D</span> descartar</span></>
+          : <ReadOnlyNote>tu rol no confirma ni descarta alertas.</ReadOnlyNote>}
+      </div>
     </>
   );
 }

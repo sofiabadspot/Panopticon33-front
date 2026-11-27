@@ -12,6 +12,7 @@ import { useConsole } from '../ctx';
 import { SheetHead } from './SheetHead';
 import { useOpenStory } from '../story/OpenStory';
 import { usePermissions } from '../permissions';
+import { Field } from '../../ui/Field';
 
 export function VehicleSheet({ id }: { id: string }) {
   const { user } = useSession();
@@ -35,13 +36,12 @@ function ReasonGate({ plate, n, onGrant }: { plate: string; n: number; onGrant: 
       <SheetHead kicker="Vehículo" title={<span className="plate">{plate}</span>} />
       <form className="pb" onSubmit={submit} noValidate>
         <div className="callout"><Icon name="lock" /><span className="grow">La ficha muestra {n ? `${n} lecturas de 7 días` : 'las lecturas de 7 días'}, la lista de robados y los vehículos asociados. Ver la ficha queda en la bitácora con su motivo.</span></div>
-        <div className="field">
-          <select className="fld sm" value={pick} onChange={(e) => setPick(e.target.value)} aria-invalid={tried && !pick} aria-label="Motivo de la consulta" autoFocus>
-            <option value="">Motivo de la consulta…</option>{SEARCH_REASONS.map((r) => <option key={r}>{r}</option>)}
+        <Field label="Motivo de la consulta" error={tried && !pick ? 'El motivo es obligatorio: sin motivo no hay ficha.' : null}>{(p) => <>
+          <select {...p} className="fld sm" value={pick} onChange={(e) => setPick(e.target.value)} autoFocus>
+            <option value="">Elegir un motivo…</option>{SEARCH_REASONS.map((r) => <option key={r}>{r}</option>)}
           </select>
           <input className="fld sm" value={text} onChange={(e) => setText(e.target.value)} placeholder="Número de caso (opcional)" aria-label="Número de caso" />
-          {tried && !pick && <span className="err"><Icon name="error" />El motivo es obligatorio: sin motivo no hay ficha.</span>}
-        </div>
+        </>}</Field>
         <button className="btn primary sm" type="submit"><Icon name="directions_car" />Ver ficha</button>
       </form>
     </>
@@ -95,6 +95,13 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
         {p.listed && <div className="callout danger"><Icon name="warning" /><span className="grow"><b>{p.listed.reason}</b> desde el {p.listed.since} · caso <span className="mono">{p.listed.case}</span></span></div>}
         {p.mismatch && <div className="callout warn"><Icon name="swap_horiz" /><span className="grow">La cámara ve otro vehículo que el de la lista. Puede ser una placa clonada: revisa las fotos de las lecturas antes de concluir.</span></div>}
 
+        <div className="kpis" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+          <div className="kpi"><div className="v">{p.reads.length}</div><div className="l">Lecturas</div><div className="x">en {p.cameras.length} {p.cameras.length === 1 ? 'cámara' : 'cámaras'}</div></div>
+          <div className={`kpi ${last ? '' : 'nodata'}`}><div className="v">{last ? ago(last.at, now) : '—'}</div><div className="l">Última lectura</div>{last && <div className="x">{last.street}</div>}</div>
+          <div className={`kpi ${first ? '' : 'nodata'}`}><div className="v">{first ? dateTime(first.at) : '—'}</div><div className="l">Primera lectura</div></div>
+          <div className={`kpi ${p.usualHours ? '' : 'nodata'}`}><div className="v">{p.usualHours ? `${p.usualHours[0]}–${p.usualHours[1]} h` : '—'}</div><div className="l">Franja habitual</div><div className="x">{p.usualHours ? '8 de cada 10 lecturas' : 'Pocas lecturas para un patrón'}</div></div>
+        </div>
+
         <div className="box">
           <div className="bh"><h3>Vehículo</h3></div>
           <div className="bb"><dl className="details">
@@ -102,13 +109,6 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
             <dt>Visto por cámara</dt><dd>{p.seen ? `${p.seen.type} · ${p.seen.color}` : 'Sin lecturas'}</dd>
             <dt>Titular registrado</dt><dd><span className="chip nodata">Registro vehicular sin conectar</span></dd>
           </dl></div>
-        </div>
-
-        <div className="kpis" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
-          <div className="kpi"><div className="v">{p.reads.length}</div><div className="l">Lecturas</div><div className="x">en {p.cameras.length} {p.cameras.length === 1 ? 'cámara' : 'cámaras'}</div></div>
-          <div className={`kpi ${last ? '' : 'nodata'}`}><div className="v">{last ? ago(last.at, now) : '—'}</div><div className="l">Última lectura</div>{last && <div className="x">{last.street}</div>}</div>
-          <div className={`kpi ${first ? '' : 'nodata'}`}><div className="v">{first ? dateTime(first.at) : '—'}</div><div className="l">Primera lectura</div></div>
-          <div className={`kpi ${p.usualHours ? '' : 'nodata'}`}><div className="v">{p.usualHours ? `${p.usualHours[0]}–${p.usualHours[1]} h` : '—'}</div><div className="l">Franja habitual</div><div className="x">{p.usualHours ? '8 de cada 10 lecturas' : 'Pocas lecturas para un patrón'}</div></div>
         </div>
 
         <div className="box flush">

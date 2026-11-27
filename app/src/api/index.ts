@@ -65,7 +65,10 @@ export const SCENARIO_LABEL: Record<Scenario, string> = {
   cargando: 'Cargando datos', sin_maic: 'Sin conexión con MAIC',
 };
 const SCENARIOS = Object.keys(SCENARIO_LABEL) as Scenario[];
-const readScenario = (): Scenario => { try { const v = localStorage.getItem('p33.escenario'); return SCENARIOS.includes(v as Scenario) ? (v as Scenario) : 'normal'; } catch { return 'normal'; } };
+/** Herramientas de demostración (escenarios): solo en desarrollo o si la build se arma con
+    VITE_DEMO_TOOLS=1. En la build de producción no aparecen y la consola siempre arranca en "normal". */
+export const DEMO_TOOLS = import.meta.env.DEV || import.meta.env.VITE_DEMO_TOOLS === '1';
+const readScenario = (): Scenario => { if (!DEMO_TOOLS) return 'normal'; try { const v = localStorage.getItem('p33.escenario'); return SCENARIOS.includes(v as Scenario) ? (v as Scenario) : 'normal'; } catch { return 'normal'; } };
 
 /* Historia de 60 min (cada 2 min) por zona, tomada del prototipo y escalada a la base actual. */
 const history: Record<string, number[]> = {};

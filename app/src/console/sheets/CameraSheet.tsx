@@ -25,6 +25,8 @@ export function CameraSheet({ id }: { id: string }) {
       <SheetHead kicker={<><span>{cam.kind === 'mixta' ? 'Mixta' : cam.kind === 'vehicular' ? 'Vehicular' : 'Peatonal'}{cam.ptz && ' · PTZ'}</span>·<span>{cam.compute}</span></>}
         title={<span className="mono">{cam.id}</span>} sub={cam.street} aside={<span className={chip}>{CAMERA_LABEL[cam.status]}</span>} />
       <div className="pb">
+        {/* Orden de toda ficha: avisos, imagen, cifras, detalle, relacionados, línea de tiempo y acciones al pie. */}
+        {cam.status === 'fuera_de_preset' && <div className="callout"><Icon name="info" /><span className="grow">En movimiento la cámara solo detecta: no mide la zona ni lee placas.</span></div>}
         <Evidence ev={{ type: 'pendiente', caption: cam.status === 'caida' ? 'Sin video' : 'Video en vivo de la cámara' }} />
         <dl className="details">
           <dt>Zona</dt><dd>{zone ? <button className="linklike" onClick={() => c.open({ k: 'zona', id: zone.id })}>{zone.name}</button> : '—'}</dd>
@@ -32,7 +34,6 @@ export function CameraSheet({ id }: { id: string }) {
           <dt>Cuadros por segundo</dt><dd className="mono">{cam.status === 'caida' ? '—' : cam.fps}</dd>
           <dt>Coordenadas</dt><dd className="mono">{cam.lat.toFixed(5)}, {cam.lon.toFixed(5)}</dd>
         </dl>
-        {cam.status === 'fuera_de_preset' && <div className="callout"><Icon name="info" /><span className="grow">En movimiento la cámara solo detecta: no mide la zona ni lee placas.</span></div>}
         <div className="box flush">
           <div className="bh"><h3>Presets</h3><span className="sub">{cam.presets.length}</span></div>
           <ul className="list bb">

@@ -256,7 +256,7 @@ function forScenario(sc: string | null): FacialMatch[] {
   if (sc === 'gestionadas') return base.map((m) => (m.status === 'por_revisar' ? { ...m, status: 'descartada', discardReason: 'No es la misma persona', timeline: [...m.timeline, { at: lastDetection(m).at + 2 * MIN, label: 'Descartada: No es la misma persona', by: 'Karla Méndez' }] } : m));
   return base;
 }
-const readSc = () => { try { return localStorage.getItem('p33.escenario'); } catch { return null; } };
+const readSc = () => { if (!(import.meta.env.DEV || import.meta.env.VITE_DEMO_TOOLS === '1')) return null; try { return localStorage.getItem('p33.escenario'); } catch { return null; } };
 matches = forScenario(readSc());
 const subs = new Set<() => void>();
 queueMicrotask(() => syncFaceAlerts(matches.map(toAlert)));

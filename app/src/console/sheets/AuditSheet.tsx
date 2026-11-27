@@ -8,7 +8,7 @@ import { useSession } from '../../shell/session';
 import { Icon, download } from '../../ui/kit';
 import { useConsole, type Sheet } from '../ctx';
 import { SheetHead } from './SheetHead';
-import { DateTimeField, rangeErrors } from '../../ui/Field';
+import { DateTimeField, Field, rangeErrors } from '../../ui/Field';
 
 const PAGE = 50;
 let logged = false;
@@ -44,9 +44,9 @@ export function AuditSheet({ action = '' }: { action?: string }) {
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="bd" style={{ paddingTop: 14 }}>
           <div className="form-row">
-            <div className="field"><label htmlFor="au">Usuario</label><select id="au" className="fld sm" value={f.user} onChange={set('user')}><option value="">Todos</option>{usersList.map((u) => <option key={u}>{u}</option>)}</select></div>
-            <div className="field"><label htmlFor="aa">Acción</label><select id="aa" className="fld sm" value={f.action} onChange={set('action')}><option value="">Todas</option>{actions.map((a) => <option key={a}>{a}</option>)}</select></div>
-            <div className="field"><label htmlFor="ao">Objeto</label><input id="ao" className="fld sm" value={f.object} onChange={set('object')} placeholder="AL-4107, P512884, Z-01…" /></div>
+            <Field label="Usuario">{(p) => <select {...p} className="fld sm" value={f.user} onChange={set('user')}><option value="">Todos</option>{usersList.map((u) => <option key={u}>{u}</option>)}</select>}</Field>
+            <Field label="Acción">{(p) => <select {...p} className="fld sm" value={f.action} onChange={set('action')}><option value="">Todas</option>{actions.map((a) => <option key={a}>{a}</option>)}</select>}</Field>
+            <Field label="Objeto">{(p) => <input {...p} className="fld sm" value={f.object} onChange={set('object')} placeholder="AL-4107, P512884, Z-01…" />}</Field>
             <DateTimeField label="Desde" value={f.from} onChange={(v) => setF({ ...f, from: v })} error={rangeErrors(f.from, f.to, ['el inicio', 'el fin']).from} />
             <DateTimeField label="Hasta" value={f.to} onChange={(v) => setF({ ...f, to: v })} error={rangeErrors(f.from, f.to, ['el inicio', 'el fin']).to} />
           </div>

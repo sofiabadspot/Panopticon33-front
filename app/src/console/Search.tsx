@@ -8,11 +8,12 @@ import { normalizePlate } from '../api/format';
 import { KIND_LABEL, KIND_PHRASE } from '../api/labels';
 import { useSession } from '../shell/session';
 import { Icon } from '../ui/kit';
+import { Combobox } from '../ui/Combobox';
 import { useConsole, type Recent } from './ctx';
 import { useOpenStory } from './story/OpenStory';
 import { usePermissions } from './permissions';
 
-interface Result { group: string; icon: string; label: string; sub?: string; ref: string; run: () => void }
+interface Result { group: string; icon: string; label: string; sub?: string; ref: string; run: () => void | boolean }
 
 const PLATE_RE = /^[A-Z?*]{1,2}\s?[0-9?*][0-9A-Z?*-]{1,7}$/i;
 
@@ -36,19 +37,16 @@ export function Search() {
   const faces = useFacial();
   const openStory = useOpenStory();
   const [q, setQ] = useState('');
-  const [open, setOpen] = useState(false);
-  const [sel, setSel] = useState(0);
   const input = useRef<HTMLInputElement>(null);
-  const box = useRef<HTMLDivElement>(null);
+  /** Vuelve a abrir la lista con el foco en el campo (después de elegir una búsqueda reciente). */
+  const reopen = () => requestAnimationFrame(() => { input.current?.blur(); input.current?.focus(); });
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       const typing = (e.target as HTMLElement).closest('input, select, textarea');
-      if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || (e.key === '/' && !typing)) { e.preventDefault(); input.current?.focus(); setOpen(true); }
+      if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || (e.key === '/' && !typing)) { e.preventDefault(); input.current?.focus(); }
     };
-    const out = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
-    window.addEventListener('keydown', k); window.addEventListener('mousedown', out);
-    return () => { window.removeEventListener('keydown', k); window.removeEventListener('mousedown', out); };
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   }, []);
 
   const results = useMemo<Result[]>(() => {
@@ -96,7 +94,8 @@ export function Search() {
       else if (kind === 'camara') c.open({ k: 'camara', id });
       else if (kind === 'vehiculo' || (kind === 'placa' && perm.has('investigar'))) openVehicle(kind === 'placa' ? r.q.toUpperCase() : id);
       else if (kind === 'jules' && perm.jules) c.askJules(id);
-      else { setQ(r.q); setOpen(true); return; }
+      else { setQ(r.q); reopen(); return true; }
+      return false;
     };
     return { group: 'Recientes', icon: 'history', label: r.label, sub: r.kind, ref: r.ref, run };
   };
@@ -104,41 +103,18 @@ export function Search() {
 
   const choose = (r: Result) => {
     if (r.group !== 'Recientes' && r.group !== 'Jules') c.remember({ q: q.trim(), label: r.label, kind: r.group, ref: r.ref });
-    r.run(); setOpen(false); setQ(''); input.current?.blur();
+    // run() devuelve true cuando deja algo escrito para seguir buscando (una búsqueda reciente).
+    if (!r.run()) { setQ(''); input.current?.blur(); }
   };
 
-  let lastGroup = '';
   return (
-    <div className="search-box" ref={box}>
-      <div className="search-in">
-        <Icon name="search" />
-        <input ref={input} value={q} placeholder={perm.jules ? 'Buscar zona, placa, cámara… o preguntarle a Jules' : 'Buscar zona, placa, cámara…'}
-          onFocus={() => setOpen(true)} onChange={(e) => { setQ(e.target.value); setSel(0); setOpen(true); }}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(shown.length - 1, s + 1)); }
-            if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => Math.max(0, s - 1)); }
-            if (e.key === 'Enter' && shown[sel]) choose(shown[sel]);
-            if (e.key === 'Escape') { setOpen(false); input.current?.blur(); }
-          }}
-          role="combobox" aria-expanded={open} aria-controls="search-pop" aria-label="Buscar" />
-        <span className="kbd">/</span>
-      </div>
-      {open && (
-        <div className="search-pop" id="search-pop" role="listbox">
-          {q.trim().length < 2 && !c.recents.length && <div className="hint">Escribe al menos dos letras. Tus búsquedas recientes aparecerán aquí.</div>}
-          {q.trim().length >= 2 && !results.length && <div className="hint">Sin resultados para "{q.trim()}".</div>}
-          {shown.map((r, i) => {
-            const head = r.group !== lastGroup ? <div className="grp" key={'g' + r.group}>{r.group === 'Recientes' ? 'Búsquedas recientes' : r.group}</div> : null;
-            lastGroup = r.group;
-            return [head, (
-              <button key={r.ref + i} role="option" aria-selected={i === sel} className={`res ${i === sel ? 'on' : ''}`} onMouseEnter={() => setSel(i)} onClick={() => choose(r)}>
-                <Icon name={r.icon} /><span>{r.label}{r.sub && <><br /><small>{r.sub}</small></>}</span>
-                {i === sel && <span className="kbd">↵</span>}
-              </button>
-            )];
-          })}
-        </div>
-      )}
-    </div>
+    <Combobox className="search-box" inClassName="search-in" label="Buscar" inputRef={input}
+      query={q} onQuery={setQ} onPick={choose}
+      options={shown.map((r, i) => ({ ...r, key: r.ref + i }))}
+      groupLabel={(g) => (g === 'Recientes' ? 'Búsquedas recientes' : g)}
+      placeholder={perm.jules ? 'Buscar zona, placa, cámara… o preguntarle a Jules' : 'Buscar zona, placa, cámara…'}
+      hint="Escribe al menos dos letras. Tus búsquedas recientes aparecerán aquí."
+      empty={q.trim().length >= 2 ? <>Sin resultados para «{q.trim()}».</> : 'Escribe al menos dos letras.'}
+      prefix={<Icon name="search" />} suffix={<span className="kbd" aria-hidden>/</span>} />
   );
 }

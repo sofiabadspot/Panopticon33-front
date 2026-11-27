@@ -4,7 +4,9 @@
    derecha, el expediente como una carpeta con solapas: Resumen, Detecciones, Señas, Vínculos (lista o
    mapa), Historia, Documentos y Fuentes. El Analista, además, puede pedir buscar en otras fuentes.
    Esc cierra el expediente (no la ficha). Todo es de ejemplo. */
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Tabs } from '../../ui/Tabs';
+import { MediaViewer } from '../../ui/MediaViewer';
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ago, dateShort, dateTime, hhmm, pct } from '../../api/format';
 import { FACIAL_LISTS, FACIAL_SOURCES, POSE_LABEL, SHARP_LABEL, TRAIT_GROUPS, lastDetection, type FacialDetection, type FacialMatch, type LinkKind, type PersonLink, type Proof, type ProofKind, type Trait, type TraitGroup } from '../../api/facial';
@@ -28,8 +30,9 @@ const PROOF_ICON: Record<ProofKind, string> = { imagen: 'image', video: 'smart_d
 const PROOF_TAG: Record<ProofKind, string> = { imagen: 'Imagen', video: 'Video', documento: 'Documento', registro: 'Registro' };
 export const proofItem = (p: Proof): ViewItem => ({ src: '', tag: PROOF_TAG[p.kind], title: p.title, sub: `${p.src} · ${dateShort(p.at)}`, icon: PROOF_ICON[p.kind] });
 
-/** Visor grande que se navega: anterior / siguiente (también con las flechas), una tira con todas y,
-    si se pasa `compare`, la imagen de referencia al lado para comparar. Esc y las flechas los maneja el expediente. */
+/** Material del expediente en grande: el visor único de la consola (ui/MediaViewer), montado dentro
+    del expediente. Anterior / siguiente (también con las flechas), la tira con todas y, si se pasa
+    `compare`, la imagen de referencia al lado para comparar. */
 export function Viewer({ items, index, onIndex, onClose, compare, render }: {
   items: ViewItem[]; index: number; onIndex: (i: number) => void; onClose: () => void; compare?: ViewItem | null;
   /** Dibuja el material en grande en vez de una imagen (evidencias del expediente). */
@@ -39,28 +42,15 @@ export function Viewer({ items, index, onIndex, onClose, compare, render }: {
   const x = items[Math.min(index, n - 1)];
   if (!x) return null;
   const ref = compare && x.tag === 'Hoy' ? compare : null;
-  const body = (
-    <div className="lb" role="dialog" aria-label={`${x.tag}: ${x.title}`}>
-      <div className="lb-hd">
-        <span className="mono">{index + 1} / {n}</span>
-        <b><Icon name={x.icon} />{x.tag} · {x.title}</b>
-        <span className="lb-sub">{x.sub}</span>
-        <button className="iconbtn" aria-label="Cerrar (Esc)" title="Cerrar (Esc)" onClick={onClose}><Icon name="close" /></button>
-      </div>
-      {render ? <div className="lb-body lb-art">{render(index)}</div> : <div className={`lb-body ${ref ? 'two' : ''}`}>
-        <figure><ZoomImg key={x.title + index} src={x.src} alt={`${x.tag} · ${x.title}`} /><figcaption>{x.tag} · {x.sub}</figcaption></figure>
-        {ref && <figure><ZoomImg src={ref.src} alt={`${ref.tag} · ${ref.title}`} /><figcaption>Para comparar: {ref.title}</figcaption></figure>}
-      </div>}
-      {n > 1 && (
-        <div className="lb-nav">
-          <button className="btn secondary sm" onClick={() => onIndex((index + n - 1) % n)}><Icon name="chevron_left" />Anterior</button>
-          <div className="lb-strip">{items.map((y, i) => <button key={i} className={i === index ? 'on' : ''} aria-label={`${y.tag} · ${y.title}`} aria-pressed={i === index} onClick={() => onIndex(i)}>{y.src ? <img src={y.src} alt="" /> : <span className="lb-ic"><Icon name={y.icon} /></span>}</button>)}</div>
-          <button className="btn secondary sm" onClick={() => onIndex((index + 1) % n)}>Siguiente<Icon name="chevron_right" /></button>
-        </div>
-      )}
-    </div>
+  const pic = (y: ViewItem) => (y.src ? <img className="iv-pic" src={y.src} alt={`${y.tag} · ${y.title}`} draggable={false} /> : <Shot label={`${y.tag} · ${y.title}`} />);
+  return (
+    <MediaViewer mount="inline" className="in-dossier" icon={x.icon} title={`${x.tag} · ${x.title}`} sub={x.sub} onClose={onClose}
+      kind={render ? 'document' : 'media'}
+      nav={{ index, count: n, onGo: onIndex, thumbs: items.map((y) => ({ label: `${y.tag} · ${y.title}`, node: y.src ? <img src={y.src} alt="" /> : <span className="lb-ic"><Icon name={y.icon} /></span> })) }}
+      compare={!render && ref ? { node: pic(ref), caption: `Para comparar: ${ref.title}`, mainCaption: `${x.tag} · ${x.sub}` } : null}>
+      {render ? <div className="lb-art">{render(index)}</div> : pic(x)}
+    </MediaViewer>
   );
-  return body;
 }
 
 /** Respaldos: un recuadro por cada imagen, video, documento o registro que comprueba un dato. */
@@ -79,34 +69,6 @@ export function Proofs({ items, onOpen }: { items: Proof[]; onOpen: (i: number) 
     </div>
   );
 }
-
-/** Imagen que se amplía ahí mismo: clic acerca (2,5×) hacia donde está el puntero, mover la recorre,
-    la rueda cambia el aumento, otro clic vuelve. */
-function ZoomImg({ src, alt }: { src: string; alt: string }) {
-  return src ? <ZoomReal src={src} alt={alt} /> : <span className="ds-zoom ds-empty"><Shot label={alt} /></span>;
-}
-function ZoomReal({ src, alt }: { src: string; alt: string }) {
-  const [z, setZ] = useState(1);
-  const [o, setO] = useState({ x: 50, y: 50 });
-  const btn = useRef<HTMLButtonElement>(null);
-  const zRef = useRef(z); zRef.current = z;
-  const at = (e: React.MouseEvent) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setO({ x: Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100)), y: Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100)) }); };
-  // La rueda acerca más sin desplazar el panel (oyente no pasivo: React los registra pasivos).
-  useEffect(() => {
-    const b = btn.current; if (!b) return;
-    const w = (e: WheelEvent) => { if (zRef.current === 1) return; e.preventDefault(); setZ((v) => Math.max(1.2, Math.min(6, v * Math.exp(-e.deltaY * 0.002)))); };
-    b.addEventListener('wheel', w, { passive: false }); return () => b.removeEventListener('wheel', w);
-  }, []);
-  return (
-    <button ref={btn} type="button" className={`ds-zoom ${z > 1 ? 'on' : ''}`} aria-label={z > 1 ? `Alejar ${alt}` : `Ampliar ${alt}`} aria-pressed={z > 1}
-      // Con teclado (Enter o Espacio) no hay puntero: se acerca al centro.
-      onClick={(e) => { if (e.detail === 0) setO({ x: 50, y: 50 }); else at(e); setZ(z > 1 ? 1 : 2.5); }} onMouseMove={(e) => z > 1 && at(e)}>
-      <img src={src} alt={alt} style={{ transform: `scale(${z})`, transformOrigin: `${o.x}% ${o.y}%` } as CSSProperties} />
-      {z > 1 && <span className="ds-zoom-lvl mono">{z.toFixed(1)}×</span>}
-    </button>
-  );
-}
-
 
 /** Señas por grupo: lo registrado en la lista frente a lo que se ve en la captura. */
 export function Traits({ m, only }: { m: FacialMatch; only?: TraitGroup[] }) {
@@ -266,7 +228,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
   const close = useRef(onClose); close.current = onClose;
   const secRef = useRef(sec); secRef.current = sec;
   // Volver al Resumen: el foco va a su botón del dock (si no, quedaría fuera del expediente).
-  const closeSec = () => { setSec('resumen'); requestAnimationFrame(() => box.current?.querySelector<HTMLElement>('[data-sec="resumen"]')?.focus()); };
+  const closeSec = () => { setSec('resumen'); requestAnimationFrame(() => box.current?.querySelector<HTMLElement>('#dz-tab-resumen')?.focus()); };
   const closeSecRef = useRef(closeSec); closeSecRef.current = closeSec;
   // Al abrir toma el foco (una sola vez); Esc cierra lo de más arriba (el visor, la sección, el expediente);
   // Tab queda adentro; al cerrar, el foco vuelve a donde estaba (el botón que lo abrió).
@@ -298,15 +260,6 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
     { id: 'docs', label: 'Documentos', count: String(docCards.length) },
     { id: 'fuentes', label: 'Fuentes', count: `${connected}/${FACIAL_SOURCES.length}` },
   ];
-  // Flechas, Inicio y Fin entre secciones, como las pestañas de Jules.
-  const tabKey = (e: React.KeyboardEvent) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-    e.preventDefault();
-    const i = Math.max(0, tabs.findIndex((t) => t.id === sec)), n = tabs.length;
-    const next = tabs[e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : (i + (e.key === 'ArrowRight' ? 1 : n - 1)) % n];
-    setSec(next.id); setCmp(false);
-    (e.currentTarget.querySelector(`[data-sec="${next.id}"]`) as HTMLElement | null)?.focus();
-  };
 
   const order = m.links.find((l) => l.kind === 'caso' && l.facts.some(([, v]) => v === 'Orden de captura'));
   const confirmed = m.timeline.find((x) => x.label.startsWith('Identidad confirmada'));
@@ -478,14 +431,9 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
         </div>}
 
         {/* Las secciones del expediente, en un dock abajo al centro. */}
-        <div className="dz-dock" role="tablist" aria-label="Secciones del expediente" onKeyDown={tabKey}>
-          {tabs.map((t) => (
-            <button key={t.id} id={`dz-tab-${t.id}`} data-sec={t.id} role="tab" aria-selected={sec === t.id} aria-controls="dz-panel"
-              tabIndex={sec === t.id ? 0 : -1} className={sec === t.id ? 'on' : ''} onClick={() => { setSec(t.id); setCmp(false); }}>
-              {t.label}{t.count != null && <i className="mono">{t.count}</i>}
-            </button>
-          ))}
-        </div>
+        <Tabs<typeof sec> className="dz-dock" label="Secciones del expediente" panelId="dz-panel" idPrefix="dz-tab-" value={sec}
+          onChange={(id) => { setSec(id); setCmp(false); }}
+          items={tabs.map((t) => ({ id: t.id, label: t.label, extra: t.count != null && <i className="mono">{t.count}</i> }))} />
       </div>
 
       {view && <Viewer items={view.items} index={view.index} render={view.cards ? (i) => <Artifact c={view.cards![i]} /> : undefined} onIndex={(i) => setView({ ...view, index: i })} onClose={() => setView(null)} />}

@@ -18,6 +18,7 @@ import { EventTag } from '../panels/EventsPanel';
 import { ConfirmDelete, SectionHead } from './configPlace';
 import { CsvImport, type CsvColumn, type RowResult } from './CsvImport';
 import { Segmented } from '../../ui/Segmented';
+import { Field } from '../../ui/Field';
 
 const SEVS: Severity[] = ['critica', 'media', 'baja'];
 
@@ -230,9 +231,8 @@ export function RuleDialog({ rule, onClose }: { rule: Rule; onClose: () => void 
             <span className="hint dim" style={{ fontSize: 'var(--fs-sm)' }}>Define el orden en la bandeja del 911 y el tiempo que tiene para decidir.</span>
           </div>
           <div className="form-row">
-            <div className="field"><label htmlFor="rt">Umbral ({rule.unit})</label><input id="rt" inputMode="decimal" className="fld mono" value={v.threshold} onChange={(e) => setV({ ...v, threshold: e.target.value })} aria-invalid={!(Number(v.threshold) > 0)} /></div>
-            <div className="field"><label htmlFor="rp">Tiene que durar (min)</label><input id="rp" inputMode="numeric" className="fld mono" value={v.persistenceMin} onChange={(e) => setV({ ...v, persistenceMin: e.target.value.replace(/\D/g, '') })} />
-              <span className="hint dim" style={{ fontSize: 'var(--fs-xs)' }}>0 = avisa al instante</span></div>
+            <Field label={<>Umbral ({rule.unit})</>}>{(p) => <input {...p} inputMode="decimal" className="fld mono" value={v.threshold} onChange={(e) => setV({ ...v, threshold: e.target.value })} aria-invalid={!(Number(v.threshold) > 0)} />}</Field>
+            <Field label="Tiene que durar (min)" hint="0 = avisa al instante">{(p) => <input {...p} inputMode="numeric" className="fld mono" value={v.persistenceMin} onChange={(e) => setV({ ...v, persistenceMin: e.target.value.replace(/\D/g, '') })} />}</Field>
           </div>
           {rule.kind !== 'camara_caida' && rule.kind !== 'placa_en_lista' && rule.kind !== 'persona_en_lista' && <>
             <div style={{ display: 'flex', alignItems: 'center', marginTop: 4 }}>
@@ -244,13 +244,13 @@ export function RuleDialog({ rule, onClose }: { rule: Rule; onClose: () => void 
               const set = (p: Partial<RuleOverride>) => setOvr(ovr.map((x, j) => (j === i ? { ...x, ...p } : x)));
               return (
                 <div key={i} className="form-row" style={{ gridTemplateColumns: '1fr 100px 80px auto', alignItems: 'end' }}>
-                  <div className="field"><label htmlFor={`oi${i}`}>Zona</label>
-                    <select id={`oi${i}`} className="fld sm" value={o.targetId} onChange={(e) => set({ targetId: e.target.value })}>
+                  <Field label="Zona">{(p) => (
+                    <select {...p} className="fld sm" value={o.targetId} onChange={(e) => set({ targetId: e.target.value })}>
                       <option value="">Elegir zona…</option>
                       {zones.map((x) => <option key={x.id} value={x.id} disabled={!free({ ...o, targetId: x.id }, i)}>{x.name}</option>)}
-                    </select></div>
-                  <div className="field"><label htmlFor={`ot${i}`}>Umbral</label><input id={`ot${i}`} inputMode="decimal" className="fld sm mono" value={o.threshold || ''} onChange={(e) => set({ threshold: Number(e.target.value) || 0 })} /></div>
-                  <div className="field"><label htmlFor={`op${i}`}>Min</label><input id={`op${i}`} inputMode="numeric" className="fld sm mono" value={o.persistenceMin} onChange={(e) => set({ persistenceMin: Number(e.target.value) || 0 })} /></div>
+                    </select>)}</Field>
+                  <Field label="Umbral">{(p) => <input {...p} inputMode="decimal" className="fld sm mono" value={o.threshold || ''} onChange={(e) => set({ threshold: Number(e.target.value) || 0 })} />}</Field>
+                  <Field label="Min">{(p) => <input {...p} inputMode="numeric" className="fld sm mono" value={o.persistenceMin} onChange={(e) => set({ persistenceMin: Number(e.target.value) || 0 })} />}</Field>
                   <button className="iconbtn" aria-label="Quitar esta zona" title="Quitar esta zona" onClick={() => setOvr(ovr.filter((_, j) => j !== i))}><Icon name="close" /></button>
                 </div>
               );
@@ -277,9 +277,8 @@ function SeverityTargets() {
         <p className="muted" style={{ margin: 0 }}>Cuánto tiene el operador 911 para confirmar o descartar una alerta. Pasado ese tiempo, la bandeja y el mapa la marcan como atrasada.</p>
         <div className="form-row" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr)) auto', alignItems: 'end' }}>
           {SEVS.map((k) => (
-            <div key={k} className="field"><label htmlFor={`st-${k}`}>{SEVERITY_LABEL[k]} · minutos</label>
-              <input id={`st-${k}`} inputMode="numeric" className="fld sm mono" value={v[k] || ''} onChange={(e) => setV({ ...v, [k]: Number(e.target.value.replace(/\D/g, '')) || 0 })} />
-              <span className="hint dim" style={{ fontSize: 'var(--fs-xs)' }}>{rules.filter((r) => r.severity === k).map((r) => r.name).join(', ') || 'Ninguna regla'}</span></div>
+            <Field key={k} label={<>{SEVERITY_LABEL[k]} · minutos</>} hint={rules.filter((r) => r.severity === k).map((r) => r.name).join(', ') || 'Ninguna regla'}>{(p) => (
+              <input {...p} inputMode="numeric" className="fld sm mono" value={v[k] || ''} onChange={(e) => setV({ ...v, [k]: Number(e.target.value.replace(/\D/g, '')) || 0 })} />)}</Field>
           ))}
           <button className="btn secondary sm" disabled={!dirty || !ok} onClick={() => { setSeverityTargets(v, user); toast('Tiempos guardados'); }}>Guardar tiempos</button>
         </div>
@@ -373,15 +372,15 @@ export function ListsSection() {
             setAdding(false); setEditId(null); setF({ name: '', kind: 'vehiculos', origin: '', mode: 'Carga manual', maxAgeH: '24' });
           }}>{editId ? 'Guardar cambios' : 'Agregar lista'}</button>
         </>}>
-          <div className="field"><label htmlFor="ln">Nombre</label><input id="ln" className="fld" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Vehículos con orden de búsqueda" /></div>
+          <Field label="Nombre">{(p) => <input {...p} className="fld" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Vehículos con orden de búsqueda" />}</Field>
           <div className="field"><span className="lbl">Qué contiene</span>
             <Segmented label="Qué contiene" value={f.kind} onChange={(kind) => setF({ ...f, kind })} options={[{ value: 'vehiculos', label: 'Placas de vehículos', disabled: !!editId && f.kind !== 'vehiculos' }, { value: 'personas', label: 'Personas', disabled: !!editId && f.kind !== 'personas' }]} />
             {editId && <span className="hint">El tipo de una lista no se cambia: crea otra lista.</span>}</div>
-          <div className="field"><label htmlFor="lo">De dónde viene</label><input id="lo" className="fld" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} placeholder="PNC, Fiscalía, Ministerio…" /></div>
+          <Field label="De dónde viene">{(p) => <input {...p} className="fld" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} placeholder="PNC, Fiscalía, Ministerio…" />}</Field>
           <div className="form-row">
-            <div className="field"><label htmlFor="lm">Cómo se actualiza</label>
-              <select id="lm" className="fld" value={f.mode} onChange={(e) => setF({ ...f, mode: e.target.value as ListMode })}>{LIST_MODES.map((m) => <option key={m} value={m}>{m}</option>)}</select></div>
-            <div className="field"><label htmlFor="la">Avisar si pasa más de (horas)</label><input id="la" inputMode="numeric" className="fld mono" value={f.maxAgeH} onChange={(e) => setF({ ...f, maxAgeH: e.target.value.replace(/\D/g, '') })} /></div>
+            <Field label="Cómo se actualiza">{(p) => (
+              <select {...p} className="fld" value={f.mode} onChange={(e) => setF({ ...f, mode: e.target.value as ListMode })}>{LIST_MODES.map((m) => <option key={m} value={m}>{m}</option>)}</select>)}</Field>
+            <Field label="Avisar si pasa más de (horas)">{(p) => <input {...p} inputMode="numeric" className="fld mono" value={f.maxAgeH} onChange={(e) => setF({ ...f, maxAgeH: e.target.value.replace(/\D/g, '') })} />}</Field>
           </div>
           <span className="hint dim" style={{ fontSize: 'var(--fs-sm)' }}>{MODE_HELP[f.mode]}</span>
         </Dialog>

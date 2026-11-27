@@ -83,8 +83,8 @@ export function CommandBar({ tool, setTool, canIncident, canMeasure, onNewEvent,
 
   const Btn = ({ t, icon, label, short, keyHint, disabled, why }: { t: Tool; icon: React.ReactNode; label: string; short: string; keyHint: string; disabled?: boolean; why?: string }) => (
     <button className={`cmd-btn ${tool === t ? 'on' : ''}`} aria-pressed={tool === t} disabled={disabled} onClick={() => setTool(tool === t && t !== 'mover' ? 'mover' : t)}
-      title={disabled ? why : `${label} (${keyHint})`} aria-keyshortcuts={keyHint} aria-label={label}>
-      {icon}<span className="cmd-name" aria-hidden>{short}</span><span className="cmd-tip" aria-hidden>{label}<kbd className="kbd">{keyHint}</kbd></span>
+      title={disabled ? why : `${label} (${keyHint})`} aria-keyshortcuts={keyHint} aria-label={disabled && why ? `${label}: ${why}` : label}>
+      {icon}<span className="cmd-name" aria-hidden>{short}</span><span className="cmd-tip" aria-hidden>{disabled && why ? why : <>{label}<kbd className="kbd">{keyHint}</kbd></>}</span>
     </button>
   );
 

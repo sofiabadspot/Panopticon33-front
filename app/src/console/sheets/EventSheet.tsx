@@ -15,6 +15,7 @@ import { EventTag } from '../panels/EventsPanel';
 import { SheetHead, SheetNotFound } from './SheetHead';
 import { usePermissions } from '../permissions';
 import { DateRangeField, Field, rangeErrors } from '../../ui/Field';
+import { Combobox } from '../../ui/Combobox';
 
 export function EventSheet({ id }: { id: string }) {
   const perm = usePermissions();
@@ -141,6 +142,7 @@ export function EventFormSheet({ id }: { id?: string }) {
   /** Las zonas del evento son las que toca su área: ahí se cuenta la gente y los policías. */
   const touched = zonesTouching(f.cells, zones);
   /** Sumar una zona entera al área (atajo para no elegir hexágono por hexágono). */
+  const [zq, setZq] = useState('');
   const addZone = (zid: string) => { const z = zones.find((x) => x.id === zid); if (z) setCells([...new Set([...f.cells, ...zoneHexes([z])])]); };
 
   const errors: Record<string, string> = {};
@@ -160,6 +162,8 @@ export function EventFormSheet({ id }: { id?: string }) {
   }
   const zonesCap = touched.length ? touched.reduce((n, z) => n + z.capacity, 0) : Math.round((cellsArea(f.cells) * 4) / 100) * 100;
   const err = (k: string) => (tried && errors[k] ? <span className="err"><Icon name="error" />{errors[k]}</span> : null);
+  /** Mensaje de error de un campo (después del primer envío), para pasarlo a Field. */
+  const msg = (k: string) => (tried ? errors[k] ?? null : null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
   const submit = (e: FormEvent) => {
@@ -182,18 +186,19 @@ export function EventFormSheet({ id }: { id?: string }) {
     <>
       <SheetHead kicker={ex ? ex.id : 'Nuevo evento'} title={ex ? 'Editar evento' : 'Registrar evento'} />
       <form className="pb" onSubmit={submit} noValidate id="evform">
-        <div className="field"><label htmlFor="en">Nombre</label><input id="en" className="fld sm" value={f.name} onChange={set('name')} aria-invalid={tried && !!errors.name} placeholder="Festividades de diciembre" />{err('name')}</div>
-        <div className="field"><label htmlFor="ev">Lugar</label><input id="ev" className="fld sm" value={f.venue} onChange={set('venue')} /></div>
+        <Field label="Nombre" error={msg('name')}>{(p) => <input {...p} className="fld sm" value={f.name} onChange={set('name')} placeholder="Festividades de diciembre" />}</Field>
+        <Field label="Lugar">{(p) => <input {...p} className="fld sm" value={f.venue} onChange={set('venue')} />}</Field>
         <DateRangeField labels={['Inicio', 'Fin']} errorLabels={['el inicio', 'el fin']} from={f.start} to={f.end} showErrors={tried}
           onChange={(r) => setF({ ...f, start: r.from, end: r.to })} />
         <div className="box"><div className="bh"><h3>Dónde ocurre</h3><span className="sub">{f.cells.length} hexágonos</span></div><div className="bb grid">
           <HexPicker cells={f.cells} onChange={setCells} allowSplit hint="Puede abarcar varias zonas, y también lugares separados." />
           {err('zones')}
-          <div className="field"><label htmlFor="eaz">Sumar una zona entera</label>
-            <select id="eaz" className="fld sm" value="" onChange={(e) => addZone(e.target.value)}>
-              <option value="">Elegir zona…</option>
-              {zones.filter((z) => !touched.includes(z)).map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
-            </select></div>
+          <Field label="Sumar una zona entera" optional hint="Escribe el nombre de una zona: se suman todos sus hexágonos.">
+            {(p) => <Combobox inputId={p.id} describedBy={p['aria-describedby']} inputClassName="fld sm" query={zq} onQuery={setZq}
+              placeholder="Buscar zona…" empty="Ninguna zona con ese nombre."
+              options={zones.filter((z) => !touched.includes(z) && z.name.toLowerCase().includes(zq.trim().toLowerCase())).slice(0, 8).map((z) => ({ key: z.id, label: z.name, sub: z.id, icon: 'pentagon' }))}
+              onPick={(o) => { addZone(o.key); setZq(''); }} />}
+          </Field>
           <div className="dim" style={{ fontSize: 'var(--fs-sm)' }}>
             {touched.length ? <>Zonas que toca: <b style={{ color: 'var(--ink)', fontWeight: 500 }}>{touched.map((z) => z.name).join(', ')}</b>. Ahí se cuentan las personas y los policías.</>
               : f.cells.length ? 'No toca ninguna zona: al guardar se crea una con estos hexágonos para poder contar a la gente.' : null}
@@ -201,19 +206,20 @@ export function EventFormSheet({ id }: { id?: string }) {
         </div></div>
         <div className="box"><div className="bh"><h3>Personas y policías</h3></div><div className="bb grid">
           <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
-            <div className="field"><label htmlFor="ecap">Aforo máximo (personas)</label><input id="ecap" inputMode="numeric" className="fld sm mono" value={f.capacity} onChange={set('capacity')} placeholder={zonesCap ? fmt(zonesCap) : ''} aria-invalid={tried && !!errors.capacity} />
-              {err('capacity') ?? <span className="hint dim" style={{ fontSize: 'var(--fs-xs)' }}>{f.capacity === '' ? (zonesCap ? `Vacío: la suma de sus zonas (${fmt(zonesCap)})` : 'Vacío: la suma de sus zonas') : 'Reemplaza a la capacidad de sus zonas'}</span>}</div>
-            <div className="field"><label htmlFor="ex">Asistencia esperada</label><input id="ex" inputMode="numeric" className="fld sm mono" value={f.expected} onChange={set('expected')} aria-invalid={tried && !!errors.expected} />{err('expected')}</div>
-            <div className="field"><label htmlFor="ep">Policías previstos</label><input id="ep" inputMode="numeric" className="fld sm mono" value={f.planned} onChange={set('planned')} aria-invalid={tried && !!errors.planned} />{err('planned') ?? <span className="hint dim" style={{ fontSize: 'var(--fs-xs)' }}>Se muestran si no hay ubicación policial en vivo</span>}</div>
+            <Field label="Aforo máximo (personas)" error={msg('capacity')}
+              hint={f.capacity === '' ? (zonesCap ? `Vacío: la suma de sus zonas (${fmt(zonesCap)})` : 'Vacío: la suma de sus zonas') : 'Reemplaza a la capacidad de sus zonas'}>
+              {(p) => <input {...p} inputMode="numeric" className="fld sm mono" value={f.capacity} onChange={set('capacity')} placeholder={zonesCap ? fmt(zonesCap) : ''} />}</Field>
+            <Field label="Asistencia esperada" error={msg('expected')}>{(p) => <input {...p} inputMode="numeric" className="fld sm mono" value={f.expected} onChange={set('expected')} />}</Field>
+            <Field label="Policías previstos" error={msg('planned')} hint="Se muestran si no hay ubicación policial en vivo">{(p) => <input {...p} inputMode="numeric" className="fld sm mono" value={f.planned} onChange={set('planned')} />}</Field>
           </div>
         </div></div>
         <div className="box"><div className="bh"><h3>Cuándo avisar durante el evento</h3></div><div className="bb grid">
           <label className="toggle"><input type="checkbox" checked={f.own} onChange={(e) => setF({ ...f, own: e.target.checked })} />Usar umbrales propios mientras dure</label>
           {!f.own && <span className="dim" style={{ fontSize: 'var(--fs-sm)' }}>Apagado: sus zonas usan los umbrales de Reglas y criticidad.</span>}
           {f.own && <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-            <div className="field"><label htmlFor="to">Aglomeración desde (% del aforo)</label><input id="to" inputMode="numeric" className="fld sm mono" value={f.occ} onChange={set('occ')} aria-invalid={tried && !!errors.occ} />{err('occ')}</div>
-            <div className="field"><label htmlFor="tp">Falta policía desde (personas por policía)</label><input id="tp" inputMode="numeric" className="fld sm mono" value={f.per} onChange={set('per')} aria-invalid={tried && !!errors.per} />{err('per')}</div>
-            <div className="field"><label htmlFor="tm">Tiene que durar (min)</label><input id="tm" inputMode="numeric" className="fld sm mono" value={f.pers} onChange={set('pers')} aria-invalid={tried && !!errors.pers} />{err('pers')}</div>
+            <Field label="Aglomeración desde (% del aforo)" error={msg('occ')}>{(p) => <input {...p} inputMode="numeric" className="fld sm mono" value={f.occ} onChange={set('occ')} />}</Field>
+            <Field label="Falta policía desde (personas por policía)" error={msg('per')}>{(p) => <input {...p} inputMode="numeric" className="fld sm mono" value={f.per} onChange={set('per')} />}</Field>
+            <Field label="Tiene que durar (min)" error={msg('pers')}>{(p) => <input {...p} inputMode="numeric" className="fld sm mono" value={f.pers} onChange={set('pers')} />}</Field>
           </div>}
         </div></div>
       </form>

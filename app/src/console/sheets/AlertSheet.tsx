@@ -9,7 +9,7 @@ import { DISCARD_REASONS, DISPATCH_LABEL, KIND_LABEL, KIND_PHRASE } from '../../
 import type { Alert, PlateRead, Zone } from '../../api/types';
 import { useSession } from '../../shell/session';
 import { Unattended } from '../../ui/Unattended';
-import { Evidence, Icon, Sparkline, StatusChip, useNow, useToast } from '../../ui/kit';
+import { Evidence, Icon, ReadOnlyNote, Sparkline, StatusChip, useNow, useToast } from '../../ui/kit';
 import { useInspect } from '../../ui/ImageInspect';
 import type { Evidence as Ev } from '../../api/types';
 import { byUrgency } from '../../views/shared';
@@ -199,7 +199,7 @@ export function AlertSheet({ id, inWall = false }: { id: string; inWall?: boolea
           {DISCARD_REASONS.map((r, i) => <button key={r} className="btn secondary xs" onClick={() => discard(r)}><span className="kbd">{i + 1}</span>{r}</button>)}
           <button className="btn ghost xs" onClick={() => setDiscarding(false)}>Cancelar</button>
         </>}
-        {!canDecide && a.review === 'por_revisar' && <span className="dim" style={{ fontSize: 'var(--fs-sm)' }}><Icon name="lock" /> Solo lectura: tu rol no confirma ni descarta alertas.</span>}
+        {!perm.can('decidir') && a.review === 'por_revisar' && a.kind !== 'persona_en_lista' && <ReadOnlyNote>tu rol no confirma ni descarta alertas.</ReadOnlyNote>}
         {a.review === 'confirmada' && sent && (pendingCount > 0
           ? <button className="btn primary" style={{ flex: 1 }} onClick={advance} autoFocus><Icon name="arrow_forward" />Siguiente alerta<span className="chip" style={{ marginLeft: 'auto' }}>{pendingCount} por revisar</span><span className="kbd" style={{ color: 'inherit', borderColor: 'currentColor' }}>↵</span></button>
           : <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> No quedan alertas por revisar.</span>)}

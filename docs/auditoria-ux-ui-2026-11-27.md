@@ -429,3 +429,41 @@ Las acciones de borrar, cancelar y terminar van en una "zona de peligro" al fina
 - Lo que depende del backend.
 - Legal.
 - Los escenarios de demo siguen visibles en el menú de cuenta; hay que ocultarlos en la build de producción.
+
+---
+
+## Avance 27-nov (4): componentes que faltaban, permisos y fichas
+
+**Escenarios de demo:** no aparecen en la build de producción y la consola siempre arranca en "Con alertas por revisar". En desarrollo siguen en el menú de cuenta. Para una build de demostración que los muestre: `VITE_DEMO_TOOLS=1 npm run build`.
+
+**Regla única de permisos** (`ReadOnlyNote` en `ui/kit.tsx`):
+- Lo que el rol nunca va a tener se oculta.
+- Si la tarea principal de la vista es decidir y el rol no puede, en el lugar de los botones aparece "**Solo lectura:** tu rol no …". Es el mismo texto y el mismo estilo en la bandeja, la ficha de alerta y la de Personas. Antes había un aviso arriba, un texto en el pie y un aviso en el medio.
+- Lo que el rol puede hacer pero hoy no se puede (por ejemplo, sin ubicación policial) queda deshabilitado con el motivo a la vista. "¿Quién llega?" ahora muestra el motivo en su tooltip.
+
+**Componentes nuevos en `src/ui/`:**
+
+| Componente | Reemplaza | Dónde |
+| --- | --- | --- |
+| `Tabs` (línea o chips; flechas, Inicio y Fin) | `.ltabs`, `.fbar` con `aria-pressed`, el dock del expediente y `Tabs` de Jules | Barra de tareas, filtros de la bandeja y de Personas, secciones del expediente. El tipo de opinión de Jules pasó a `Segmented`, porque es una elección dentro de un formulario. |
+| `MediaViewer` | `.iv`, `.lb` y `ZoomImg` | Evidencia sobre el mapa (con giro), visor de Personas y visor del expediente (con tira de miniaturas, comparación y documentos). Mismos controles en los tres: rueda, arrastre, doble clic, + − 0, ← → y Esc. |
+| `Combobox` (`aria-activedescendant`; Esc cierra y después borra, sin perder el foco) | El buscador incompleto y el select "Sumar una zona entera" | Buscador de la barra y formulario de evento. |
+
+**Formularios:** 49 campos más pasaron a `Field` en configuración (operación, lugar, roles), evento, bitácora, vehículo, investigación y evidencia. Así todos muestran la etiqueta, la ayuda y el error enlazados de la misma manera. "Motivo de la consulta" ahora tiene etiqueta visible.
+
+Quedaron armados a mano, a propósito:
+- Los grupos de `Segmented` y el grupo de radios "Cámara cercana", porque una `<label>` no puede apuntar a un grupo.
+- Los errores que valen para todo el formulario.
+
+**Anatomía de las fichas:** el orden único está documentado en `SheetHead.tsx` (cabecera, avisos, imagen, cifras, detalle, relacionados, línea de tiempo, zona de peligro y pie). Se corrigieron dos fichas:
+- **Cámara:** el aviso de "fuera de preset" va antes del video.
+- **Vehículo:** las cifras van antes del detalle.
+
+El selector Grabación / En vivo de Personas pasó a `Segmented`.
+
+**Sigue pendiente**
+- Unificar los 8 estilos de estado vacío.
+- Que cada ficha tenga su propio esqueleto de carga (hoy depende de un flag global).
+- Lo que depende del backend.
+- Legal.
+
