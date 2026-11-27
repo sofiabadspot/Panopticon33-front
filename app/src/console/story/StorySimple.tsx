@@ -2,10 +2,11 @@
    todos los eventos. ▶ reproduce: la línea se va dibujando, la cámara va de evento en evento y en cada uno
    aparece la captura con la cámara y la hora (como "Ver recorrido en el mapa", al estilo God's Eye View).
    Abrir una historia queda en la bitácora; el motivo es fijo ("Consulta del analista"). */
-import { useMemo, useState } from 'react';
-import { canOpenStory, openStory, storyPlates, useApi } from '../../api';
+import { useEffect, useMemo, useState } from 'react';
+import { canOpenStory, openStory, sampleInvestigations, samplePerson, storyPlates, useApi } from '../../api';
 import { UNKNOWN_FACES, useFacial } from '../../api/facial';
 import { ago } from '../../api/format';
+import type { Story } from '../../api/types';
 import type { StoryChapter, StorySubject } from '../../api/types';
 import { useSession } from '../../shell/session';
 import { Icon } from '../../ui/kit';
@@ -29,6 +30,11 @@ export function StorySearch() {
   const faces = useFacial();
   const stories = useApi((s) => s.stories);
   const open = useOpenSubject();
+  const c = useConsole();
+  useEffect(() => { sampleInvestigations(); samplePerson(); }, [faces.length]);
+  // Guardadas: las investigaciones, de la más reciente a la más vieja. Sin guardar: lo que se miró hace poco.
+  const saved = stories.filter((x) => x.saved).sort((a, b) => b.saved!.at - a.saved!.at);
+  const recent = stories.filter((x) => !x.saved).sort((a, b) => b.createdAt - a.createdAt).slice(0, 6);
   const t = q.trim().toLowerCase();
   const hits = useMemo<Hit[]>(() => {
     if (t.length < 2) return [];
@@ -48,11 +54,15 @@ export function StorySearch() {
       </label>
       {t.length < 2 ? (
         <>
-          <p className="ss-hint">Escribí una placa (por ejemplo <b>P 512</b>) o el nombre de una persona. Elegila y apretá ▶ para ver su recorrido.</p>
-          {stories.length > 0 && <div className="ss-grp">Vistas hace poco</div>}
+          <p className="ss-hint">Escribí una placa (por ejemplo <b>P 512</b>) o el nombre de una persona para empezar una investigación.</p>
+          {saved.length > 0 && <div className="ss-grp">Investigaciones <span>{saved.length}</span></div>}
+          <ul className="ss-cards">
+            {saved.map((st) => <li key={st.id}><InvCard st={st} onOpen={() => c.setStoryId(st.id)} /></li>)}
+          </ul>
+          {recent.length > 0 && <div className="ss-grp">Vistas hace poco</div>}
           <ul className="ss-list">
-            {stories.slice().reverse().slice(0, 6).map((st) => (
-              <li key={st.id}><button onClick={() => open(st.subject)}><Icon name="history" /><span><b>{st.title}</b><small>{ago(st.createdAt)}</small></span></button></li>
+            {recent.map((st) => (
+              <li key={st.id}><button onClick={() => open(st.subject)}><Icon name="history" /><span><b>{st.title}</b><small>Sin guardar · {ago(st.createdAt)}</small></span></button></li>
             ))}
           </ul>
         </>
@@ -64,6 +74,18 @@ export function StorySearch() {
         </ul>
       )}
     </div>
+  );
+}
+
+/** Tarjeta de una investigación guardada: nombre, a quién sigue, el caso y cuánto se le agregó. */
+function InvCard({ st, onOpen }: { st: Story; onOpen: () => void }) {
+  const n = st.added.length;
+  return (
+    <button className="ss-card" onClick={onOpen}>
+      <span className="ss-card-hd"><b>{st.saved!.name}</b><Icon name="chevron_right" /></span>
+      <span className="ss-card-who">{st.subject.k === 'placa' ? <span className="plate">{st.title}</span> : <><Icon name="person" />{st.title}</>}{st.caseId && <span className="mono">{st.caseId}</span>}</span>
+      <span className="ss-card-ft"><span>{n ? `${n} ${n === 1 ? 'evidencia' : 'evidencias'}` : 'Sin evidencias'}</span><span>{st.saved!.by} · {ago(st.saved!.at)}</span></span>
+    </button>
   );
 }
 

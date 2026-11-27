@@ -183,6 +183,8 @@ export interface StoryChapter {
   evidence: Evidence[];
   source: 'sistema' | 'analista' | 'antecedente';
   addedBy?: string;
+  /** Cuándo lo cargó el analista. El capítulo se ubica por `at` (cuándo pasó el hecho), nunca por esta. */
+  addedAt?: number;
   srcLabel?: string;
   key?: boolean;
   keyLabel?: string;
@@ -203,4 +205,7 @@ export interface Story {
   window?: { from: number; to: number };
   added: StoryChapter[];
   keyOverrides: Record<string, boolean>;
+  /** Guardada como investigación: tiene nombre y queda en la lista del analista. Sin esto es una consulta
+      (aparece en «Vistas hace poco»). */
+  saved?: { name: string; at: number; by: string };
 }

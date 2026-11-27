@@ -57,9 +57,9 @@ function ReasonDialog({ s }: { s: StorySubject }) {
     if (st) { playWhenOpened(); c.setStoryId(st.id); }
   };
   return (
-    <Dialog title={s.k === 'sin_identificar' ? `Historia de la persona sin identificar ${s.faceId}` : `Historia de ${label.title}`} onClose={close}>
+    <Dialog title={s.k === 'sin_identificar' ? `Investigar a la persona sin identificar ${s.faceId}` : `Investigar ${label.title}`} onClose={close}>
       <form onSubmit={submit} noValidate style={{ display: 'grid', gap: 14 }}>
-        <div className="callout"><Icon name="lock" /><span className="grow">La historia reconstruye por dónde anduvo, capítulo por capítulo. Abrirla queda en la bitácora con su motivo.</span></div>
+        <div className="callout"><Icon name="lock" /><span className="grow">La investigación reconstruye por dónde anduvo, capítulo por capítulo. Abrirla queda en la bitácora con su motivo.</span></div>
         <div className="field">
           <select className="fld sm" value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Motivo de la consulta" autoFocus>
             <option value="">Motivo de la consulta…</option>{SEARCH_REASONS.map((r) => <option key={r}>{r}</option>)}

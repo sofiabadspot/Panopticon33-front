@@ -44,3 +44,24 @@ export const normalizePlate = (p: string) => p.toUpperCase().replace(/[\s-]/g, '
 /** Valor de input datetime-local en hora de El Salvador (UTC−6, sin horario de verano). */
 export const toLocalInput = (t: number) => new Date(t - 6 * 3600e3).toISOString().slice(0, 16);
 export const fromLocalInput = (v: string) => new Date(v + ':00-06:00').getTime();
+
+/** Fechas de una investigación (puede abarcar horas, días o años): un solo criterio para la lista, el
+    reproductor, el mapa y las tarjetas.
+    · Todo hoy: solo la hora («08:07»).
+    · Varios días, o un día que no es hoy: fecha y hora («27 nov · 08:07»).
+    · Varios años: con el año («27 nov 2024 · 08:07»). */
+export function spanWhen(times: number[]) {
+  const key = (t: number) => new Date(t).toLocaleDateString('en-CA', { timeZone: TZ });
+  const days = new Set(times.map(key)), years = new Set([...days].map((d) => d.slice(0, 4)));
+  const withYear = years.size > 1 || (years.size === 1 && ![...years][0].startsWith(key(Date.now()).slice(0, 4)));
+  const withDate = days.size > 1 || (days.size === 1 && !days.has(key(Date.now())));
+  const day = (t: number) => new Date(t).toLocaleDateString('es-SV', { timeZone: TZ, day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}) }).replace('.', '');
+  return { withDate, dayKey: key, day, at: (t: number) => (withDate ? `${day(t)} · ${hhmm(t)}` : hhmm(t)) };
+}
+/** Un lapso legible: «45 min», «3 h», «12 d», «2 años». */
+export function lapse(min: number) {
+  if (min < 60) return `${Math.round(min)} min`;
+  if (min < 48 * 60) return `${Math.round(min / 60)} h`;
+  if (min < 365 * 24 * 60) return `${Math.round(min / 1440)} d`;
+  const y = Math.round(min / 525600); return `${y} ${y === 1 ? 'año' : 'años'}`;
+}

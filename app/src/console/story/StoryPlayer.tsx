@@ -1,7 +1,7 @@
 /* Reproductor de la historia: play/pausa, capítulo actual, barra con un punto por capítulo (a la misma
    distancia, sin escala de tiempo), velocidad y salida. Atajos: Espacio, ← →, Esc. */
 import { useEffect, useMemo, useRef } from 'react';
-import { dateShort, dateTime, hhmm } from '../../api/format';
+import { hhmm, spanWhen } from '../../api/format';
 import type { StoryChapter } from '../../api/types';
 import { chapterNums } from './storyRoute';
 import { useStoryPlayback, type StorySpeed } from './useStory';
@@ -48,17 +48,20 @@ export function StoryPlayer({ chapters, onExit }: { chapters: StoryChapter[]; on
   // Lo recorrido: sin capítulos, nada; con uno solo, la barra entera (ya se está en el único capítulo).
   const done = n > 1 ? left(at) : n === 1 ? 100 : 0;
   // Extremos de la barra: la hora, y la fecha si no es de hoy.
-  const today = dateShort(Date.now());
-  const end = (t: number) => (dateShort(t) === today ? hhmm(t) : dateTime(t));
-  const label = cur ? (cur.source === 'antecedente' ? dateTime(cur.at) : `${nums[at]} / ${String(n).padStart(2, '0')}`) : '— / —';
+  // Fechas: con varios días (o años) se ve la fecha; si todo es de hoy, solo la hora.
+  const when = spanWhen(chapters.map((c) => c.at));
+  const end = when.at;
+  const label = cur ? `${nums[at]} / ${String(n).padStart(2, '0')}` : '— / —';
+  // Bajo cada punto de la barra: la hora; con varios días, la fecha en el primer punto de cada día.
+  const tick = (i: number) => (when.withDate && (i === 0 || when.dayKey(chapters[i - 1].at) !== when.dayKey(chapters[i].at)) ? when.day(chapters[i].at) : hhmm(chapters[i].at));
 
   return (
-    <footer className="story-player" aria-label="Reproductor de la historia">
+    <footer className="story-player" aria-label="Reproductor del recorrido">
       <button className="story-play" onClick={toggle} disabled={!n} aria-label={playing ? 'Pausar' : 'Reproducir'} title={`${playing ? 'Pausar' : 'Reproducir'} (Espacio)`}>
         <svg viewBox="0 0 14 14" aria-hidden>{playing ? <path d="M3 1.5h3v11H3zM8 1.5h3v11H8z" /> : <path d="M3 1.5v11L12 7z" />}</svg>
       </button>
       <div className="story-cur">
-        <b>{label}{cur && cur.source !== 'antecedente' ? ` · ${hhmm(cur.at)}` : ''}</b>
+        <b>{label}{cur ? ` · ${when.at(cur.at)}` : ''}</b>
         <span>{cur?.cameraId ?? 'Sin cámara'} · <span className="kbd">←</span> <span className="kbd">→</span> capítulo · <span className="kbd">Espacio</span></span>
       </div>
       <div className="story-track">
@@ -76,9 +79,9 @@ export function StoryPlayer({ chapters, onExit }: { chapters: StoryChapter[]; on
               <button
                 className={`pt ${c.source} ${i < at ? 'on' : ''} ${i === at ? 'head' : ''}`} style={{ left: `${left(i)}%` }}
                 onClick={() => { setAt(i); setPlaying(false); }} aria-current={i === at ? 'step' : undefined}
-                aria-label={`Capítulo ${nums[i]}, ${hhmm(c.at)}${c.key ? ', momento clave' : ''}`} title={`${nums[i]} · ${hhmm(c.at)} · ${c.place}`}
+                aria-label={`Capítulo ${nums[i]}, ${when.at(c.at)}${c.key ? ', momento clave' : ''}`} title={`${nums[i]} · ${when.at(c.at)} · ${c.place}`}
               />
-              {n <= 14 && <span className={`pt-t ${i === at ? 'now' : ''}`} style={{ left: `${left(i)}%` }} aria-hidden>{hhmm(c.at)}</span>}
+              {n <= 14 && <span className={`pt-t ${i === at ? 'now' : ''}`} style={{ left: `${left(i)}%` }} aria-hidden>{tick(i)}</span>}
             </span>
           ))}
         </div>
@@ -86,7 +89,6 @@ export function StoryPlayer({ chapters, onExit }: { chapters: StoryChapter[]; on
       <div className="seg" role="group" aria-label="Velocidad">
         {SPEEDS.map((s) => <button key={s.v} className={speed === s.v ? 'on' : ''} onClick={() => setSpeed(s.v)} aria-pressed={speed === s.v}>{s.label}</button>)}
       </div>
-      <button className="btn secondary" onClick={onExit}>Salir de la historia <span className="kbd">Esc</span></button>
     </footer>
   );
 }

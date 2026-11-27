@@ -911,10 +911,70 @@ let evSeq = 1;
 /** POST /v1/stories/{id}/evidence → auditado: el analista suma un capítulo propio. */
 export function addStoryEvidence(id: string, ch: Omit<StoryChapter, 'id' | 'source' | 'addedBy' | 'reads'>, user: User): string | null {
   const st = state.stories.find((x) => x.id === id); if (!st) return null;
-  const c: StoryChapter = { ...ch, id: `analista-${ch.at}-${evSeq++}`, source: 'analista', addedBy: user.name, reads: 0 };
+  const c: StoryChapter = { ...ch, id: `analista-${ch.at}-${evSeq++}`, source: 'analista', addedBy: user.name, addedAt: Date.now(), reads: 0 };
   patchStory(id, (x) => ({ ...x, added: [...x.added, c] }));
-  audit(user, 'Agregar evidencia', id, `${c.place} · ${c.evidence[0]?.caption ?? ''}`, st.reason);
+  audit(user, 'Agregar evidencia', id, `${c.lat === null ? 'Sin lugar' : c.place} · ${c.evidence[0]?.caption ?? ''}`, st.reason);
   return c.id;
+}
+/** PATCH /v1/stories/{id} { saved } → auditado: lo que se está investigando pasa a ser una investigación con nombre. */
+export function saveStory(id: string, name: string, user: User): void {
+  const st = state.stories.find((x) => x.id === id); if (!st || !name.trim()) return;
+  patchStory(id, (x) => ({ ...x, saved: { name: name.trim(), at: Date.now(), by: user.name } }));
+  audit(user, 'Guardar investigación', id, name.trim(), st.reason);
+}
+
+/* Investigaciones de ejemplo (simulado): el analista entra y ya tiene casos trabajados, con su recorrido y
+   evidencias agregadas. Se arman sobre placas que tienen lecturas reales en el seed. */
+let sampled = false;
+export function sampleInvestigations(): void {
+  if (sampled) return; sampled = true;
+  const now = Date.now(), counts = new Map<string, number>();
+  for (const r of seed.reads) if (r.at <= now) counts.set(r.plate, (counts.get(r.plate) ?? 0) + 1);
+  const plates = [...counts.entries()].filter(([, n]) => n >= 4).sort((a, b) => Number(!!seed.plateWatch[b[0]]) - Number(!!seed.plateWatch[a[0]]) || b[1] - a[1]).map(([p]) => p);
+  const CASES = [
+    { name: 'Robo de vehículo con conductor', reason: 'Denuncia por robo', caseId: 'FGR-2026-1184', ev: [['Externa', 'Video', 'Video de un vecino', 'Particular (vecino o testigo)'], ['Interna', 'Documento', 'Denuncia de la víctima en sede policial', 'Lista de la PNC']] },
+    { name: 'Placa en lista: seguimiento de recorridos', reason: 'Seguimiento de vehículo en lista', caseId: 'EXP-0412', ev: [['Externa', 'Imagen', 'Cámara privada de un comercio', 'Comercio o cámara privada'], ['Externa', 'Documento', 'Informe de Aduanas: cruce de frontera', 'Aduanas']] },
+    { name: 'Vehículo visto en dos hechos', reason: 'Requerimiento fiscal', caseId: 'FGR-2026-1201', ev: [['Externa', 'Documento', 'Requerimiento fiscal', 'Fiscalía'], ['Externa', 'Video', 'Video de un colectivo', 'Empresa de transporte']] },
+  ];
+  const made: Story[] = [];
+  CASES.forEach((k, i) => {
+    const plate = plates[i]; if (!plate || state.stories.some((x) => x.saved && x.subject.k === 'placa' && x.subject.plate === plate)) return;
+    const reads = vehicleProfile(plate).reads; if (!reads.length) return;
+    const st: Story = {
+      id: 'HIS-' + String(storySeq++).padStart(4, '0'), subject: { k: 'placa', plate }, title: plate, reason: k.reason, caseId: k.caseId,
+      createdAt: now - (i + 1) * 12 * 60_000, createdBy: 'Analista de turno', added: [], keyOverrides: {},
+      saved: { name: k.name, at: now - (i + 1) * 10 * 60_000, by: 'Analista de turno' },
+    };
+    // Las evidencias de tipo Documento no tienen lugar en el mapa: en la reproducción salen como una escena.
+    st.added = k.ev.map(([, kind, caption, src], j) => {
+      const r = reads[Math.min(reads.length - 1, Math.floor(((j + 1) * reads.length) / (k.ev.length + 1)))];
+      const at = r.at + 4 * 60_000, addedAt = Math.max(at + 60_000, st.saved!.at - (k.ev.length - j) * 60_000);
+      const base = { id: `analista-${at}-${evSeq++}`, at, evidence: [{ type: 'pendiente' as const, caption }], source: 'analista' as const, addedBy: 'Analista de turno', addedAt, reads: 0, srcLabel: src };
+      if (kind === 'Documento') return { ...base, lat: null, lon: null, place: 'Sin lugar en el mapa' };
+      const lat = r.lat + 0.0012 * (j % 2 ? -1 : 1), lon = r.lon + 0.0015;
+      return { ...base, lat, lon, place: placeLabel(lat, lon) };
+    });
+    made.push(st);
+  });
+  if (made.length) commit({ stories: [...state.stories, ...made] });
+  samplePerson();
+}
+/* Una investigación de ejemplo sobre una persona de lista (si el reconocimiento facial ya cargó): su
+   recorrido sale de las detecciones; se le suman las fotos del DUI, que no tienen lugar en el mapa. */
+let sampledPerson = false;
+export function samplePerson(): void {
+  if (sampledPerson) return;
+  const m = faceMatches().find((x) => x.status !== 'descartada' && x.detections.length > 1); if (!m) return;
+  sampledPerson = true;
+  if (state.stories.some((x) => x.saved && x.subject.k === 'persona' && x.subject.matchId === m.id)) return;
+  const now = Date.now(), first = m.detections[0];
+  const st: Story = {
+    id: 'HIS-' + String(storySeq++).padStart(4, '0'), subject: { k: 'persona', matchId: m.id }, title: m.name, reason: 'Seguimiento de persona con orden de captura', caseId: m.listRef,
+    createdAt: now - 40 * 60_000, createdBy: 'Analista de turno', keyOverrides: {},
+    saved: { name: `Seguimiento de ${m.name}`, at: now - 30 * 60_000, by: 'Analista de turno' },
+    added: [{ id: `analista-${first.at}-${evSeq++}`, at: first.at - 20 * 60_000, lat: null, lon: null, place: 'Sin lugar en el mapa', evidence: [{ type: 'pendiente', caption: 'Fotos del DUI y ficha de la persona' }], source: 'analista', addedBy: 'Analista de turno', addedAt: now - 35 * 60_000, reads: 0, srcLabel: 'DUI (RNPN)' }],
+  };
+  commit({ stories: [...state.stories, st] });
 }
 /** PATCH /v1/stories/{id}/key-moments/{chapterId} { key }: marca (true) o desmarca (false) un momento clave.
     El valor lo da la fila tal como se ve (en la ventana o en todo), así se puede quitar uno automático. */

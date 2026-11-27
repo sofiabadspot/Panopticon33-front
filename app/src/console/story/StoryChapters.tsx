@@ -3,7 +3,7 @@
    marca el hueco sin cámaras: ese tramo es inferido, no observado. */
 import { useEffect, useRef, useState } from 'react';
 import { canOpenStory, storySubjectLabel, toggleKeyMoment } from '../../api';
-import { hhmm, pct } from '../../api/format';
+import { hhmm, lapse, pct, spanWhen } from '../../api/format';
 import { gapBefore } from '../../api/story';
 import type { Story, StoryChapter, StorySubject } from '../../api/types';
 import { Icon } from '../../ui/kit';
@@ -11,8 +11,6 @@ import { useOpenStory } from './OpenStory';
 import { StoryEmpty } from './StoryPanel';
 import { useStoryChapters, useStoryPlayback } from './useStory';
 
-const TZ = 'America/El_Salvador';
-const day = (t: number) => new Date(t).toLocaleDateString('es-SV', { timeZone: TZ, day: '2-digit', month: '2-digit' });
 
 const CAM_ID = /^(CAM|SM)-\d+$/i;
 const mentionLabel = (m: StorySubject) => (m.k === 'sin_identificar' ? 'persona sin identificar' : storySubjectLabel(m).title);
@@ -36,7 +34,8 @@ export function StoryChapters({ story }: { story: Story }) {
   const { at, setAt, setPlaying, playing } = useStoryPlayback(chs.length);
   const [q, setQ] = useState('');
   const openStory = useOpenStory();
-  const today = day(Date.now());
+  // Una investigación puede abarcar días o años: con más de un día, la lista se separa por fecha.
+  const when = spanWhen(chs.map((c) => c.at));
   const nowRef = useRef<HTMLLIElement>(null);
   useEffect(() => { nowRef.current?.scrollIntoView({ block: 'nearest' }); }, [at]);
 
@@ -54,18 +53,20 @@ export function StoryChapters({ story }: { story: Story }) {
       {!chs.length ? <StoryEmpty story={story} /> : <>
         <div className="story-search">
           <Icon name="search" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar en esta historia" aria-label="Buscar por lugar, cámara o texto" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar en esta investigación" aria-label="Buscar por lugar, cámara o texto" />
           {q && <button className="iconbtn" onClick={() => setQ('')} aria-label="Borrar búsqueda"><Icon name="close" /></button>}
         </div>
         <ol className="story-list">
           {!rows.length && <li className="empty">Ningún capítulo coincide con “{q.trim()}”.</li>}
-          {rows.map(({ c, i }) => {
+          {rows.map(({ c, i }, k) => {
             const gap = gapBefore(chs, i);
             const now = i === at;
             const ment = c.mentions && canOpenStory(c.mentions) ? c.mentions : null;
-            const d = day(c.at);
+            // Encabezado de día cuando cambia la fecha respecto de la fila anterior que se ve.
+            const newDay = when.withDate && (k === 0 || when.dayKey(rows[k - 1].c.at) !== when.dayKey(c.at));
             return [
-              !needle && gap && gap.min > 5 && <li key={c.id + ':gap'} className="story-gap" aria-hidden>+{gap.min} min sin cámaras · tramo inferido</li>,
+              newDay && <li key={c.id + ':day'} className="story-day">{when.day(c.at)}</li>,
+              !needle && gap && gap.min > 5 && <li key={c.id + ':gap'} className="story-gap" aria-hidden>+{lapse(gap.min)} sin cámaras · tramo inferido</li>,
               <li key={c.id} ref={now ? nowRef : undefined} className={`story-ch ${c.source} ${now ? 'now' : ''}`}>
                 <button className="story-ch-main" onClick={() => { setAt(i); setPlaying(false); }} aria-current={now ? 'step' : undefined}>
                   <span className="n">{nums[i]}</span>
@@ -81,13 +82,13 @@ export function StoryChapters({ story }: { story: Story }) {
                       </span>
                     )}
                   </span>
-                  <span className="t mono">{d !== today && <>{d}<br /></>}{hhmm(c.at)}</span>
+                  <span className="t mono">{hhmm(c.at)}</span>
                 </button>
                 <button className={`story-star ${c.key ? 'on' : ''}`} onClick={() => toggleKeyMoment(story.id, c.id, !c.key)} aria-pressed={!!c.key}
                   aria-label={c.key ? 'Quitar de momentos clave' : 'Marcar como momento clave'} title={c.key ? 'Quitar de momentos clave' : 'Marcar como momento clave'}>
                   <span aria-hidden>★</span>
                 </button>
-                {ment && <p className="story-ment">Aparece con: {mentionLabel(ment)} · <button className="linklike story-ment-link" onClick={() => openStory(ment, story.invId ? { invId: story.invId } : undefined)}>Ver su historia</button></p>}
+                {ment && <p className="story-ment">Aparece con: {mentionLabel(ment)} · <button className="linklike story-ment-link" onClick={() => openStory(ment, story.invId ? { invId: story.invId } : undefined)}>Ver su recorrido</button></p>}
               </li>,
             ];
           })}

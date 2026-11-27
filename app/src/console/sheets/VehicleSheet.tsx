@@ -151,7 +151,7 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
                 {p.reads.length > 1 && <button className={`btn ${trace ? 'secondary' : 'primary'} sm`} aria-pressed={trace} onClick={toggleTrace} style={{ flex: 1 }}>
                   <Icon name={trace ? 'visibility_off' : 'route'} />{trace ? 'Ocultar recorrido' : 'Ver recorrido en el mapa'}
                 </button>}
-                {story && <button className="btn secondary sm" onClick={story} style={{ flex: 1 }}><Icon name="play_arrow" />Ver historia</button>}
+                {story && <button className="btn secondary sm" onClick={story} style={{ flex: 1 }}><Icon name="play_arrow" />Ver recorrido</button>}
               </div>
               {trace && <p className="trace-sum">El número de cada parada es el orden en que pasó el vehículo. Entre dos lecturas puede haber calles sin cámara.</p>}
             </div>

@@ -137,7 +137,7 @@ export function InvestigationDock({ id }: { id: string }) {
                 <button className="linklike plate" onClick={() => c.open({ k: 'vehiculo', id: l.plate })}>{l.plate}</button>
                 {l.listed && <span className="sev critica" title="En lista" />}
                 <button className={`iconbtn cd-trace ${traced === l.plate ? 'on' : ''}`} aria-pressed={traced === l.plate} onClick={() => toggleTrace(l.plate, l.shown.length)} title={traced === l.plate ? 'Ocultar recorrido' : 'Ver recorrido en el mapa'} aria-label={`Recorrido de ${l.plate}`}><Icon name="route" /></button>
-                <button className="iconbtn cd-trace" onClick={() => openStory({ k: 'placa', plate: l.plate }, { invId: inv.id })} title="Ver historia" aria-label={`Historia de ${l.plate}`}><Icon name="play_arrow" /></button>
+                <button className="iconbtn cd-trace" onClick={() => openStory({ k: 'placa', plate: l.plate }, { invId: inv.id })} title="Ver recorrido" aria-label={`Recorrido de ${l.plate}`}><Icon name="play_arrow" /></button>
               </div>
               <small>{here ? `${here.cameraId} · ${hhmm(here.at)}` : 'Sin lecturas hasta acá'}{outside > 0 && ` · ${outside} fuera`}</small>
             </div>,

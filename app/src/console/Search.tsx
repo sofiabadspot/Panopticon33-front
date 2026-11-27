@@ -58,11 +58,11 @@ export function Search() {
        Elegir una abre la historia y la reproduce. */
     if (role === 'analyst') {
       for (const p of storyPlates(q.replace(/[*?]/g, '')))
-        out.push({ group: 'Historias', icon: 'route', label: `Historia de ${p.plate}`, sub: `${p.reads} ${p.reads === 1 ? 'lectura' : 'lecturas'} en 7 días${p.listed ? ' · en lista' : ''}`, ref: 'historia:placa:' + p.plate, run: () => openStory({ k: 'placa', plate: p.plate }) });
+        out.push({ group: 'Investigar', icon: 'route', label: `Investigar ${p.plate}`, sub: `${p.reads} ${p.reads === 1 ? 'lectura' : 'lecturas'} en 7 días${p.listed ? ' · en lista' : ''}`, ref: 'historia:placa:' + p.plate, run: () => openStory({ k: 'placa', plate: p.plate }) });
       for (const m of faces.filter((m) => (has(m.name) || has(m.listRef) || has(m.docId)) && canOpenStory({ k: 'persona', matchId: m.id })).slice(0, 4))
-        out.push({ group: 'Historias', icon: 'person_search', label: `Historia de ${m.name}`, sub: `${m.listRef} · ${m.docId}`, ref: 'historia:persona:' + m.id, run: () => openStory({ k: 'persona', matchId: m.id }) });
+        out.push({ group: 'Investigar', icon: 'person_search', label: `Investigar a ${m.name}`, sub: `${m.listRef} · ${m.docId}`, ref: 'historia:persona:' + m.id, run: () => openStory({ k: 'persona', matchId: m.id }) });
       for (const u of UNKNOWN_FACES.filter((u) => has(u.label) || has(u.id) || (t.length >= 4 && has('persona sin identificar'))))
-        out.push({ group: 'Historias', icon: 'person_search', label: `Historia de la persona sin identificar ${u.id}`, sub: u.label, ref: 'historia:sin_identificar:' + u.id, run: () => openStory({ k: 'sin_identificar', faceId: u.id }) });
+        out.push({ group: 'Investigar', icon: 'person_search', label: `Investigar a la persona sin identificar ${u.id}`, sub: u.label, ref: 'historia:sin_identificar:' + u.id, run: () => openStory({ k: 'sin_identificar', faceId: u.id }) });
     }
     out.push({ group: 'Jules', icon: 'auto_awesome', label: `Preguntar a Jules: "${q.trim()}"`, sub: 'Consulta y recomienda; no ejecuta acciones', ref: 'jules:' + q.trim(), run: () => c.askJules(q.trim()) });
     if (PLATE_RE.test(q.trim())) {

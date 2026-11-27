@@ -39,7 +39,8 @@ export const TOOLS: Record<Role, Tool[]> = {
   // Los eventos van dentro de Estado (ya no tienen pestaña propia).
   command: [{ id: 'estado', label: 'Estado' }, { id: 'alertas', label: 'Alertas' }],
   operator_911: [{ id: 'alertas', label: 'Alertas' }, { id: 'verificacion', label: 'Personas' }, { id: 'estado', label: 'Estado' }],
-  analyst: [{ id: 'investigar', label: 'Historias' }, { id: 'alertas', label: 'Alertas' }, { id: 'estado', label: 'Estado' }],
+  // Analista: sus investigaciones y el estado general. Las alertas en vivo son del operador.
+  analyst: [{ id: 'investigar', label: 'Investigaciones' }, { id: 'estado', label: 'Estado' }],
   admin: [{ id: 'config', label: 'Configuración' }, { id: 'estado', label: 'Estado' }],
 };
 export const DEFAULT_PANEL: Record<Role, PanelId> = { command: 'estado', operator_911: 'alertas', analyst: 'investigar', admin: 'config' };

@@ -75,6 +75,9 @@ interface Props {
   routeOverview?: boolean;
   /** Recorrido controlado: false si el capítulo actual no tiene lugar; la parada sigue marcada pero sin captura «ahora». */
   routeCard?: boolean;
+  /** Reproduciendo: mientras dura el capítulo, la línea avanza (y el mapa la sigue) desde la parada actual
+      hasta la siguiente, en `ms`. Así nunca queda quieto esperando. `key` cambia solo con la parada destino. */
+  routeLead?: { ms: number; key: string } | null;
   sketch?: LngLat[];
   /** Hexágonos elegidos para una zona o un evento (se suman y se quitan con clic). */
   pickCells?: string[];
@@ -122,6 +125,9 @@ interface Props {
   incidents?: { id: string; lat: number; lon: number; label: string; title: string; icon?: string }[];
   /** Alt + clic en el mapa: atajo para registrar lo que pasó en ese punto, sin elegir herramienta. */
   onAltClick?: (p: LngLat) => void;
+  /** Sigue un punto en pantalla (px dentro del mapa) mientras el mapa se mueve: para lo que se abre junto
+      al punto tocado (el abanico de acciones). */
+  track?: { p: LngLat; onXY: (xy: [number, number]) => void } | null;
 }
 
 const token = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888888';
@@ -204,7 +210,7 @@ export function MapView(p: Props) {
   /* Recorrido animado: se dibuja de punta a punta con una estela; cada parada se enciende al pasar. */
   /** Medios aéreos: si se dibujan, y cuándo se actualizó la estela por última vez. */
   const air = useRef({ on: false, show: [] as typeof AIRCRAFT, trailAt: 0, trailShown: false });
-  const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[]; eased?: string; playTok?: number; follow?: boolean; ctlKey?: string; ctlPrev?: number; segRaf?: number }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
+  const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[]; eased?: string; playTok?: number; follow?: boolean; ctlKey?: string; ctlPrev?: number; segRaf?: number; leadKey?: string; leadRaf?: number; leadTo?: number }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
   const [hud, setHud] = useState<{ reached: number; n: number; done: boolean } | null>(null);
   /* Capturas proyectadas sobre las paradas del recorrido: se pueden ocultar desde el HUD. */
   const [snaps, setSnaps] = useState(true); const snapsRef = useRef(snaps); snapsRef.current = snaps;
@@ -396,6 +402,13 @@ export function MapView(p: Props) {
   useEffect(() => { if (mapRef.current) mapRef.current.getCanvas().style.cursor = p.onMapClick ? 'crosshair' : ''; }, [p.onMapClick]);
   // Mientras se marca en el mapa (hexágonos, un punto), los rótulos y marcadores no se pueden tocar: el clic va al mapa.
   useEffect(() => { mapRef.current?.getContainer().classList.toggle('map-picking', !!p.onMapClick); }, [p.onMapClick]);
+  const trackCb = useRef(p.track?.onXY); trackCb.current = p.track?.onXY;
+  useEffect(() => {
+    const map = mapRef.current, pt = p.track?.p; if (!map || !pt) return undefined;
+    const send = () => { const q = map.project(pt); trackCb.current?.([q.x, q.y]); };
+    send(); map.on('move', send); map.on('resize', send);
+    return () => { map.off('move', send); map.off('resize', send); };
+  }, [p.track?.p[0], p.track?.p[1]]); // eslint-disable-line react-hooks/exhaustive-deps
   // Al empezar o terminar de elegir hexágonos, la grilla aparece o se va.
   useEffect(() => { pickGridRef.current(); }, [!!p.pickCells]);
 
@@ -638,7 +651,11 @@ export function MapView(p: Props) {
         A.ctlKey = rkey; A.ctlPrev = ctl; cancelAnimationFrame(A.segRaf ?? 0); A.segRaf = 0;
         const reducedSeg = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         (map.getSource('routeGhost') as GeoJSONSource).setData(fc(line(path.slice(cut))));
-        if (prev !== undefined && prev === ctl - 1 && !reducedSeg && cut > stopAt[prev]) {
+        if (prev !== undefined && prev === ctl - 1 && A.leadTo === ctl) {
+          // La línea ya llegó sola mientras corría el capítulo anterior: no se vuelve a animar.
+          (map.getSource('route') as GeoJSONSource).setData(fc(line(path.slice(0, cut + 1))));
+          A.head?.setLngLat(path[cut]);
+        } else if (prev !== undefined && prev === ctl - 1 && !reducedSeg && cut > stopAt[prev]) {
           const from = stopAt[prev], D = 1600, t0 = performance.now();
           if (!A.head) { const el = document.createElement('div'); el.className = 'mk-comet'; el.innerHTML = '<i></i><b></b>'; A.head = new maplibregl.Marker({ element: el }).setLngLat(path[from]).addTo(map); }
           A.head.getElement().classList.remove('done');
@@ -675,6 +692,30 @@ export function MapView(p: Props) {
             map.fitBounds(b, { padding: pad, maxZoom: 16, duration: reducedMo ? 0 : 800, bearing: map.getBearing(), pitch: map.getPitch() });
           });
         } else map.easeTo({ center: [R[ctl].lon, R[ctl].lat], zoom: z >= 15 ? z : 16, duration: reducedMo ? 0 : 700 });
+      }
+      // Avance continuo (reproduciendo): de la parada actual a la siguiente durante todo el capítulo, a ritmo
+      // parejo, con el punto luminoso adelante y el mapa acompañando. En pausa se queda donde llegó.
+      const A2 = anim.current, lead = P.routeLead && ctl < R.length - 1 && !P.routeOverview ? P.routeLead : null;
+      const lk = lead ? `${rkey}#${ctl}#${lead.key}` : '';
+      if (A2.leadKey !== lk) {
+        A2.leadKey = lk; cancelAnimationFrame(A2.leadRaf ?? 0); A2.leadRaf = 0; A2.leadTo = undefined;
+        const from = stopAt[ctl], to = lead ? stopAt[ctl + 1] : from;
+        if (lead && !reducedMo && to > from) {
+          A2.leadTo = ctl + 1;
+          if (!A2.head) { const el = document.createElement('div'); el.className = 'mk-comet'; el.innerHTML = '<i></i><b></b>'; A2.head = new maplibregl.Marker({ element: el }).setLngLat(path[from]).addTo(map); }
+          A2.head.getElement().classList.remove('done');
+          const z = map.getZoom(), t0 = performance.now(), D = lead.ms;
+          map.easeTo({ center: [R[ctl + 1].lon, R[ctl + 1].lat], zoom: z >= 15 ? z : 16, duration: D, easing: (t) => t });
+          const step = (now: number) => {
+            const k = Math.min(1, (now - t0) / D), x = from + (to - from) * k, i = Math.min(to - 1, Math.floor(x)), f = x - i;
+            const pt: LngLat = [path[i][0] + (path[i + 1][0] - path[i][0]) * f, path[i][1] + (path[i + 1][1] - path[i][1]) * f];
+            (map.getSource('route') as GeoJSONSource).setData(fc(line([...path.slice(0, i + 1), pt])));
+            (map.getSource('routeGhost') as GeoJSONSource).setData(fc(line([pt, ...path.slice(i + 1)])));
+            A2.head?.setLngLat(pt);
+            if (k < 1) A2.leadRaf = requestAnimationFrame(step); else A2.leadRaf = 0;
+          };
+          A2.leadRaf = requestAnimationFrame(step);
+        }
       }
     } else {
       anim.current.eased = undefined;
@@ -868,7 +909,7 @@ export function MapView(p: Props) {
   }
   /* ---------- Animación del recorrido ---------- */
   function stopRoute() {
-    cancelAnimationFrame(anim.current.raf); cancelAnimationFrame(anim.current.segRaf ?? 0); anim.current.segRaf = 0; anim.current.ctlKey = undefined; anim.current.reached = -1;
+    cancelAnimationFrame(anim.current.raf); cancelAnimationFrame(anim.current.segRaf ?? 0); anim.current.segRaf = 0; cancelAnimationFrame(anim.current.leadRaf ?? 0); anim.current.leadRaf = 0; anim.current.leadKey = undefined; anim.current.leadTo = undefined; anim.current.ctlKey = undefined; anim.current.reached = -1;
     anim.current.head?.remove(); anim.current.head = null; setHud(null);
     const map = mapRef.current; if (map && ready.current) (map.getSource('route') as GeoJSONSource).setData(fc([]));
   }

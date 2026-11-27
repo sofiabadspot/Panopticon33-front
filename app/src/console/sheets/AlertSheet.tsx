@@ -123,7 +123,7 @@ export function AlertSheet({ id }: { id: string }) {
           {/* Analista: abrir una investigación con el lugar y la hora de esta alerta ya cargados */}
           {role === 'analyst' && <button className="chip outline" onClick={() => { c.setInvDraft({ title: `${KIND_PHRASE[a.kind]}${a.plate ? ` ${a.plate.listed}` : ''}`, lat: a.lat, lon: a.lon, label: cam?.street ?? zone?.name ?? a.cameraId, from: a.createdAt - 3600e3, to: a.createdAt + 1800e3 }); c.setPanel('investigar'); }}><Icon name="timeline" />Investigar esto</button>}
           {/* Analista: la historia de la placa (pide motivo). Las alertas de persona no son suyas. */}
-          {role === 'analyst' && a.plate && <button className="chip outline" onClick={() => openStory({ k: 'placa', plate: a.plate!.listed })}><Icon name="play_arrow" />Ver historia</button>}
+          {role === 'analyst' && a.plate && <button className="chip outline" onClick={() => openStory({ k: 'placa', plate: a.plate!.listed })}><Icon name="play_arrow" />Ver recorrido</button>}
         </>}
       />
       <div className={`pb ${!sent ? '' : txSolo ? 'tx-alone' : 'tx-after'}`}>

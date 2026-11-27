@@ -43,14 +43,15 @@ import { FacialPanel, FacialSheet } from './sheets/FacialSheet';
 import { WhoArrives } from './WhoArrives';
 import { VehicleSheet } from './sheets/VehicleSheet';
 import { AirSheet } from './sheets/AirSheet';
-import { CommandBar, INCIDENT_ICON, IncidentCard, type Tool } from './CommandBar';
+import { CommandBar, INCIDENT_ICON, IncidentFan, type Tool } from './CommandBar';
 import { StoryPlaybackProvider, useStoryChapters } from './story/useStory';
 import { useStoryRoute } from './story/storyRoute';
 import { StorySearch } from './story/StorySimple';
 import { StoryPanel } from './story/StoryPanel';
 import { StoryChapters } from './story/StoryChapters';
 import { StoryPlayer } from './story/StoryPlayer';
-import { EvidenceCard } from './story/EvidenceCard';
+import { EvidenceFan, EvidenceLoose } from './story/EvidenceCard';
+import { StoryScene } from './story/StoryScene';
 import { OpenStoryHost } from './story/OpenStory';
 
 /** Iniciales para el avatar (solo palabras con mayúscula: sin títulos como "Cmdte."). */
@@ -87,14 +88,18 @@ function Layout() {
      reproductor. La investigación (si la hay) sigue abierta debajo: al salir se vuelve a ella. */
   const stories = useApi((s) => s.stories);
   const story = role === 'analyst' && c.storyId ? stories.find((x) => x.id === c.storyId) ?? null : null;
+  // Una investigación que ya no existe (p. ej. después de recargar los datos) no queda «abierta» en blanco:
+  // si no, tocar su tarjeta no haría nada.
+  useEffect(() => { if (c.storyId && !stories.some((x) => x.id === c.storyId)) c.setStoryId(null); }, [c.storyId, stories]); // eslint-disable-line react-hooks/exhaustive-deps
   /* Historia (como en God's Eye View): a la izquierda lo que se buscó, a la derecha los eventos, abajo la
      línea de tiempo. Las tres y el mapa siguen el mismo evento actual; al abrirla se reproduce sola. */
   const sr = useStoryRoute(story);
   const storyChs = useStoryChapters(story);
-  /* Agregar un evento de afuera (cámara privada, video de un vecino, denuncia…): clic en el mapa y se suma
-     al trayecto en su lugar por hora. */
-  const [ev, setEv] = useState<{ p: LngLat | null } | null>(null);
-  useEffect(() => { setEv(null); }, [story?.id]);
+  /* Agregar evidencia (herramienta Evidencia de la barra): clic en el mapa y junto al punto se abre el
+     abanico (archivo, título, plataforma). Se suma al trayecto en su lugar por hora. */
+  const [evAt, setEvAt] = useState<LngLat | null>(null);
+  /** Evidencia sin lugar en el mapa: su formulario abierto sobre la barra. */
+  const [loose, setLoose] = useState(false);
   // Solo en desarrollo: abrir una historia desde la consola del navegador (window.__p33).
   useEffect(() => {
     if (!import.meta.env.DEV) return undefined;
@@ -135,7 +140,13 @@ function Layout() {
   const [tool, setToolRaw] = useState<Tool>('mover');
   const measuring = tool === 'medir';
   const [incAt, setIncAt] = useState<LngLat | null>(null);
-  const setTool = (t: Tool) => { setToolRaw(t); setMeasureAt(null); if (t !== 'incidente') setIncAt(null); };
+  const setTool = (t: Tool) => { setToolRaw(t); setMeasureAt(null); if (t !== 'incidente') setIncAt(null); if (t !== 'evidencia') setEvAt(null); else setLoose(false); };
+  // Al abrir o cerrar una investigación, la barra vuelve a Mover.
+  useEffect(() => { setTool('mover'); setLoose(false); }, [story?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* El abanico se abre junto al punto tocado: el mapa dice dónde queda ese punto en pantalla. */
+  const fanPt = story ? (tool === 'evidencia' ? evAt : null) : tool === 'incidente' ? incAt : null;
+  const [fanXY, setFanXY] = useState<[number, number] | null>(null);
+  useEffect(() => { if (!fanPt) setFanXY(null); }, [fanPt]);
   const setMeasuring = (on: boolean) => setTool(on ? 'medir' : 'mover');
   const incidents = useApi((s) => s.incidents);
   const canIncident = role === 'operator_911' || role === 'command';
@@ -319,7 +330,7 @@ function Layout() {
       </header>
 
       <aside className="lcol" aria-label={story ? 'Lo que buscaste' : 'Lista'}>
-        {story ? <StoryPanel key={story.id} story={story} onAddEvidence={() => setEv((e) => e ?? { p: null })} /> : <>
+        {story ? <StoryPanel key={story.id} story={story} onExit={() => c.setStoryId(null)} /> : <>
         <nav className="ltabs" role="tablist" aria-label="Tareas" ref={tabsRef}>
           {/* Indicador que se desliza a la pestaña activa (posición medida abajo, en tabsRef). */}
           <span className="ti" aria-hidden />
@@ -352,7 +363,7 @@ function Layout() {
             zones={zones} zoneStatus={admin ? undefined : inv ? NO_STATUS : loading ? undefined : status} cameras={admin && adm.pending ? pendingCams : cameras} units={admin ? null : policeSource && !inv ? units : null} alerts={admin ? [] : mapAlerts}
             zonePaint={admin ? { color: () => ZONE_COLOR, dim: (z) => adm.pending && !pendingZones.includes(z) } : undefined}
             layers={admin ? { zones: adm.zones, events: adm.events, cameras: adm.cameras, fov: adm.cameras && adm.fov, alerts: false, units: false, hex: null, drones: false, helis: false } : { ...layers, zones: layers.zones && seen('zones'), events: layers.events && seen('events'), alerts: layers.alerts && seen('alerts'), cameras: layers.cameras && seen('cameras'), drones: layers.drones && seen('drones'), helis: layers.helis && seen('helis'), hex: layers.hex && seen('hex') && !hexOff(layers.hex) ? layers.hex : null, units: layers.units && seen('units') && policeSource && !inv }} severityOf={sevOf} eventOf={inv ? undefined : eventOf} selectedZone={selectedZone} focusSel={mapFocus} hoverAlert={c.hoverAlert} onAlertHover={c.setHoverAlert} freshAlerts={c.fresh}
-            highlightZones={c.overlay.highlightZones} route={story ? sr.stops : c.overlay.route} routeLabel={story ? story.title : c.overlay.routeLabel} routeAt={story ? sr.at : null} routeCount={story ? sr.count : null} routeOverview={!!story && sr.overview} routeCard={story ? sr.card : undefined} sketch={c.overlay.sketch} pickCells={c.overlay.pickCells} pin={c.pin} signal={c.signal}
+            highlightZones={c.overlay.highlightZones} route={story ? sr.stops : c.overlay.route} routeLabel={story ? story.title : c.overlay.routeLabel} routeAt={story ? sr.at : null} routeCount={story ? sr.count : null} routeOverview={!!story && sr.overview} routeCard={story ? sr.card : undefined} routeLead={story ? sr.lead : null} sketch={c.overlay.sketch} pickCells={c.overlay.pickCells} pin={c.pin} signal={c.signal}
             bounds={boundsOf(fit.points, 0.0008)} fitKey={fit.key} backOutKey={backOut} padding={{ top: 24, right: 24, bottom: 24, left: 24 }}
             base={base} onBaseStatus={setBaseStatus} onPointer={setPointer}
             region={{ lat: SECTOR.lat, lon: SECTOR.lon, title: SECTOR.name, sub: `${zones.length} zonas · ${cameras.length} cámaras`, onClick: () => setFit({ points: sectorPts, key: 'sector' + Date.now() }) }}
@@ -360,15 +371,20 @@ function Layout() {
             onEventClick={(id) => c.open({ k: 'evento', id })}
             onAlertClick={(id) => c.open({ k: 'alerta', id })}
             onCameraClick={(id) => c.open(role === 'admin' ? { k: 'config', tab: 'camaras', id } : { k: 'camara', id })}
-            onMapClick={story && ev ? (p) => setEv({ p }) : measuring ? (p) => setMeasureAt(p) : tool === 'incidente' ? (p) => setIncAt(p) : c.overlay.onMapClick} onEmptyClick={() => { if (c.sheet) c.close(); }} onAirClick={(id) => c.open({ k: 'aereo', id })}
+            onMapClick={story ? (tool === 'evidencia' ? (p) => setEvAt(p) : undefined) : measuring ? (p) => setMeasureAt(p) : tool === 'incidente' ? (p) => setIncAt(p) : c.overlay.onMapClick} onEmptyClick={() => { if (c.sheet) c.close(); }} onAirClick={(id) => c.open({ k: 'aereo', id })}
             measure={measure ? { p: measure.p, radius, cells: [], state: measure.state } : null}
-            incidents={story && ev?.p ? [{ id: 'nuevo', lat: ev.p[1], lon: ev.p[0], label: 'Evento nuevo', title: 'Dónde pasó', icon: 'add' }] : story || inv ? undefined : [...incidents.map((x) => ({ id: x.id, lat: x.lat, lon: x.lon, label: INCIDENT_LABEL[x.kind], icon: INCIDENT_ICON[x.kind], title: `${x.id} · ${INCIDENT_LABEL[x.kind]} · ${x.address} · ${hhmm(x.at)} · ${x.by}` })),
-              ...(incAt ? [{ id: 'nuevo', lat: incAt[1], lon: incAt[0], label: 'Nuevo incidente', title: 'Punto del incidente', icon: 'add' }] : [])]}
+            incidents={story || inv ? undefined : incidents.map((x) => ({ id: x.id, lat: x.lat, lon: x.lon, label: INCIDENT_LABEL[x.kind], icon: INCIDENT_ICON[x.kind], title: `${x.id} · ${INCIDENT_LABEL[x.kind]} · ${x.address} · ${hhmm(x.at)} · ${x.by}` }))}
+            track={fanPt ? { p: fanPt, onXY: setFanXY } : null}
             onAltClick={canIncident && !inv && !c.overlay.onMapClick ? (p) => { setToolRaw('incidente'); setMeasureAt(null); setIncAt(p); } : undefined}
           />
           {/* En modo historia el analista trabaja después del hecho: los avisos en vivo no se le superponen. */}
           {!story && <ArrivalBanner />}
-          {story && ev && <EvidenceCard key={story.id} story={story} p={ev.p} onClose={() => setEv(null)} />}
+          {/* Capítulo sin lugar en el mapa: se ve como una escena sobre el mapa oscurecido. */}
+          {story && <StoryScene story={story} />}
+          {story && loose && <EvidenceLoose key={story.id} story={story} onClose={() => setLoose(false)} />}
+          {story && tool === 'evidencia' && (evAt && fanXY
+            ? <EvidenceFan key={story.id} story={story} p={evAt} xy={fanXY} onClose={() => setEvAt(null)} />
+            : <div className="map-hint" role="status"><Icon name="my_location" />Hacé clic en el mapa donde pasó</div>)}
           {admin && !c.overlay.onMapClick && <AdminMapLegend l={adm} cameras={adm.pending ? pendingCams : cameras} />}
           {measuring && (
             <section className="measure-card" aria-live="polite">
@@ -380,9 +396,13 @@ function Layout() {
               </>)}
             </section>
           )}
-          {tool === 'incidente' && <IncidentCard p={incAt} onClose={() => setTool('mover')} onDone={(label) => c.setSignal({ lat: incAt![1], lon: incAt![0], label: `Registrado · ${label}`, key: String(Date.now()) })}>{whoArrives}</IncidentCard>}
-          {!inv && !story && !loading && !c.overlay.onMapClick && !admin && (
-            <CommandBar tool={tool} setTool={setTool} canIncident={canIncident} canMeasure={policeSource}
+          {tool === 'incidente' && !story && (incAt && fanXY
+            ? <IncidentFan p={incAt} xy={fanXY} onClose={() => setIncAt(null)} onDone={(label) => c.setSignal({ lat: incAt[1], lon: incAt[0], label: `Registrado · ${label}`, key: String(Date.now()) })}>{whoArrives}</IncidentFan>
+            : <div className="map-hint" role="status"><Icon name="my_location" />Hacé clic en el mapa donde pasó</div>)}
+          {/* Analista: la barra solo dentro de una investigación (Evidencia). «¿Quién llega?» es de los roles
+              que despachan o miden en vivo, no del analista. */}
+          {(story || (!inv && role !== 'analyst')) && !loading && !c.overlay.onMapClick && !admin && (
+            <CommandBar tool={tool} setTool={setTool} canIncident={canIncident && !story} canMeasure={policeSource && !story} canEvidence={!!story} onLooseEvidence={() => setLoose(true)}
               onNewEvent={canOpenSheet(role, { k: 'evento-form' }) ? () => c.open({ k: 'evento-form' }) : undefined} />
           )}
           <div className="hud-frame" aria-hidden>

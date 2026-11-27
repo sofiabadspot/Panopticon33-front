@@ -1,94 +1,171 @@
-/* Agregar evidencia a la historia: el analista marca en el mapa dónde pasó y carga qué es (origen, tipo,
-   título, hora, fuente y un enlace opcional). Mismo patrón que Registrar incidentes (IncidentCard): la
-   tarjeta measure-card arriba a la izquierda del mapa; un clic en otro punto la mueve. El capítulo nuevo
-   entra en su lugar por hora y el reproductor salta a él. No hay archivo: se ve con el marcador B/N. */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { addStoryEvidence, placeLabel } from '../../api';
-import type { LngLat, Story } from '../../api/types';
+/* Agregar evidencia a la investigación. El botón Evidencia de la barra de abajo despliega dos opciones:
+   · En un lugar del mapa: se toca el punto y junto a él se abre el abanico (QuickFan, el mismo de Registrar
+     incidente): adjuntar archivo, solo título o el video de una cámara de la plataforma.
+   · Sin lugar en el mapa (EvidenceLoose): documentos, fotos o informes que no pasaron en un punto de la
+     ciudad. En la reproducción se ven como una escena (StoryScene).
+   Siempre se pide CUÁNDO PASÓ el hecho (no cuándo se sube): con esa fecha entra en su lugar de la película.
+   La fecha de carga queda aparte (addedAt). La fuente sale de la misma lista que el expediente facial, más
+   las externas habituales: buena parte del relato viene de fuentes de afuera. */
+import { useEffect, useMemo, useState } from 'react';
+import { addStoryEvidence, placeLabel, useApi } from '../../api';
+import { FACIAL_SOURCES } from '../../api/facial';
+import { cameraClip } from '../../api/video';
+import type { Evidence, LngLat, Story, StoryChapter } from '../../api/types';
 import { useSession } from '../../shell/session';
 import { Icon } from '../../ui/kit';
+import { QuickFan } from '../QuickFan';
 import { useStoryChapters, useStoryJump, useStoryPlayback, useStoryRange } from './useStory';
 
-const ORIGINS = ['Interna', 'Externa'] as const;
-const KINDS = ['Imagen', 'Video', 'Documento', 'Registro'] as const;
+type Mode = 'archivo' | 'titulo' | 'plataforma';
+const ITEMS: { id: Mode; label: string; icon: string; hint: string }[] = [
+  { id: 'archivo', label: 'Adjuntar archivo', icon: 'description', hint: 'Imagen, video o documento' },
+  { id: 'titulo', label: 'Solo título', icon: 'edit_note', hint: 'Lo que se sabe, sin archivo' },
+  { id: 'plataforma', label: 'De la plataforma', icon: 'videocam', hint: 'Video de una cámara de Panopticon' },
+];
+
+/** De dónde viene la evidencia: las fuentes del expediente facial y las externas habituales. */
+export const EVIDENCE_SOURCES = [...FACIAL_SOURCES.map((s) => s.name), 'Particular (vecino o testigo)', 'Comercio o cámara privada', 'Empresa de transporte', 'Medios o redes sociales'];
+const OTHER = 'Otra fuente…';
 
 /* La hora se carga en la de El Salvador (UTC−6, sin horario de verano), la misma que muestra la consola,
    aunque el navegador esté en otra zona. */
 const OFFSET = 6 * 3_600_000;
 const toField = (t: number) => new Date(t - OFFSET).toISOString().slice(0, 16);
 const fromField = (v: string) => { const t = Date.parse(`${v}:00Z`); return Number.isNaN(t) ? null : t + OFFSET; };
+const evOf = (f: File, caption: string): Evidence => {
+  const src = URL.createObjectURL(f);
+  return f.type.startsWith('image/') ? { type: 'imagen', src, caption } : f.type.startsWith('video/') ? { type: 'clip', src, caption } : { type: 'pendiente', caption: `${caption} · ${f.name}` };
+};
 
-export function EvidenceCard({ story, p, onClose }: { story: Story; p: LngLat | null; onClose: () => void }) {
-  const { user } = useSession();
+/** Lo común a las dos formas: cuándo pasó y de qué fuente viene. */
+function useWhenAndSource(story: Story) {
   const chs = useStoryChapters(story);
   const { at } = useStoryPlayback(chs.length);
+  const [when, setWhen] = useState(() => toField(chs[at]?.at ?? Date.now()));
+  const [pick, setPick] = useState('');
+  const [other, setOther] = useState('');
+  const t = useMemo(() => fromField(when), [when]);
+  const source = pick === OTHER ? other.trim() : pick;
+  const whenField = (
+    <div className="field"><label htmlFor="ev-when">Cuándo pasó</label>
+      <input id="ev-when" type="datetime-local" className="fld sm" value={when} onChange={(e) => setWhen(e.target.value)} aria-invalid={t === null} />
+      <span className="hint">La fecha y hora del hecho (por ejemplo, cuándo se hizo la denuncia), no la de hoy. Con esta fecha entra en su lugar del recorrido.</span></div>
+  );
+  const sourceField = (
+    <div className="field"><label htmlFor="ev-src">Fuente</label>
+      <select id="ev-src" className="fld sm" value={pick} onChange={(e) => setPick(e.target.value)}>
+        <option value="">Elegí de dónde viene…</option>{EVIDENCE_SOURCES.map((s) => <option key={s}>{s}</option>)}<option>{OTHER}</option>
+      </select>
+      {pick === OTHER && <input className="fld sm" autoFocus value={other} onChange={(e) => setOther(e.target.value)} placeholder="Nombre de la fuente" aria-label="Nombre de la fuente" />}</div>
+  );
+  return { t, source, whenField, sourceField };
+}
+
+/** Guardar un capítulo y llevar el reproductor a él. */
+function useAdd(story: Story) {
+  const { user } = useSession();
   const { range, setRange } = useStoryRange();
   const jumpTo = useStoryJump();
-  const [origin, setOrigin] = useState<(typeof ORIGINS)[number]>('Interna');
-  const [kind, setKind] = useState<(typeof KINDS)[number]>('Imagen');
-  const [title, setTitle] = useState('');
-  const [when, setWhen] = useState(() => toField(chs[at]?.at ?? Date.now()));
-  const [source, setSource] = useState('');
-  const [link, setLink] = useState('');
-  const t = useMemo(() => fromField(when), [when]);
-  const ok = !!p && title.trim().length >= 3 && source.trim().length > 0 && t !== null;
-
-  // Esc cierra la tarjeta y no sale de la historia: se atiende antes que el reproductor (fase de captura)
-  // y se marca con preventDefault, que StoryPlayer respeta.
-  const close = useRef(onClose); close.current = onClose;
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); close.current(); } };
-    window.addEventListener('keydown', k, true);
-    return () => window.removeEventListener('keydown', k, true);
-  }, []);
-
-  const save = () => {
-    if (!ok) return;
-    const id = addStoryEvidence(story.id, {
-      at: t!, lat: p![1], lon: p![0], place: placeLabel(p![1], p![0]),
-      evidence: [{ type: 'pendiente', caption: title.trim() }],
-      srcLabel: `${origin} · ${kind} · ${source.trim()}`,
-      note: link.trim() || undefined,
-    }, user);
-    if (!id) return;
+  return (ch: Omit<StoryChapter, 'id' | 'source' | 'addedBy' | 'reads'>) => {
+    const id = addStoryEvidence(story.id, ch, user);
+    if (!id) return false;
     jumpTo(id);
     // Fuera de la ventana del hecho no se vería: se pasa a todo.
-    if (story.window && range === 'ventana' && (t! < story.window.from || t! > story.window.to)) setRange('todo');
-    onClose();
+    if (story.window && range === 'ventana' && (ch.at < story.window.from || ch.at > story.window.to)) setRange('todo');
+    return true;
+  };
+}
+
+/** En un lugar del mapa: el abanico junto al punto tocado. */
+export function EvidenceFan({ story, p, xy, onClose }: { story: Story; p: LngLat; xy: [number, number]; onClose: () => void }) {
+  const cameras = useApi((s) => s.cameras);
+  const { t, source, whenField, sourceField } = useWhenAndSource(story);
+  const add = useAdd(story);
+  const [mode, setMode] = useState<Mode | null>(null);
+  const [title, setTitle] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [cam, setCam] = useState<string | null>(null);
+  useEffect(() => { setMode(null); setCam(null); }, [p[0], p[1]]);
+  // Cámaras con video más cercanas al punto.
+  const near = useMemo(() => cameras.filter((c) => cameraClip(c.id))
+    .map((c) => ({ c, d: Math.hypot((c.lat - p[1]) * 111_000, (c.lon - p[0]) * 105_000) }))
+    .sort((a, b) => a.d - b.d).slice(0, 4), [cameras, p[0], p[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+  const camera = near.find((x) => x.c.id === cam)?.c;
+
+  // De la plataforma, la cámara es la fuente: solo se pide cuándo pasó.
+  const ok = t !== null && (mode === 'plataforma' ? !!camera : title.trim().length >= 3 && !!source && (mode !== 'archivo' || !!file));
+  const save = () => {
+    if (!ok || !mode) return;
+    const done = mode === 'plataforma'
+      // El video de la cámara lo suma la historia sola (storyChapters) al tener cameraId.
+      ? add({ at: t!, lat: camera!.lat, lon: camera!.lon, place: camera!.street, cameraId: camera!.id, evidence: [{ type: 'pendiente', caption: title.trim() || `Video de la cámara ${camera!.id}` }], srcLabel: `Panopticon · Cámara ${camera!.id}` })
+      : add({ at: t!, lat: p[1], lon: p[0], place: placeLabel(p[1], p[0]), evidence: [mode === 'archivo' ? evOf(file!, title.trim()) : { type: 'pendiente', caption: title.trim() }], srcLabel: source });
+    if (done) onClose();
   };
 
-  const chips = <T extends string>(label: string, opts: readonly T[], v: T, set: (x: T) => void) => (
-    <div className="field">
-      <span className="lbl" id={`ev-${label}`}>{label}</span>
-      <div className="ev-chips" role="radiogroup" aria-labelledby={`ev-${label}`}>
-        {opts.map((o) => <button type="button" key={o} role="radio" aria-checked={v === o} className={`lchip ${v === o ? 'on' : ''}`} onClick={() => set(o)}>{o}</button>)}
-      </div>
-    </div>
-  );
-
   return (
-    <section className="measure-card ev-card" aria-label="Agregar evidencia">
-      <div className="mc2-hd"><span className="mc2-lbl">Agregar evidencia</span><button className="iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar (Esc)"><Icon name="close" /></button></div>
-      {!p ? <p className="mc2-hint">Hacé clic en el mapa donde pasó.</p> : (
-        <form className="ev-form" noValidate onSubmit={(e) => { e.preventDefault(); save(); }}>
-          {chips('Origen', ORIGINS, origin, setOrigin)}
-          {chips('Tipo', KINDS, kind, setKind)}
-          <div className="field"><label htmlFor="ev-title">Título</label>
-            <input id="ev-title" className="fld sm" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej.: video de un vecino, cámara del portón" /></div>
-          {/* Hora y fuente en filas propias: la hora completa («26/11/2026, 13:57») no entra en media tarjeta. */}
-          <div className="field"><label htmlFor="ev-when">Hora</label>
-            <input id="ev-when" type="datetime-local" className="fld sm" value={when} onChange={(e) => setWhen(e.target.value)} aria-invalid={t === null} /></div>
-          <div className="field"><label htmlFor="ev-src">Fuente</label>
-            <input id="ev-src" className="fld sm" value={source} onChange={(e) => setSource(e.target.value)} placeholder="Ej.: Fiscalía" /></div>
-          <div className="field"><label htmlFor="ev-link">Enlace o referencia <small className="hint">(opcional)</small></label>
-            <input id="ev-link" className="fld sm" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://… o expediente 44" /></div>
-          <span className="ev-pt mono">{p[1].toFixed(5)}, {p[0].toFixed(5)} · clic en otro punto para moverlo</span>
-          <div className="ev-actions">
-            <button type="button" className="btn secondary sm" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn primary sm" disabled={!ok}>Agregar a la historia</button>
-          </div>
-        </form>
-      )}
+    <QuickFan xy={xy} items={ITEMS} active={mode} onPick={(m) => setMode(m as Mode | null)} onClose={onClose} label="Agregar evidencia en este punto">
+      <div className="mc2-hd"><span className="mc2-lbl">{ITEMS.find((x) => x.id === mode)?.label}</span></div>
+      <form className="qf-form" noValidate onSubmit={(e) => { e.preventDefault(); save(); }}>
+        {mode === 'archivo' && (
+          <div className="field"><label htmlFor="ev-file">Archivo</label>
+            <input id="ev-file" type="file" className="fld sm qf-file" accept="image/*,video/*,application/pdf" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !title.trim()) setTitle(f.name.replace(/\.[^.]+$/, '')); }} /></div>
+        )}
+        {mode === 'plataforma' && (
+          <div className="field"><span className="lbl" id="ev-cam">Cámara cercana</span>
+            <ul className="qf-cams" role="radiogroup" aria-labelledby="ev-cam">
+              {!near.length && <li className="qf-hint">No hay cámaras con video cerca de este punto.</li>}
+              {near.map(({ c, d }) => (
+                <li key={c.id}><button type="button" role="radio" aria-checked={cam === c.id} className={cam === c.id ? 'on' : ''} onClick={() => setCam(c.id)}>
+                  <Icon name="videocam" /><span><b className="mono">{c.id}</b><small>{c.street}</small></span><em>{d < 1000 ? `${Math.round(d)} m` : `${(d / 1000).toFixed(1)} km`}</em>
+                </button></li>
+              ))}
+            </ul></div>
+        )}
+        <div className="field"><label htmlFor="ev-title">Título{mode === 'plataforma' && <small className="hint"> (opcional)</small>}</label>
+          <input id="ev-title" className="fld sm" autoFocus={mode === 'titulo'} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={mode === 'plataforma' ? 'Ej.: pasa frente al portón' : 'Ej.: video de un vecino'} /></div>
+        {whenField}
+        {mode !== 'plataforma' && sourceField}
+        <button type="submit" className="btn primary sm" style={{ width: '100%' }} disabled={!ok}>Agregar a la investigación</button>
+      </form>
+    </QuickFan>
+  );
+}
+
+/** Sin lugar en el mapa: uno o varios archivos (documento, fotos, informe), qué es, cuándo pasó y de dónde
+    viene. Panel sobre la barra de abajo. */
+export function EvidenceLoose({ story, onClose }: { story: Story; onClose: () => void }) {
+  const { t, source, whenField, sourceField } = useWhenAndSource(story);
+  const add = useAdd(story);
+  const [title, setTitle] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const ok = t !== null && title.trim().length >= 3 && !!source;
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); e.stopPropagation(); onClose(); } };
+    window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true);
+  }, [onClose]);
+  const save = () => {
+    if (!ok) return;
+    const evidence: Evidence[] = files.length ? files.map((f) => evOf(f, title.trim())) : [{ type: 'pendiente', caption: title.trim() }];
+    if (add({ at: t!, lat: null, lon: null, place: 'Sin lugar en el mapa', evidence, srcLabel: source })) onClose();
+  };
+  return (
+    <section className="ev-loose" role="dialog" aria-label="Evidencia sin lugar en el mapa">
+      <div className="mc2-hd"><span className="mc2-lbl">Evidencia sin lugar en el mapa</span><button className="iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar (Esc)"><Icon name="close" /></button></div>
+      <p className="qf-hint">Un documento, fotos o un informe que no pasó en un punto de la ciudad. En el recorrido aparece como una escena, en el momento en que pasó.</p>
+      <form className="qf-form" noValidate onSubmit={(e) => { e.preventDefault(); save(); }}>
+        <div className="field"><label htmlFor="evl-files">Archivos <small className="hint">(uno o varios)</small></label>
+          <input id="evl-files" type="file" multiple className="fld sm qf-file" accept="image/*,video/*,application/pdf" onChange={(e) => { const fs = [...(e.target.files ?? [])]; setFiles(fs); if (fs[0] && !title.trim()) setTitle(fs[0].name.replace(/\.[^.]+$/, '')); }} />
+          {files.length > 1 && <span className="hint">{files.length} archivos</span>}</div>
+        <div className="field"><label htmlFor="evl-title">Qué es</label>
+          <input id="evl-title" className="fld sm" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej.: denuncia de la víctima, fotos del DUI" /></div>
+        {whenField}
+        {sourceField}
+        <div className="ev-actions">
+          <button type="button" className="btn secondary sm" onClick={onClose}>Cancelar</button>
+          <button type="submit" className="btn primary sm" disabled={!ok}>Agregar a la investigación</button>
+        </div>
+      </form>
     </section>
   );
 }
