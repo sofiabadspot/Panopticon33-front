@@ -2,12 +2,14 @@
    Elegir un resultado lo abre en el lugar (ficha o panel) y mueve el mapa hacia él.
    Guarda las búsquedas recientes de cada rol en este navegador. Atajo: / o ⌘K. */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { forOperator, grantVehicle, useApi } from '../api';
+import { canOpenStory, forOperator, grantVehicle, storyPlates, useApi } from '../api';
+import { UNKNOWN_FACES, useFacial } from '../api/facial';
 import { normalizePlate } from '../api/format';
 import { KIND_LABEL, KIND_PHRASE } from '../api/labels';
 import { useSession } from '../shell/session';
 import { Icon } from '../ui/kit';
 import { useConsole, type Recent } from './ctx';
+import { useOpenStory } from './story/OpenStory';
 
 interface Result { group: string; icon: string; label: string; sub?: string; ref: string; run: () => void }
 
@@ -28,6 +30,9 @@ export function Search() {
   const cameras = useApi((s) => s.cameras);
   const events = useApi((s) => s.events);
   const units = useApi((s) => s.units);
+  /* Historias: solo el analista. De una persona de lista, nunca de una coincidencia descartada. */
+  const faces = useFacial();
+  const openStory = useOpenStory();
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [sel, setSel] = useState(0);
@@ -49,6 +54,16 @@ export function Search() {
     const has = (s: string) => s.toLowerCase().includes(t);
     const out: Result[] = [];
     const np = normalizePlate(q);
+    /* Historias primero (analista): placas reales que coinciden con lo escrito, aunque sea a medias, y personas.
+       Elegir una abre la historia y la reproduce. */
+    if (role === 'analyst') {
+      for (const p of storyPlates(q.replace(/[*?]/g, '')))
+        out.push({ group: 'Historias', icon: 'route', label: `Historia de ${p.plate}`, sub: `${p.reads} ${p.reads === 1 ? 'lectura' : 'lecturas'} en 7 días${p.listed ? ' · en lista' : ''}`, ref: 'historia:placa:' + p.plate, run: () => openStory({ k: 'placa', plate: p.plate }) });
+      for (const m of faces.filter((m) => (has(m.name) || has(m.listRef) || has(m.docId)) && canOpenStory({ k: 'persona', matchId: m.id })).slice(0, 4))
+        out.push({ group: 'Historias', icon: 'person_search', label: `Historia de ${m.name}`, sub: `${m.listRef} · ${m.docId}`, ref: 'historia:persona:' + m.id, run: () => openStory({ k: 'persona', matchId: m.id }) });
+      for (const u of UNKNOWN_FACES.filter((u) => has(u.label) || has(u.id) || (t.length >= 4 && has('persona sin identificar'))))
+        out.push({ group: 'Historias', icon: 'person_search', label: `Historia de la persona sin identificar ${u.id}`, sub: u.label, ref: 'historia:sin_identificar:' + u.id, run: () => openStory({ k: 'sin_identificar', faceId: u.id }) });
+    }
     out.push({ group: 'Jules', icon: 'auto_awesome', label: `Preguntar a Jules: "${q.trim()}"`, sub: 'Consulta y recomienda; no ejecuta acciones', ref: 'jules:' + q.trim(), run: () => c.askJules(q.trim()) });
     if (PLATE_RE.test(q.trim())) {
       if (role === 'analyst' && !/[*?]/.test(q)) out.push({ group: 'Placas', icon: 'badge', label: `Ficha del vehículo ${q.trim().toUpperCase()}`, sub: 'Pide motivo; queda en la bitácora', ref: 'vehiculo:' + q.trim().toUpperCase(), run: () => openVehicle(q.trim().toUpperCase()) });
@@ -68,7 +83,7 @@ export function Search() {
     for (const [s, x] of [...streets].slice(0, 5)) out.push({ group: 'Calles', icon: 'place', label: s, sub: `cruce con cámara ${x.id}`, ref: 'calle:' + s, run: () => { c.setPin({ lat: x.lat, lon: x.lon, label: s }); c.focus([[x.lon - 0.002, x.lat - 0.0015], [x.lon + 0.002, x.lat + 0.0015]], 'calle'); } });
     for (const u of units.filter((u) => has(u.id)).slice(0, 4)) out.push({ group: 'Unidades', icon: 'local_police', label: u.id, sub: u.type, ref: 'unidad:' + u.id, run: () => { c.setPin({ lat: u.lat, lon: u.lon, label: u.id }); c.focus([[u.lon - 0.0015, u.lat - 0.001], [u.lon + 0.0015, u.lat + 0.001]], 'unidad'); } });
     return out;
-  }, [q, zones, alerts, cameras, events, units, role, c, investigations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [q, zones, alerts, cameras, events, units, role, c, investigations, faces, openStory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fromRecent = (r: Recent): Result => {
     const [kind, ...rest] = r.ref.split(':'); const id = rest.join(':');

@@ -39,7 +39,7 @@ export const TOOLS: Record<Role, Tool[]> = {
   // Los eventos van dentro de Estado (ya no tienen pestaña propia).
   command: [{ id: 'estado', label: 'Estado' }, { id: 'alertas', label: 'Alertas' }],
   operator_911: [{ id: 'alertas', label: 'Alertas' }, { id: 'verificacion', label: 'Personas' }, { id: 'estado', label: 'Estado' }],
-  analyst: [{ id: 'investigar', label: 'Investigaciones' }, { id: 'alertas', label: 'Alertas' }, { id: 'estado', label: 'Estado' }],
+  analyst: [{ id: 'investigar', label: 'Historias' }, { id: 'alertas', label: 'Alertas' }, { id: 'estado', label: 'Estado' }],
   admin: [{ id: 'config', label: 'Configuración' }, { id: 'estado', label: 'Estado' }],
 };
 export const DEFAULT_PANEL: Record<Role, PanelId> = { command: 'estado', operator_911: 'alertas', analyst: 'investigar', admin: 'config' };
@@ -138,7 +138,8 @@ export function ConsoleProvider({ role, children }: { role: Role; children: Reac
   const [fresh, setFresh] = useState<string[]>([]);
   const [arrival, setArrival] = useState<string | null>(null);
   const [sound, setSoundState] = useState(() => { try { return localStorage.getItem('p33.sound') !== 'off'; } catch { return true; } });
-  const setSound = useCallback((on: boolean) => { setSoundState(on); try { localStorage.setItem('p33.sound', on ? 'on' : 'off'); } catch { /* sin almacenamiento */ } }, []);
+  // Al activarlo suena una muestra del aviso de Jules: así se sabe al momento si el audio sale.
+  const setSound = useCallback((on: boolean) => { setSoundState(on); if (on) julesSound(); try { localStorage.setItem('p33.sound', on ? 'on' : 'off'); } catch { /* sin almacenamiento */ } }, []);
   useEffect(() => {
     // Lecturas de una placa, detecciones de una persona: cada una nueva avisa.
     const seen = (a: (typeof allAlerts)[number]) => (a.kind === 'persona_en_lista' ? a.observations : a.sightings?.length ?? 1);
@@ -158,8 +159,8 @@ export function ConsoleProvider({ role, children }: { role: Role; children: Reac
   const [storyId, setStoryIdRaw] = useState<string | null>(null);
   const setStoryId = useCallback((id: string | null) => { if (id) write(undefined, null); setStoryIdRaw(id); setInvPick(false); }, [write]);
   const jules = useJulesStore();
-  // Llega una respuesta de Jules (pasa a escribirla): suena un aviso distinto al de las alertas.
-  useEffect(() => { if (jules.estado === 'speak' && sound) chime(JULES_TONES, 0.12); }, [jules.estado]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Jules empieza a escribir su respuesta: suena su propio aviso, distinto al de las alertas.
+  useEffect(() => { if (jules.estado === 'speak' && sound) julesSound(); }, [jules.estado]); // eslint-disable-line react-hooks/exhaustive-deps
   const key = `p33.recent.${role}`;
   const [recents, setRecents] = useState<Recent[]>(() => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } });
   useEffect(() => { try { setRecents(JSON.parse(localStorage.getItem(key) || '[]')); } catch { setRecents([]); } }, [key]);
@@ -199,20 +200,55 @@ export function useOverlay(o: Overlay, deps: unknown[]) {
   useEffect(() => { setOverlay(o); return () => setOverlay({}); }, deps); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-/* Avisos sonoros cortos (Web Audio, sin archivos). Alerta nueva: dos tonos que bajan.
-   Mensaje de Jules: dos tonos suaves que suben, para distinguirlo de una alerta sin mirar. */
+/* Avisos sonoros cortos (Web Audio, sin archivos). Alerta nueva: dos pitidos que bajan.
+   Jules empieza a escribir: un toque de campanilla grave y bajo, discreto, para no confundirlo con una alerta.
+   Un solo AudioContext para toda la sesión: los navegadores (Safari sobre todo) lo dejan
+   "suspendido" si nace fuera de un clic, así que se reactiva con el primer clic o tecla. */
 const ALERT_TONES: [number, number][] = [[880, 0], [660, 0.16]];
-const JULES_TONES: [number, number][] = [[587, 0], [880, 0.12]];
-function chime(tones: [number, number][] = ALERT_TONES, peak = 0.18) {
+let audio: AudioContext | null = null;
+function audioCtx(): AudioContext | null {
+  if (audio) return audio;
   try {
     const W = window as unknown as { webkitAudioContext?: typeof AudioContext };
-    const ctx = new (window.AudioContext || W.webkitAudioContext!)();
-    tones.forEach(([f, at]) => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
-      const t0 = ctx.currentTime + at; g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(peak, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
-      o.start(t0); o.stop(t0 + 0.25);
-    });
-    setTimeout(() => ctx.close(), 800);
-  } catch { /* sin audio */ }
+    audio = new (window.AudioContext || W.webkitAudioContext!)();
+  } catch { audio = null; }
+  return audio;
+}
+if (typeof window !== 'undefined') {
+  const unlock = () => { const a = audioCtx(); if (a && a.state !== 'running') void a.resume(); };
+  ['pointerdown', 'keydown'].forEach((ev) => window.addEventListener(ev, unlock, { capture: true, passive: true }));
+}
+function chime(tones: [number, number][] = ALERT_TONES, peak = 0.2) {
+  const ctx = audioCtx(); if (!ctx) return;
+  const play = () => {
+    try {
+      tones.forEach(([f, at]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+        const t0 = ctx.currentTime + at; g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(peak, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.24);
+        o.start(t0); o.stop(t0 + 0.26);
+      });
+    } catch { /* sin audio */ }
+  };
+  if (ctx.state === 'running') play(); else ctx.resume().then(play, () => { /* bloqueado por el navegador */ });
+}
+
+/** Aviso de Jules: un solo toque de campanilla, grave y bajo, con un armónico apenas audible y
+    caída lenta. Discreto para una sala de control; las alertas son pitidos cortos, esto no. */
+function julesSound() {
+  const ctx = audioCtx(); if (!ctx) return;
+  const play = () => {
+    try {
+      const out = ctx.createGain(); out.gain.value = 0.3; out.connect(ctx.destination);
+      const t0 = ctx.currentTime;
+      // Mi (659 Hz) y su octava muy baja: timbre redondo, sin brillo.
+      [[659, 0.2, 0.9], [1318, 0.03, 0.4]].forEach(([f, peak, decay]) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(out);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(peak, t0 + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t0 + decay);
+        o.start(t0); o.stop(t0 + decay + 0.05);
+      });
+    } catch { /* sin audio */ }
+  };
+  if (ctx.state === 'running') play(); else ctx.resume().then(play, () => { /* bloqueado por el navegador */ });
 }

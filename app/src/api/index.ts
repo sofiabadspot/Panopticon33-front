@@ -801,6 +801,18 @@ const sameSubject = (a: StorySubject, b: StorySubject) =>
       : b.k === 'sin_identificar' && a.faceId === b.faceId;
 
 /** ¿Se puede abrir la historia? No la de una coincidencia descartada ni la de una que no existe. */
+/** GET /v1/stories/subjects?plate= — placas que tienen lecturas y coinciden con lo escrito (también a medias:
+    "P 512" encuentra "P 512-884"). Para el buscador: ofrece la historia de una placa real, no del texto escrito. */
+export function storyPlates(q: string, max = 5): { plate: string; reads: number; listed: boolean }[] {
+  const t = normalizePlate(q); if (t.length < 2) return [];
+  const now = Date.now(), by = new Map<string, { plate: string; reads: number }>();
+  for (const r of seed.reads) {
+    if (r.at > now) continue;
+    const k = normalizePlate(r.plate); if (!k.includes(t)) continue;
+    const e = by.get(k); if (e) e.reads++; else by.set(k, { plate: r.plate, reads: 1 });
+  }
+  return [...by.values()].sort((a, b) => b.reads - a.reads).slice(0, max).map((e) => ({ ...e, listed: !!seed.plateWatch[e.plate] }));
+}
 export function canOpenStory(s: StorySubject): boolean {
   if (s.k === 'persona') { const m = faceMatches().find((x) => x.id === s.matchId); return !!m && m.status !== 'descartada'; }
   if (s.k === 'sin_identificar') return unknownFaces().some((u) => u.id === s.faceId);
@@ -817,19 +829,21 @@ export function storySubjectLabel(s: StorySubject): { title: string; sub: string
   }
   if (s.k === 'sin_identificar') {
     const u = unknownFaces().find((x) => x.id === s.faceId);
-    return { title: u?.label ?? 'Sin identificar', sub: 'Sin nombre ni documento', facts: u ? [['Detecciones', String(u.sights.length)], ['Visto junto a', u.seenWith]] : [] };
+    return { title: u?.label ?? 'Sin identificar', sub: 'Sin nombre ni documento', facts: u ? [['Detecciones', String(u.sights.length)], ['Visto junto a', faceMatches().find((m) => m.id === u.seenWith)?.name ?? u.seenWith]] : [] };
   }
   const p = vehicleProfile(s.plate);
   return { title: p.plate, sub: p.seen ? `${p.seen.type} · ${p.seen.color}` : 'Sin lecturas', facts: [['Lecturas en 7 días', String(p.reads.length)], ...(p.listed ? [['En lista', 'Sí'] as [string, string]] : [])] };
 }
 
 let storySeq = 1;
-/** POST /v1/stories → auditado. Pide motivo, salvo que venga de una investigación (hereda el suyo y su ventana). */
+/** POST /v1/stories → auditado. Pide motivo, salvo que venga de una investigación (hereda el suyo y su ventana).
+    Si ya hay historia del sujeto con el mismo origen (la misma investigación, o ninguna), la devuelve sin auditar. */
 export function openStory(s: StorySubject, reason: string, user: User, from?: { invId: string }): Story | null {
   const inv = from ? state.investigations.find((k) => k.id === from.invId) : undefined;
   const why = inv ? inv.reason : reason.trim();
   if (!why || !canOpenStory(s)) return null;
-  const had = state.stories.find((x) => sameSubject(x.subject, s));
+  // Una historia abierta desde una investigación es otra que la abierta suelta: hereda motivo y ventana.
+  const had = state.stories.find((x) => sameSubject(x.subject, s) && x.invId === inv?.id);
   if (had) return had;
   const st: Story = {
     id: 'HIS-' + String(storySeq++).padStart(4, '0'), subject: s, title: storySubjectLabel(s).title, reason: why,
@@ -895,15 +909,16 @@ export function storyChapters(st: Story, range: 'ventana' | 'todo'): StoryChapte
 const patchStory = (id: string, f: (x: Story) => Story) => commit({ stories: state.stories.map((x) => (x.id === id ? f(x) : x)) });
 let evSeq = 1;
 /** POST /v1/stories/{id}/evidence → auditado: el analista suma un capítulo propio. */
-export function addStoryEvidence(id: string, ch: Omit<StoryChapter, 'id' | 'source' | 'addedBy' | 'reads'>, user: User): void {
-  const st = state.stories.find((x) => x.id === id); if (!st) return;
+export function addStoryEvidence(id: string, ch: Omit<StoryChapter, 'id' | 'source' | 'addedBy' | 'reads'>, user: User): string | null {
+  const st = state.stories.find((x) => x.id === id); if (!st) return null;
   const c: StoryChapter = { ...ch, id: `analista-${ch.at}-${evSeq++}`, source: 'analista', addedBy: user.name, reads: 0 };
   patchStory(id, (x) => ({ ...x, added: [...x.added, c] }));
   audit(user, 'Agregar evidencia', id, `${c.place} · ${c.evidence[0]?.caption ?? ''}`, st.reason);
+  return c.id;
 }
-/** PATCH /v1/stories/{id}/key-moments/{chapterId}: marca o desmarca un momento clave. */
-export function toggleKeyMoment(id: string, chapterId: string): void {
-  const st = state.stories.find((x) => x.id === id); if (!st) return;
-  const cur = storyChapters(st, 'todo').find((c) => c.id === chapterId); if (!cur) return;
-  patchStory(id, (x) => ({ ...x, keyOverrides: { ...x.keyOverrides, [chapterId]: !cur.key } }));
+/** PATCH /v1/stories/{id}/key-moments/{chapterId} { key }: marca (true) o desmarca (false) un momento clave.
+    El valor lo da la fila tal como se ve (en la ventana o en todo), así se puede quitar uno automático. */
+export function toggleKeyMoment(id: string, chapterId: string, value: boolean): void {
+  if (!state.stories.some((x) => x.id === id)) return;
+  patchStory(id, (x) => ({ ...x, keyOverrides: { ...x.keyOverrides, [chapterId]: value } }));
 }

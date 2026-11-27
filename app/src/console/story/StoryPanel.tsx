@@ -56,7 +56,11 @@ export function StoryPanel({ story, onAddEvidence }: { story: Story; onAddEviden
   const { range, setRange } = useStoryRange();
   const who = storySubjectLabel(story.subject);
   const inv = story.invId ? investigations.find((k) => k.id === story.invId) : undefined;
-  const cams = new Set(chs.map((c) => c.cameraId).filter(Boolean)).size;
+  // "Acerca de" mide lo detectado: los antecedentes (pueden ser de semanas antes) no estiran el lapso, y lo
+  // agregado por el analista no suma cámaras.
+  const timed = chs.filter((c) => c.source !== 'antecedente');
+  const spanChs = timed.length ? timed : chs;
+  const cams = new Set(chs.filter((c) => c.source === 'sistema').map((c) => c.cameraId).filter(Boolean)).size;
   const keys = chs.map((c, i) => ({ c, i })).filter((x) => x.c.key);
   const go = (i: number) => { setAt(i); setPlaying(false); };
 
@@ -97,7 +101,7 @@ export function StoryPanel({ story, onAddEvidence }: { story: Story; onAddEviden
             <div className="story-stats">
               <div><b>{chs.length}</b><span>{chs.length === 1 ? 'capítulo' : 'capítulos'}</span></div>
               <div><b>{cams}</b><span>{cams === 1 ? 'cámara' : 'cámaras'}</span></div>
-              <div><b>{span(chs[chs.length - 1].at - chs[0].at)}</b><span>de {hhmm(chs[0].at)} a {hhmm(chs[chs.length - 1].at)}</span></div>
+              <div><b>{span(spanChs[spanChs.length - 1].at - spanChs[0].at)}</b><span>de {hhmm(spanChs[0].at)} a {hhmm(spanChs[spanChs.length - 1].at)}</span></div>
             </div>
             <p className="story-sum">{summary(story, chs)}</p>
           </section>
@@ -117,7 +121,7 @@ export function StoryPanel({ story, onAddEvidence }: { story: Story; onAddEviden
         </>}
       </div>
       <div className="story-foot">
-        <button className="btn primary sm block" onClick={onAddEvidence}><Icon name="add" />Agregar evidencia <span className="kbd">clic en el mapa</span></button>
+        {onAddEvidence && <button className="btn primary sm block" onClick={onAddEvidence}><Icon name="add" />Agregar un evento al trayecto <span className="kbd">clic en el mapa</span></button>}
       </div>
     </div>
   );

@@ -103,3 +103,35 @@ test('routeStopAt: parada del capítulo, la anterior para un antecedente sin cá
   assert.equal(routeStopAt([none('x')], 0), null);
   assert.equal(routeStopAt([], 0), null);
 });
+
+test('encuentros: solo el primero por sujeto y nunca pisa primera/última', () => {
+  const sights = [sight('SM-05', 0), sight('SM-09', 600), sight('SM-11', 1200), sight('SM-12', 1800), sight('SM-14', 2400)];
+  const other = { label: 'P 330-121', sights: sights.slice(1).map((s) => ({ at: s.at + 10_000, cameraId: s.cameraId })) };
+  const c = buildChapters(sights, [], [], { others: [other] });
+  assert.equal(c[0].keyLabel, 'Primera detección');
+  assert.equal(c[4].keyLabel, 'Última vez visto');
+  assert.equal(c[1].keyLabel, 'Encuentro con P 330-121');
+  assert.equal(c.filter((x) => x.keyLabel?.startsWith('Encuentro')).length, 1);
+  assert.ok(!c[2].key && !c[3].key);
+  // Si el encuentro cae en la primera/última detección, se combinan las etiquetas.
+  const c2 = buildChapters(sights, [], [], { others: [{ label: 'X', sights: [{ at: T0 + 5000, cameraId: 'SM-05' }] }] });
+  assert.equal(c2[0].keyLabel, 'Primera detección · con X');
+  assert.equal(c2.filter((x) => x.keyLabel?.startsWith('Encuentro')).length, 0);
+  const c3 = buildChapters(sights, [], [], { others: [{ label: 'Y', sights: [{ at: T0 + 2_410_000, cameraId: 'SM-14' }] }] });
+  assert.equal(c3[4].keyLabel, 'Última vez visto · con Y');
+  // La alerta va primero y el encuentro se le suma.
+  const c4 = buildChapters(sights, [], [], { alertAt: { at: T0 + 595_000, alertId: 'A-1' }, others: [{ label: 'Z', sights: [{ at: T0 + 610_000, cameraId: 'SM-09' }] }] });
+  assert.equal(c4[1].keyLabel, 'Se generó A-1 · con Z');
+});
+
+test('gapBefore: la evidencia del analista no hace «no cierra»', () => {
+  const far = (s: number) => sight('C' + s, s, -33.4 + 0.027, -70.6);
+  // El analista agrega algo lejos y justo antes de una detección: no cuenta.
+  const a: StoryChapter = { ...added(590), lat: -33.4 + 0.5, lon: -70.6 };
+  const c = buildChapters([sight('A', 0), far(1200)], [], [a], {});
+  assert.equal(c[1].source, 'analista');
+  assert.equal(gapBefore(c, 1), null);
+  const g = gapBefore(c, 2)!;
+  assert.equal(g.min, 20); // desde la detección A, no desde la evidencia
+  assert.equal(g.impossible, false);
+});

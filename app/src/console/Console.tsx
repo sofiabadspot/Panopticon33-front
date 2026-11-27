@@ -29,7 +29,6 @@ import { Search } from './Search';
 import { VideoWall } from './VideoWall';
 import { StatusPanel } from './panels/StatusPanel';
 import { QueuePanel } from './panels/QueuePanel';
-import { InvestigatePanel } from './panels/InvestigatePanel';
 import { AuditNav, ConfigNav } from './panels/AdminPanels';
 import { AlertSheet } from './sheets/AlertSheet';
 import { ZoneSheet } from './sheets/ZoneSheet';
@@ -44,12 +43,15 @@ import { FacialPanel, FacialSheet } from './sheets/FacialSheet';
 import { WhoArrives } from './WhoArrives';
 import { VehicleSheet } from './sheets/VehicleSheet';
 import { AirSheet } from './sheets/AirSheet';
-import { InvestigationDock } from './InvestigationDock';
 import { CommandBar, INCIDENT_ICON, IncidentCard, type Tool } from './CommandBar';
-import { StoryPlaybackProvider } from './story/useStory';
+import { StoryPlaybackProvider, useStoryChapters } from './story/useStory';
+import { useStoryRoute } from './story/storyRoute';
+import { StorySearch } from './story/StorySimple';
 import { StoryPanel } from './story/StoryPanel';
 import { StoryChapters } from './story/StoryChapters';
-import { useStoryRoute } from './story/storyRoute';
+import { StoryPlayer } from './story/StoryPlayer';
+import { EvidenceCard } from './story/EvidenceCard';
+import { OpenStoryHost } from './story/OpenStory';
 
 /** Iniciales para el avatar (solo palabras con mayúscula: sin títulos como "Cmdte."). */
 const initials = (name: string) => name.split(' ').filter((w) => /^[A-ZÁÉÍÓÚ]/.test(w) && !/\.$/.test(w)).slice(0, 2).map((w) => w[0]).join('');
@@ -59,7 +61,7 @@ const NO_STATUS = {};
 
 export function Console() {
   const { role } = useSession();
-  return <ConsoleProvider key={role} role={role}><StoryPlaybackProvider><Layout /></StoryPlaybackProvider></ConsoleProvider>;
+  return <ConsoleProvider key={role} role={role}><StoryPlaybackProvider><Layout /><OpenStoryHost /></StoryPlaybackProvider></ConsoleProvider>;
 }
 
 function Layout() {
@@ -85,8 +87,14 @@ function Layout() {
      reproductor. La investigación (si la hay) sigue abierta debajo: al salir se vuelve a ella. */
   const stories = useApi((s) => s.stories);
   const story = role === 'analyst' && c.storyId ? stories.find((x) => x.id === c.storyId) ?? null : null;
-  // En el mapa, la historia es un recorrido controlado: sigue al capítulo que se está mirando.
+  /* Historia (como en God's Eye View): a la izquierda lo que se buscó, a la derecha los eventos, abajo la
+     línea de tiempo. Las tres y el mapa siguen el mismo evento actual; al abrirla se reproduce sola. */
   const sr = useStoryRoute(story);
+  const storyChs = useStoryChapters(story);
+  /* Agregar un evento de afuera (cámara privada, video de un vecino, denuncia…): clic en el mapa y se suma
+     al trayecto en su lugar por hora. */
+  const [ev, setEv] = useState<{ p: LngLat | null } | null>(null);
+  useEffect(() => { setEv(null); }, [story?.id]);
   // Solo en desarrollo: abrir una historia desde la consola del navegador (window.__p33).
   useEffect(() => {
     if (!import.meta.env.DEV) return undefined;
@@ -154,7 +162,7 @@ function Layout() {
   const julesDock = role === 'command' && !c.sheet;
   // Jules minimizado (franja de 64 px) o con el ancho que eligió la persona arrastrando su borde.
   const julesW = c.jules.minimizado && !c.jules.maximizado ? '64px' : c.jules.ancho ? `${c.jules.ancho}px` : null;
-  const rw = story ? '400px' : c.sheet ? (wide ? 'min(860px, 52vw)' : c.sheet.k === 'jules' && julesW ? julesW : c.sheet.k === 'alerta' ? '500px' : c.sheet.k === 'config' ? 'min(480px, 36vw)' : '440px') : julesDock ? julesW ?? '400px' : '0px';
+  const rw = story ? '360px' : c.sheet ? (wide ? 'min(860px, 52vw)' : c.sheet.k === 'jules' && julesW ? julesW : c.sheet.k === 'alerta' ? '500px' : c.sheet.k === 'config' ? 'min(480px, 36vw)' : '440px') : julesDock ? julesW ?? '400px' : '0px';
 
   // Encuadre: al abrir una ficha el mapa va hacia lo abierto; al inicio, al sector.
   // Zona → evento en curso que la incluye (un evento puede abarcar varias zonas). Si no hay ninguno en
@@ -217,11 +225,11 @@ function Layout() {
   // ¿Quién llega? mide en el punto elegido: el de la medición o el del incidente que se está registrando.
   const measurePt = measuring ? measureAt : tool === 'incidente' ? incAt : null;
   const measure = useMemo(() => (measurePt ? { p: measurePt, ...coverageAt(measurePt, radius, policeSource ? units : null) } : null), [measurePt, radius, units, policeSource]);
-  const whoArrives = measure && (<>
-    <div className="seg" role="group" aria-label="Radio"><span className="seg-lbl">Radio</span>{[250, 500, 1000].map((r) => <button key={r} className={radius === r ? 'on' : ''} onClick={() => setRadius(r)}>{r < 1000 ? `${r} m` : '1 km'}</button>)}</div>
-    <p className={`mc2-state ${measure.state}`}><i />{measure.state === 'cubierta' ? `Cubierta: ${measure.within.length} ${measure.within.length === 1 ? 'unidad' : 'unidades'} en el radio` : measure.state === 'cerca' ? `Sin unidades en el radio; la más cercana llega en ${Math.round(measure.nearest!.eta)} min` : 'Sin cobertura: ninguna unidad llega en menos de 4 min'}</p>
-    {policeSource && <WhoArrives key={measure.p.join(',')} p={measure.p} />}
-  </>);
+  // En el incidente, el paso 2 es solo a quién mandar: la lista de unidades por tiempo de llegada. El radio y la
+  // cobertura son de la herramienta ¿Quién llega? (medir), no de despachar.
+  const whoArrives = measure && (policeSource
+    ? <WhoArrives key={measure.p.join(',')} p={measure.p} />
+    : <p className={`mc2-state ${measure.state}`}><i />{measure.state === 'cubierta' ? `Cubierta: ${measure.within.length} ${measure.within.length === 1 ? 'unidad' : 'unidades'} en el radio` : measure.state === 'cerca' ? `Sin unidades en el radio; la más cercana llega en ${Math.round(measure.nearest!.eta)} min` : 'Sin cobertura: ninguna unidad llega en menos de 4 min'}</p>);
   /* Capas del mapa. Cada chip lleva el MISMO ícono que ese elemento tiene en el mapa, así el chip es a la vez
      el filtro y la referencia (no hay leyenda aparte). */
   const LAYER_ICON: Record<string, ReactNode> = {
@@ -310,8 +318,8 @@ function Layout() {
         </div>
       </header>
 
-      <aside className="lcol" aria-label={story ? 'Historia' : 'Lista'}>
-        {story ? <StoryPanel key={story.id} story={story} /> : <>
+      <aside className="lcol" aria-label={story ? 'Lo que buscaste' : 'Lista'}>
+        {story ? <StoryPanel key={story.id} story={story} onAddEvidence={() => setEv((e) => e ?? { p: null })} /> : <>
         <nav className="ltabs" role="tablist" aria-label="Tareas" ref={tabsRef}>
           {/* Indicador que se desliza a la pestaña activa (posición medida abajo, en tabsRef). */}
           <span className="ti" aria-hidden />
@@ -329,7 +337,7 @@ function Layout() {
           {loading ? <PanelSkeleton kind={c.panel === 'estado' ? 'estado' : c.panel === 'alertas' || c.panel === 'verificacion' ? 'imagenes' : 'lista'} /> : <>
           {c.panel === 'estado' && <StatusPanel />}
           {c.panel === 'alertas' && <QueuePanel />}
-          {c.panel === 'investigar' && <InvestigatePanel />}
+          {c.panel === 'investigar' && <StorySearch />}
           {c.panel === 'config' && <ConfigNav />}
           {c.panel === 'bitacora' && <AuditNav />}
           {c.panel === 'verificacion' && <FacialPanel />}
@@ -344,7 +352,7 @@ function Layout() {
             zones={zones} zoneStatus={admin ? undefined : inv ? NO_STATUS : loading ? undefined : status} cameras={admin && adm.pending ? pendingCams : cameras} units={admin ? null : policeSource && !inv ? units : null} alerts={admin ? [] : mapAlerts}
             zonePaint={admin ? { color: () => ZONE_COLOR, dim: (z) => adm.pending && !pendingZones.includes(z) } : undefined}
             layers={admin ? { zones: adm.zones, events: adm.events, cameras: adm.cameras, fov: adm.cameras && adm.fov, alerts: false, units: false, hex: null, drones: false, helis: false } : { ...layers, zones: layers.zones && seen('zones'), events: layers.events && seen('events'), alerts: layers.alerts && seen('alerts'), cameras: layers.cameras && seen('cameras'), drones: layers.drones && seen('drones'), helis: layers.helis && seen('helis'), hex: layers.hex && seen('hex') && !hexOff(layers.hex) ? layers.hex : null, units: layers.units && seen('units') && policeSource && !inv }} severityOf={sevOf} eventOf={inv ? undefined : eventOf} selectedZone={selectedZone} focusSel={mapFocus} hoverAlert={c.hoverAlert} onAlertHover={c.setHoverAlert} freshAlerts={c.fresh}
-            highlightZones={c.overlay.highlightZones} route={story ? sr.stops : c.overlay.route} routeLabel={story ? story.title : c.overlay.routeLabel} routeAt={story ? sr.at : null} routeCount={story ? sr.count : null} sketch={c.overlay.sketch} pickCells={c.overlay.pickCells} pin={c.pin} signal={c.signal}
+            highlightZones={c.overlay.highlightZones} route={story ? sr.stops : c.overlay.route} routeLabel={story ? story.title : c.overlay.routeLabel} routeAt={story ? sr.at : null} routeCount={story ? sr.count : null} routeOverview={!!story && sr.overview} routeCard={story ? sr.card : undefined} sketch={c.overlay.sketch} pickCells={c.overlay.pickCells} pin={c.pin} signal={c.signal}
             bounds={boundsOf(fit.points, 0.0008)} fitKey={fit.key} backOutKey={backOut} padding={{ top: 24, right: 24, bottom: 24, left: 24 }}
             base={base} onBaseStatus={setBaseStatus} onPointer={setPointer}
             region={{ lat: SECTOR.lat, lon: SECTOR.lon, title: SECTOR.name, sub: `${zones.length} zonas · ${cameras.length} cámaras`, onClick: () => setFit({ points: sectorPts, key: 'sector' + Date.now() }) }}
@@ -352,13 +360,15 @@ function Layout() {
             onEventClick={(id) => c.open({ k: 'evento', id })}
             onAlertClick={(id) => c.open({ k: 'alerta', id })}
             onCameraClick={(id) => c.open(role === 'admin' ? { k: 'config', tab: 'camaras', id } : { k: 'camara', id })}
-            onMapClick={measuring ? (p) => setMeasureAt(p) : tool === 'incidente' ? (p) => setIncAt(p) : c.overlay.onMapClick} onEmptyClick={() => { if (c.sheet) c.close(); }} onAirClick={(id) => c.open({ k: 'aereo', id })}
+            onMapClick={story && ev ? (p) => setEv({ p }) : measuring ? (p) => setMeasureAt(p) : tool === 'incidente' ? (p) => setIncAt(p) : c.overlay.onMapClick} onEmptyClick={() => { if (c.sheet) c.close(); }} onAirClick={(id) => c.open({ k: 'aereo', id })}
             measure={measure ? { p: measure.p, radius, cells: [], state: measure.state } : null}
-            incidents={inv ? undefined : [...incidents.map((x) => ({ id: x.id, lat: x.lat, lon: x.lon, label: INCIDENT_LABEL[x.kind], icon: INCIDENT_ICON[x.kind], title: `${x.id} · ${INCIDENT_LABEL[x.kind]} · ${x.address} · ${hhmm(x.at)} · ${x.by}` })),
+            incidents={story && ev?.p ? [{ id: 'nuevo', lat: ev.p[1], lon: ev.p[0], label: 'Evento nuevo', title: 'Dónde pasó', icon: 'add' }] : story || inv ? undefined : [...incidents.map((x) => ({ id: x.id, lat: x.lat, lon: x.lon, label: INCIDENT_LABEL[x.kind], icon: INCIDENT_ICON[x.kind], title: `${x.id} · ${INCIDENT_LABEL[x.kind]} · ${x.address} · ${hhmm(x.at)} · ${x.by}` })),
               ...(incAt ? [{ id: 'nuevo', lat: incAt[1], lon: incAt[0], label: 'Nuevo incidente', title: 'Punto del incidente', icon: 'add' }] : [])]}
             onAltClick={canIncident && !inv && !c.overlay.onMapClick ? (p) => { setToolRaw('incidente'); setMeasureAt(null); setIncAt(p); } : undefined}
           />
-          <ArrivalBanner />
+          {/* En modo historia el analista trabaja después del hecho: los avisos en vivo no se le superponen. */}
+          {!story && <ArrivalBanner />}
+          {story && ev && <EvidenceCard key={story.id} story={story} p={ev.p} onClose={() => setEv(null)} />}
           {admin && !c.overlay.onMapClick && <AdminMapLegend l={adm} cameras={adm.pending ? pendingCams : cameras} />}
           {measuring && (
             <section className="measure-card" aria-live="polite">
@@ -446,7 +456,6 @@ function Layout() {
         </div>
       </section>
 
-      {story && <aside className="rcol" aria-label="Capítulos"><StoryChapters key={story.id} story={story} /></aside>}
       {!story && julesDock && <aside className="rcol" aria-label="Jules"><JulesSheet docked /></aside>}
       {!story && c.sheet && (
         <aside className="rcol" aria-label="Detalle">
@@ -468,7 +477,8 @@ function Layout() {
         </aside>
       )}
       {/* Fila propia: la línea de tiempo ocupa el ancho del mapa y de la ficha */}
-      {story ? <div className="story-player-slot" /> : inv && <InvestigationDock key={inv.id} id={inv.id} />}
+      {story && <aside className="rcol" aria-label="Eventos"><StoryChapters key={story.id} story={story} /></aside>}
+      {story && <StoryPlayer chapters={storyChs} onExit={() => c.setStoryId(null)} />}
       {wallOpen && <VideoWall onClose={() => setWallOpen(false)} />}
     </div>
   );

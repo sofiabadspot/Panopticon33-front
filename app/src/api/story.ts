@@ -62,22 +62,24 @@ export function buildChapters(sights: Sight[], priors: Prior[], added: StoryChap
   // Orden estable por hora; en empate, sistema/antecedente antes que analista.
   const ordered = out.map((c, i) => ({ c, i })).sort((a, b) => a.c.at - b.c.at || rank(a.c.source) - rank(b.c.source) || a.i - b.i).map((x) => x.c);
 
-  // Momentos clave. Prioridad: alerta > encuentro > primera/última.
+  // Momentos clave. Prioridad: alerta > primera/última > encuentro. De cada otro sujeto, solo el primer encuentro.
   const seen = ordered.filter((c) => c.source === 'sistema');
   const mark = (c: StoryChapter, label: string) => { c.key = true; c.keyLabel = label; };
   if (seen.length) {
     mark(seen[0], 'Primera detección');
     if (seen.length > 1) mark(seen[seen.length - 1], 'Última vez visto');
   }
-  for (const o of opts.others ?? []) {
-    for (const c of ordered) {
-      if (c.cameraId && o.sights.some((s) => s.cameraId === c.cameraId && Math.abs(s.at - c.at) < ENCOUNTER_MS)) mark(c, 'Encuentro con ' + o.label);
-    }
-  }
   if (opts.alertAt && ordered.length) {
     const near = ordered.reduce((best, c) => (Math.abs(c.at - opts.alertAt!.at) < Math.abs(best.at - opts.alertAt!.at) ? c : best));
     mark(near, 'Se generó ' + opts.alertAt.alertId);
     near.alertId = opts.alertAt.alertId;
+  }
+  // Encuentros: si el capítulo ya tiene otra etiqueta (alerta, primera/última), se le suma « · con X».
+  for (const o of opts.others ?? []) {
+    const c = ordered.find((c) => c.cameraId && o.sights.some((s) => s.cameraId === c.cameraId && Math.abs(s.at - c.at) < ENCOUNTER_MS));
+    if (!c) continue;
+    if (c.key && c.keyLabel) c.keyLabel += ' · con ' + o.label;
+    else mark(c, 'Encuentro con ' + o.label);
   }
   for (const c of ordered) {
     const o = opts.keyOverrides?.[c.id];
@@ -92,12 +94,13 @@ export function routeStops(chs: StoryChapter[]): StoryChapter[] {
   return chs.filter((c) => c.lat !== null && c.lon !== null);
 }
 
-/** Tiempo desde el capítulo anterior con posición; `impossible` si exigiría más de 90 km/h. */
+/** Tiempo desde la detección anterior con posición; `impossible` si exigiría más de 90 km/h.
+   Solo entre detecciones del sistema: lo que agrega el analista y los antecedentes no cuentan (ni dan ni reciben hueco). */
 export function gapBefore(chs: StoryChapter[], i: number): { min: number; impossible: boolean } | null {
   const c = chs[i];
-  if (!c || c.lat === null || c.lon === null) return null;
+  if (!c || c.source !== 'sistema' || c.lat === null || c.lon === null) return null;
   let p: StoryChapter | undefined;
-  for (let j = i - 1; j >= 0; j--) if (chs[j].lat !== null) { p = chs[j]; break; }
+  for (let j = i - 1; j >= 0; j--) if (chs[j].source === 'sistema' && chs[j].lat !== null) { p = chs[j]; break; }
   if (!p) return null;
   const dt = c.at - p.at;
   const km = metersBetween({ lat: c.lat, lon: c.lon }, { lat: p.lat!, lon: p.lon! }) / 1000;

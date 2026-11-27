@@ -66,8 +66,15 @@ interface Props {
   /** Recorrido controlado (historia del analista): índice de la parada actual. No se anima solo: se dibuja
       lo recorrido hasta acá y lo que falta tenue, y la cámara va a la parada. null/undefined: animación de siempre. */
   routeAt?: number | null;
+  /** Historia del analista: el recorrido no arranca solo. Se ve entero, con todos los eventos, y se reproduce
+      cada vez que cambia este número (el botón ▶). Al reproducir la cámara sigue el recorrido de evento en evento. */
+  routePlay?: number;
   /** Lectura del HUD en el recorrido controlado: número del capítulo actual y total de capítulos. */
   routeCount?: { now: string; total: number } | null;
+  /** Recorrido controlado: mientras es true, el mapa encuadra todas las paradas (vista de conjunto) en vez de ir a la actual. */
+  routeOverview?: boolean;
+  /** Recorrido controlado: false si el capítulo actual no tiene lugar; la parada sigue marcada pero sin captura «ahora». */
+  routeCard?: boolean;
   sketch?: LngLat[];
   /** Hexágonos elegidos para una zona o un evento (se suman y se quitan con clic). */
   pickCells?: string[];
@@ -197,7 +204,7 @@ export function MapView(p: Props) {
   /* Recorrido animado: se dibuja de punta a punta con una estela; cada parada se enciende al pasar. */
   /** Medios aéreos: si se dibujan, y cuándo se actualizó la estela por última vez. */
   const air = useRef({ on: false, show: [] as typeof AIRCRAFT, trailAt: 0, trailShown: false });
-  const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[]; geo?: { key: string; pts: LngLat[]; stopAt: number[] }; eased?: string }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
+  const anim = useRef<{ key: string; raf: number; reached: number; head: maplibregl.Marker | null; arrows: { p: LngLat; deg: number }[]; eased?: string; playTok?: number; follow?: boolean; ctlKey?: string; ctlPrev?: number; segRaf?: number }>({ key: '', raf: 0, reached: -1, head: null, arrows: [] });
   const [hud, setHud] = useState<{ reached: number; n: number; done: boolean } | null>(null);
   /* Capturas proyectadas sobre las paradas del recorrido: se pueden ocultar desde el HUD. */
   const [snaps, setSnaps] = useState(true); const snapsRef = useRef(snaps); snapsRef.current = snaps;
@@ -610,21 +617,64 @@ export function MapView(p: Props) {
     for (const id of ['zones-fill', 'cameras', 'cameras-hit', 'cones-fill', 'cones-line', 'cone-hi-fill', 'cone-hi-line']) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', focus ? 'none' : 'visible');
     map.setPaintProperty('area-line', 'line-opacity', focus ? 0.22 : ['case', ['get', 'dim'], 0.3, ['match', ['get', 'k'], 'sel', 0.9, 0.7]]);
     if (map.getLayer('area-cells')) map.setLayoutProperty('area-cells', 'visibility', focus ? 'none' : 'visible');
-    const rkey = R ? (ctl !== null ? 'ctl:' : '') + JSON.stringify(R.map((s) => [s.lon, s.lat])) : '';
-    if (rkey !== anim.current.key) { anim.current.key = rkey; if (R && ctl === null) playRoute(R); else stopRoute(); }
+    const manual = P.routePlay !== undefined && ctl === null;
+    const rkey = R ? (ctl !== null ? 'ctl:' : manual ? 'man:' : '') + JSON.stringify(R.map((s) => [s.lon, s.lat])) : '';
+    if (rkey !== anim.current.key) {
+      anim.current.key = rkey; anim.current.playTok = P.routePlay ?? 0;
+      if (R && manual) { stopRoute(); fitRoute(R); }
+      else if (R && ctl === null) playRoute(R); else stopRoute();
+    } else if (R && manual && (P.routePlay ?? 0) !== anim.current.playTok) {
+      anim.current.playTok = P.routePlay ?? 0; playRoute(R, true);
+    }
     if (R && ctl !== null) {
       // Recorrido controlado: lo hecho hasta la parada actual va fuerte (punteado: es inferido entre cámaras);
       // lo que falta, tenue. Con una sola parada no hay línea.
       const { path, stopAt } = streetRoute(R.map((s) => [s.lon, s.lat] as LngLat)); const cut = stopAt[ctl];
       const line = (c: LngLat[]) => (c.length > 1 ? [{ type: 'Feature' as const, geometry: { type: 'LineString' as const, coordinates: c }, properties: {} }] : []);
-      (map.getSource('route') as GeoJSONSource).setData(fc(line(path.slice(0, cut + 1))));
-      (map.getSource('routeGhost') as GeoJSONSource).setData(fc(line(path.slice(cut))));
+      // Al pasar al hecho siguiente (reproduciendo o con →), la línea avanza por la calle con el punto
+      // luminoso adelante, en vez de saltar. Cualquier otro cambio (saltar a otro hecho, otra historia) es directo.
+      const A = anim.current, prev = A.ctlKey === rkey ? A.ctlPrev : undefined;
+      if (A.ctlKey !== rkey || A.ctlPrev !== ctl) {
+        A.ctlKey = rkey; A.ctlPrev = ctl; cancelAnimationFrame(A.segRaf ?? 0); A.segRaf = 0;
+        const reducedSeg = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        (map.getSource('routeGhost') as GeoJSONSource).setData(fc(line(path.slice(cut))));
+        if (prev !== undefined && prev === ctl - 1 && !reducedSeg && cut > stopAt[prev]) {
+          const from = stopAt[prev], D = 1600, t0 = performance.now();
+          if (!A.head) { const el = document.createElement('div'); el.className = 'mk-comet'; el.innerHTML = '<i></i><b></b>'; A.head = new maplibregl.Marker({ element: el }).setLngLat(path[from]).addTo(map); }
+          A.head.getElement().classList.remove('done');
+          const step = (now: number) => {
+            const k = Math.min(1, (now - t0) / D), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+            const x = from + (cut - from) * e, i = Math.min(cut - 1, Math.floor(x)), f = x - i;
+            const p: LngLat = [path[i][0] + (path[i + 1][0] - path[i][0]) * f, path[i][1] + (path[i + 1][1] - path[i][1]) * f];
+            (map.getSource('route') as GeoJSONSource).setData(fc(line([...path.slice(0, i + 1), p])));
+            A.head?.setLngLat(p);
+            if (k < 1) A.segRaf = requestAnimationFrame(step); else { A.segRaf = 0; A.head?.getElement().classList.add('done'); }
+          };
+          A.segRaf = requestAnimationFrame(step);
+        } else {
+          A.head?.remove(); A.head = null;
+          (map.getSource('route') as GeoJSONSource).setData(fc(line(path.slice(0, cut + 1))));
+        }
+      }
       anim.current.reached = ctl; anim.current.arrows = routeArrows(path, stopAt);
-      // La cámara va a la parada actual; si ya está cerca (zoom 15 o más) no cambia el zoom.
-      const ek = rkey + '@' + ctl;
+      // Vista de conjunto (historia recién abierta, en pausa): todas las paradas, respetando las columnas.
+      // Después, la cámara va a la parada actual; si ya está cerca (zoom 15 o más) no cambia el zoom.
+      const reducedMo = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const ek = rkey + '@' + (P.routeOverview ? 'all' : ctl);
       if (anim.current.eased !== ek) {
         anim.current.eased = ek; const z = map.getZoom();
-        map.easeTo({ center: [R[ctl].lon, R[ctl].lat], zoom: z >= 15 ? z : 16, duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 700 });
+        if (P.routeOverview) {
+          const b = new maplibregl.LngLatBounds([R[0].lon, R[0].lat], [R[0].lon, R[0].lat]); R.forEach((s) => b.extend([s.lon, s.lat]));
+          // Arriba más aire: el cuadro «Recorrido» y la captura que se levanta sobre la parada.
+          const pad = P.padding ? { top: P.padding.top + 180, right: P.padding.right + 60, bottom: P.padding.bottom + 60, left: P.padding.left + 60 } : { top: 180, right: 60, bottom: 60, left: 60 };
+          // Al abrir la historia cambian las columnas en este mismo render: se encuadra en el cuadro siguiente,
+          // con el mapa ya en su tamaño nuevo (si no, el encuadre queda corrido).
+          requestAnimationFrame(() => {
+            if (anim.current.eased !== ek) return;
+            map.resize();
+            map.fitBounds(b, { padding: pad, maxZoom: 16, duration: reducedMo ? 0 : 800, bearing: map.getBearing(), pitch: map.getPitch() });
+          });
+        } else map.easeTo({ center: [R[ctl].lon, R[ctl].lat], zoom: z >= 15 ? z : 16, duration: reducedMo ? 0 : 700 });
       }
     } else {
       anim.current.eased = undefined;
@@ -777,19 +827,22 @@ export function MapView(p: Props) {
     }
     if (selCam && !focus) add('csel' + selCam.id, [selCam.lon, selCam.lat], <span className="mk-camsel" aria-hidden><i /><i className="r2" /><b>{selCam.id}</b></span>);
     if (P.signal) add('sig' + P.signal.key, [P.signal.lon, P.signal.lat], <span className="mk-signal" aria-hidden><i /><i /><i /><s /><b /><em>{P.signal.label}</em></span>);
-    if (P.incidents && !focus) for (const x of P.incidents) add('inc' + x.id, [x.lon, x.lat], <span className={`mk-incident ${x.id === 'nuevo' ? 'new' : ''}`} title={x.title}><i><Icon name={x.icon ?? 'report'} /></i><b>{x.label}</b></span>, undefined, 'bottom', x.title);
+    // Con un recorrido en foco solo se dibuja el punto que se está marcando ("nuevo"), p. ej. evidencia de la historia.
+    if (P.incidents) for (const x of P.incidents) if (!focus || x.id === 'nuevo') add('inc' + x.id, [x.lon, x.lat], <span className={`mk-incident ${x.id === 'nuevo' ? 'new' : ''}`} title={x.title}><i><Icon name={x.icon ?? 'report'} /></i><b>{x.label}</b></span>, undefined, 'bottom', x.title);
     if (P.pin) add('pin', [P.pin.lon, P.pin.lat], <span className="mk-pin"><i /><b>{P.pin.label}</b></span>, undefined, 'bottom');
     if (R) {
       const reached = anim.current.reached;
       // Pasar el mouse por una parada (o por su captura) pone esa captura adelante de las demás.
       const front = (i: number, on: boolean) => markers.current.get(`rs${i}`)?.el.classList.toggle('is-front', on);
       // Controlado: las paradas que faltan se ven (huecas); en la animación aparecen al pasar.
-      R.forEach((s, i) => add(`r${i}`, [s.lon, s.lat], <span className={`mk-stop ${ctl !== null ? 'ctl' : ''} ${s.kind === 'add' ? 'add' : ''} ${i === 0 ? 'first' : ''} ${i === R.length - 1 ? 'last' : ''} ${i <= reached ? 'on' : ctl !== null ? 'ahead' : 'pending'} ${i === reached ? 'now' : ''}`} title={s.title} onMouseEnter={() => front(i, true)} onMouseLeave={() => front(i, false)}>{s.label}{s.time && <em>{s.time}</em>}</span>));
+      R.forEach((s, i) => add(`r${i}`, [s.lon, s.lat], <span className={`mk-stop ${ctl !== null ? 'ctl' : ''} ${s.kind === 'add' ? 'add' : ''} ${i === 0 ? 'first' : ''} ${i === R.length - 1 ? 'last' : ''} ${i <= reached ? 'on' : ctl !== null || manual ? 'ahead' : 'pending'} ${i === reached ? 'now' : ''}`} title={s.title} onMouseEnter={() => front(i, true)} onMouseLeave={() => front(i, false)}>{s.label}{s.time && <em>{s.time}</em>}</span>));
       // Proyección de cámara: cada lectura ya alcanzada levanta su captura sobre la parada, con un haz
       // que baja hasta el punto. Alternan de lado y de altura para no taparse entre paradas vecinas.
       if (snapsRef.current) R.forEach((s, i) => {
-        if (!s.snap || i > reached || (ctl !== null && i !== ctl)) return;
-        add(`rs${i}`, [s.lon, s.lat], <SnapCard s={s} n={i + 1} side={i % 2 ? 'l' : 'r'} beam={SNAP_BEAM + (i % 3) * 40} now={i === reached} last={i === R.length - 1} />, undefined, 'bottom');
+        // Controlado: solo la captura de la parada actual, y ninguna si el capítulo actual no tiene lugar.
+        // Siguiendo el recorrido (historia): solo la captura del evento actual, para no tapar el mapa.
+        if (!s.snap || i > reached || (ctl !== null && (i !== ctl || P.routeCard === false)) || (anim.current.follow && i !== reached)) return;
+        add(`rs${i}`, [s.lon, s.lat], <SnapCard s={s} n={ctl !== null ? s.label : String(i + 1).padStart(2, '0')} side={i % 2 ? 'l' : 'r'} beam={SNAP_BEAM + (i % 3) * 40} now={i === reached} last={i === R.length - 1} />, undefined, 'bottom');
       });
       // Sentido del recorrido: una flecha a mitad de cada tramo ya recorrido
       anim.current.arrows.forEach((ar, i) => {
@@ -815,13 +868,21 @@ export function MapView(p: Props) {
   }
   /* ---------- Animación del recorrido ---------- */
   function stopRoute() {
-    cancelAnimationFrame(anim.current.raf); anim.current.reached = -1;
+    cancelAnimationFrame(anim.current.raf); cancelAnimationFrame(anim.current.segRaf ?? 0); anim.current.segRaf = 0; anim.current.ctlKey = undefined; anim.current.reached = -1;
     anim.current.head?.remove(); anim.current.head = null; setHud(null);
     const map = mapRef.current; if (map && ready.current) (map.getSource('route') as GeoJSONSource).setData(fc([]));
   }
-  function playRoute(R: RouteStop[]) {
+  /** Todo el recorrido a la vista (historia recién abierta, antes de reproducir). */
+  function fitRoute(R: RouteStop[]) {
+    const map = mapRef.current; if (!map) return;
+    const b = new maplibregl.LngLatBounds([R[0].lon, R[0].lat], [R[0].lon, R[0].lat]); R.forEach((s) => b.extend([s.lon, s.lat]));
+    const pad = cb.current.padding ? { top: cb.current.padding.top + 180, right: cb.current.padding.right + 60, bottom: cb.current.padding.bottom + 60, left: cb.current.padding.left + 60 } : { top: 180, right: 60, bottom: 60, left: 60 };
+    requestAnimationFrame(() => { map.resize(); map.fitBounds(b, { padding: pad, maxZoom: 16, duration: 800, bearing: map.getBearing(), pitch: map.getPitch() }); });
+  }
+  /** `follow`: la cámara va de evento en evento (como en God's Eye View) y cada tramo dura lo mismo. */
+  function playRoute(R: RouteStop[], follow = false) {
     const map = mapRef.current; if (!map || !ready.current) return;
-    cancelAnimationFrame(anim.current.raf);
+    cancelAnimationFrame(anim.current.raf); anim.current.follow = follow;
     // El vehículo va por las calles: camino más corto por la red vial entre lecturas consecutivas.
     const { path: pts, stopAt } = streetRoute(R.map((s) => [s.lon, s.lat] as LngLat)); const kx = Math.cos((pts[0][1] * Math.PI) / 180);
     const seg = pts.slice(1).map((q, i) => Math.hypot((q[0] - pts[i][0]) * kx, q[1] - pts[i][1]));
@@ -831,23 +892,30 @@ export function MapView(p: Props) {
     const at = (d: number) => { let i = 0; while (i < seg.length - 1 && cum[i + 1] <= d) i++; const f = seg[i] ? Math.min(1, (d - cum[i]) / seg[i]) : 0; return { i, p: [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f] as LngLat }; };
     anim.current.arrows = stopD.slice(1).map((d1, k) => { const m = at((stopD[k] + d1) / 2); const a = pts[m.i], b = pts[m.i + 1]; return { p: m.p, deg: (Math.atan2((b[0] - a[0]) * kx, b[1] - a[1]) * 180) / Math.PI }; });
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const dur = reduced ? 0 : Math.min(9000, Math.max(3200, 1300 * (R.length - 1)));
+    const dur = reduced ? 0 : follow ? 3200 * Math.max(1, R.length - 1) : Math.min(9000, Math.max(3200, 1300 * (R.length - 1)));
+    // Siguiendo: cada tramo entre dos eventos dura lo mismo (tiempo lineal por tramo, no por distancia).
+    const distAt = (k: number) => { const segs = Math.max(1, stopD.length - 1), x = k * segs, j = Math.min(segs - 1, Math.floor(x)), f = x - j; return stopD.length > 1 ? stopD[j] + (stopD[j + 1] - stopD[j]) * f : 0; };
+    if (follow) map.easeTo({ center: [R[0].lon, R[0].lat], zoom: Math.max(map.getZoom(), 15.5), duration: reduced ? 0 : 900 });
     if (!anim.current.head) { const el = document.createElement('div'); el.className = 'mk-comet'; el.innerHTML = '<i></i><b></b>'; anim.current.head = new maplibregl.Marker({ element: el }).setLngLat(pts[0]).addTo(map); }
     anim.current.head.getElement().classList.remove('done');
     anim.current.reached = -1; const t0 = performance.now();
     const frame = (now: number) => {
-      const k = dur ? Math.min(1, (now - t0) / dur) : 1; const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; const d = e * total;
+      const k = dur ? Math.min(1, (now - t0) / dur) : 1; const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; const d = follow ? distAt(k) : e * total;
       const { i, p } = at(d);
       (map.getSource('route') as GeoJSONSource).setData(fc([{ type: 'Feature', geometry: { type: 'LineString', coordinates: [...pts.slice(0, i + 1), p] }, properties: {} }]));
       anim.current.head?.setLngLat(p);
       const reached = k >= 1 ? R.length - 1 : stopD.findLastIndex((c) => c <= d + 1e-12);
-      if (reached !== anim.current.reached) { anim.current.reached = reached; setHud({ reached, n: R.length, done: k >= 1 }); sync(); }
+      if (reached !== anim.current.reached) {
+        anim.current.reached = reached; setHud({ reached, n: R.length, done: k >= 1 });
+        if (follow && reached >= 0) map.easeTo({ center: [R[reached].lon, R[reached].lat], duration: reduced ? 0 : 900 });
+        sync();
+      }
       if (k < 1) anim.current.raf = requestAnimationFrame(frame); else anim.current.head?.getElement().classList.add('done');
     };
     anim.current.raf = requestAnimationFrame(frame);
   }
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setHover(null); }; window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, []);
-  const replay = () => { const R = cb.current.route; if (R && R.length > 1) playRoute(R); };
+  const replay = () => { const R = cb.current.route; if (R && R.length > 1) playRoute(R, !!anim.current.follow); };
   useEffect(() => () => { cancelAnimationFrame(anim.current.raf); if (field.current.timer) clearTimeout(field.current.timer); }, []);
   /* ---------- Drones y helicópteros: se mueven en cada cuadro, sin pasar por React ---------- */
   useEffect(() => {
@@ -999,14 +1067,15 @@ function routeArrows(pts: LngLat[], stopAt: number[]): { p: LngLat; deg: number 
     return { p: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f] as LngLat, deg: (Math.atan2((b[0] - a[0]) * kx, b[1] - a[1]) * 180) / Math.PI };
   });
 }
-function SnapCard({ s, n, side, beam, now, last }: { s: RouteStop; n: number; side: 'l' | 'r'; beam: number; now: boolean; last: boolean }) {
+/** `n`: número que se lee en la tarjeta, el mismo que el de la parada (en la historia, el del capítulo). */
+function SnapCard({ s, n, side, beam, now, last }: { s: RouteStop; n: string; side: 'l' | 'r'; beam: number; now: boolean; last: boolean }) {
   const sn = s.snap!; const W = 2 * (SNAP_W + SNAP_GAP); const cx = W / 2;
   const x0 = side === 'r' ? cx + SNAP_GAP : 0, x1 = x0 + SNAP_W;
   return (
-    <span className={`mk-snap ${now ? 'now' : ''} ${last ? 'last' : ''}`} style={{ width: W, height: SNAP_H + beam }} role="img" aria-label={`Captura ${n}: cámara ${sn.camera}, ${s.time ?? ''}`}>
+    <span className={`mk-snap ${now ? 'now' : ''} ${last ? 'last' : ''}`} style={{ width: W, height: SNAP_H + beam }} role="img" aria-label={`${s.kind === 'add' ? 'Evidencia agregada' : `Captura ${n}: cámara ${sn.camera}`}, ${s.time ?? ''}`}>
       <span className="sn-card" style={{ left: x0, width: SNAP_W }}>
-        <span className="sn-frame">{s.clip ? <span className="thumb"><video src={s.clip.src} poster={s.clip.poster} muted loop autoPlay playsInline /></span> : <Evidence ev={sn.evidence} small />}<i className="sn-scan" aria-hidden /><b className="sn-idx">{String(n).padStart(2, '0')}</b></span>
-        <span className="sn-row"><b>CAM {sn.camera}</b><em>{s.time}</em></span>
+        <span className="sn-frame">{s.clip ? <span className="thumb"><video src={s.clip.src} poster={s.clip.poster} muted loop autoPlay playsInline /></span> : <Evidence ev={sn.evidence} small />}<i className="sn-scan" aria-hidden /><b className="sn-idx">{n}</b></span>
+        <span className="sn-row"><b>{s.kind === 'add' ? 'Agregado' : `CAM ${sn.camera}`}</b><em>{s.time}</em></span>
         <span className="sn-row sub"><span>{sn.street}</span>{sn.confidence != null && <em>{Math.round(sn.confidence * 100)} %</em>}</span>
       </span>
       <svg className="sn-beam" width={W} height={beam} viewBox={`0 0 ${W} ${beam}`} aria-hidden>

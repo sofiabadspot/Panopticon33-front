@@ -7,12 +7,14 @@ import { hhmm, pct } from '../../api/format';
 import { gapBefore } from '../../api/story';
 import type { Story, StoryChapter, StorySubject } from '../../api/types';
 import { Icon } from '../../ui/kit';
+import { useOpenStory } from './OpenStory';
 import { StoryEmpty } from './StoryPanel';
 import { useStoryChapters, useStoryPlayback } from './useStory';
 
 const TZ = 'America/El_Salvador';
 const day = (t: number) => new Date(t).toLocaleDateString('es-SV', { timeZone: TZ, day: '2-digit', month: '2-digit' });
 
+const CAM_ID = /^(CAM|SM)-\d+$/i;
 const mentionLabel = (m: StorySubject) => (m.k === 'sin_identificar' ? 'persona sin identificar' : storySubjectLabel(m).title);
 
 function title(c: StoryChapter) {
@@ -21,8 +23,10 @@ function title(c: StoryChapter) {
   return c.cameraId ? `${c.cameraId} · ${c.place}` : c.place;
 }
 function detail(c: StoryChapter, story: Story) {
-  if (c.source === 'antecedente') return c.lat === null ? `${c.srcLabel ?? 'Registro'} · sin ubicación de cámara` : `${c.srcLabel ?? 'Registro'} · ${c.cameraId ? `${c.cameraId} · ` : ''}${c.place}`;
-  if (c.source === 'analista') return c.place;
+  // Antecedente sin punto: la fuente ya va en la píldora «Antecedente · …»; si parece una cámara que no está
+  // en la red (p. ej. CAM-031 en el Mercado Central, que no tiene cámaras), se dice.
+  if (c.source === 'antecedente') return c.lat === null ? (CAM_ID.test(c.srcLabel ?? '') ? `${c.srcLabel} · cámara fuera de la red` : 'Sin punto en el mapa') : `${c.cameraId ? `${c.cameraId} · ` : ''}${c.place}`;
+  if (c.source === 'analista') return [c.srcLabel, c.place, c.note].filter(Boolean).join(' · ');
   const what = story.subject.k === 'placa' ? 'Placa leída' : 'Persona detectada';
   return [what + (c.confidence !== undefined ? ` · ${pct(c.confidence)}` : ''), c.reads > 1 ? `×${c.reads} lecturas` : '', c.note ?? ''].filter(Boolean).join(' · ');
 }
@@ -31,6 +35,7 @@ export function StoryChapters({ story }: { story: Story }) {
   const chs = useStoryChapters(story);
   const { at, setAt, setPlaying, playing } = useStoryPlayback(chs.length);
   const [q, setQ] = useState('');
+  const openStory = useOpenStory();
   const today = day(Date.now());
   const nowRef = useRef<HTMLLIElement>(null);
   useEffect(() => { nowRef.current?.scrollIntoView({ block: 'nearest' }); }, [at]);
@@ -78,11 +83,11 @@ export function StoryChapters({ story }: { story: Story }) {
                   </span>
                   <span className="t mono">{d !== today && <>{d}<br /></>}{hhmm(c.at)}</span>
                 </button>
-                <button className={`story-star ${c.key ? 'on' : ''}`} onClick={() => toggleKeyMoment(story.id, c.id)} aria-pressed={!!c.key}
+                <button className={`story-star ${c.key ? 'on' : ''}`} onClick={() => toggleKeyMoment(story.id, c.id, !c.key)} aria-pressed={!!c.key}
                   aria-label={c.key ? 'Quitar de momentos clave' : 'Marcar como momento clave'} title={c.key ? 'Quitar de momentos clave' : 'Marcar como momento clave'}>
                   <span aria-hidden>★</span>
                 </button>
-                {ment && <p className="story-ment">Aparece con: {mentionLabel(ment)} · <span className="story-ment-link">Ver su historia</span></p>}
+                {ment && <p className="story-ment">Aparece con: {mentionLabel(ment)} · <button className="linklike story-ment-link" onClick={() => openStory(ment, story.invId ? { invId: story.invId } : undefined)}>Ver su historia</button></p>}
               </li>,
             ];
           })}

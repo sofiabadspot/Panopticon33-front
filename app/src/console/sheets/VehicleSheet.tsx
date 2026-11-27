@@ -10,6 +10,7 @@ import { useSession } from '../../shell/session';
 import { Icon, KindIcon, StatusChip, useNow } from '../../ui/kit';
 import { useConsole } from '../ctx';
 import { SheetHead } from './SheetHead';
+import { useOpenStory } from '../story/OpenStory';
 
 export function VehicleSheet({ id }: { id: string }) {
   const { user } = useSession();
@@ -70,6 +71,10 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
   /* Con una investigación abierta, el vehículo se fija en ella para seguirlo en su línea de tiempo. */
   const openInv = useApi((s) => s.investigations.find((x) => x.id === c.invId));
   const pinned = !!openInv?.plates.includes(p.plate);
+  /* Historia: con una investigación abierta hereda su motivo; si no, la pide. */
+  const { role } = useSession();
+  const openStory = useOpenStory();
+  const story = role === 'analyst' ? () => openStory({ k: 'placa', plate: p.plate }, openInv ? { invId: openInv.id } : undefined) : null;
 
 
   return (
@@ -140,11 +145,14 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
 
         <div className="box flush">
           <div className="bh"><h3>Lecturas</h3><span className="sub">{p.reads.length} en 7 días</span></div>
-          {p.reads.length > 1 && (
+          {(p.reads.length > 1 || story) && (
             <div className="bb trace-cta">
-              <button className={`btn ${trace ? 'secondary' : 'primary'} sm`} aria-pressed={trace} onClick={toggleTrace} style={{ width: '100%' }}>
-                <Icon name={trace ? 'visibility_off' : 'route'} />{trace ? 'Ocultar recorrido' : 'Ver recorrido en el mapa'}
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {p.reads.length > 1 && <button className={`btn ${trace ? 'secondary' : 'primary'} sm`} aria-pressed={trace} onClick={toggleTrace} style={{ flex: 1 }}>
+                  <Icon name={trace ? 'visibility_off' : 'route'} />{trace ? 'Ocultar recorrido' : 'Ver recorrido en el mapa'}
+                </button>}
+                {story && <button className="btn secondary sm" onClick={story} style={{ flex: 1 }}><Icon name="play_arrow" />Ver historia</button>}
+              </div>
               {trace && <p className="trace-sum">El número de cada parada es el orden en que pasó el vehículo. Entre dos lecturas puede haber calles sin cámara.</p>}
             </div>
           )}

@@ -15,6 +15,7 @@ import type { Evidence as Ev } from '../../api/types';
 import { byUrgency } from '../../views/shared';
 import { useConsole } from '../ctx';
 import { SheetHead, useSheetGo } from './SheetHead';
+import { useOpenStory } from '../story/OpenStory';
 import type { RouteStop } from '../../map/MapView';
 import { UnitHex } from '../../map/icons';
 
@@ -24,6 +25,7 @@ export function AlertSheet({ id }: { id: string }) {
   // Abrir otra ficha: en la consola, el lateral; dentro del muro de video, el muro decide (SheetNav).
   const go = useSheetGo();
   const toast = useToast();
+  const openStory = useOpenStory();
   const now = useNow(5000);
   const alerts = useApi((s) => s.alerts);
   const zones = useApi((s) => s.zones);
@@ -120,6 +122,8 @@ export function AlertSheet({ id }: { id: string }) {
           {a.review !== 'por_revisar' && <StatusChip alert={a} />}
           {/* Analista: abrir una investigación con el lugar y la hora de esta alerta ya cargados */}
           {role === 'analyst' && <button className="chip outline" onClick={() => { c.setInvDraft({ title: `${KIND_PHRASE[a.kind]}${a.plate ? ` ${a.plate.listed}` : ''}`, lat: a.lat, lon: a.lon, label: cam?.street ?? zone?.name ?? a.cameraId, from: a.createdAt - 3600e3, to: a.createdAt + 1800e3 }); c.setPanel('investigar'); }}><Icon name="timeline" />Investigar esto</button>}
+          {/* Analista: la historia de la placa (pide motivo). Las alertas de persona no son suyas. */}
+          {role === 'analyst' && a.plate && <button className="chip outline" onClick={() => openStory({ k: 'placa', plate: a.plate!.listed })}><Icon name="play_arrow" />Ver historia</button>}
         </>}
       />
       <div className={`pb ${!sent ? '' : txSolo ? 'tx-alone' : 'tx-after'}`}>

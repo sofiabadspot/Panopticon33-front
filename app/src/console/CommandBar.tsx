@@ -115,6 +115,7 @@ export function IncidentCard({ p, onClose, onDone, children }: { p: LngLat | nul
   const [kind, setKind] = useState<IncidentKind | null>(null);
   const [address, setAddress] = useState('');
   const [note, setNote] = useState('');
+  const [withNote, setWithNote] = useState(false);
   /** Registrado: la tarjeta queda abierta con quién llega, para despachar. */
   const [done, setDone] = useState<string | null>(null);
   useEffect(() => { if (p) { setAddress(placeLabel(p[1], p[0])); setDone(null); } }, [p?.[0], p?.[1]]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -123,30 +124,37 @@ export function IncidentCard({ p, onClose, onDone, children }: { p: LngLat | nul
     if (!ok) return;
     const k = registerIncident({ kind: kind!, lat: p![1], lon: p![0], address: address.trim(), note: note.trim() }, user);
     const label = `${k.id} · ${INCIDENT_LABEL[k.kind]}`;
-    setDone(label); setKind(null); setNote(''); onDone(label);
+    setDone(label); setKind(null); setNote(''); setWithNote(false); onDone(label);
   };
+  /* Un paso por vez. 1) Qué pasó: el tipo, la dirección (ya viene puesta) y Registrar; lo que informaron es
+     opcional y queda plegado. 2) Mandar unidades: se ve desde el principio, pero se abre al registrar. Así
+     en cada momento hay una sola cosa para hacer y un solo botón principal. */
   return (
     <section className="measure-card inc-card" aria-live="polite" aria-label="Registrar incidente">
-      <div className="mc2-hd"><span className="mc2-lbl">Registrar incidentes</span><button className="iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar (Esc)"><Icon name="close" /></button></div>
-      {!p ? <p className="mc2-hint">Hacé clic en el mapa donde pasó. Te muestro también qué unidades llegan a ese punto. Con <kbd className="kbd">Alt</kbd> + clic lo abrís en cualquier momento.</p> : done ? (
-        <div className="inc-done"><p className="mc2-state cubierta"><i />Registrado · <b>{done}</b></p>
-          <span className="hint">{address}</span>
-          <div className="inc-actions"><button className="btn ghost sm" onClick={onClose}>Listo</button></div></div>
-      ) : (
-        <form className="inc-form" onSubmit={(e) => { e.preventDefault(); save(); }}>
-          <div className="inc-kinds" role="radiogroup" aria-label="Qué pasó">
-            {KINDS.map((k) => <button type="button" key={k} role="radio" aria-checked={kind === k} className={`lchip ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}><Icon name={INCIDENT_ICON[k]} />{INCIDENT_LABEL[k]}</button>)}
+      <div className="mc2-hd"><span className="mc2-lbl">Nuevo incidente</span><button className="iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar (Esc)"><Icon name="close" /></button></div>
+      {!p ? <p className="mc2-hint">Hacé clic en el mapa donde pasó.</p> : <>
+        {done ? (
+          <div className="inc-step done">
+            <h3 className="inc-step-hd"><span className="inc-num ok"><Icon name="check" /></span><span className="inc-step-t">{done}<small>{address}</small></span></h3>
           </div>
-          <div className="field"><label htmlFor="inc-addr">Dirección</label><input id="inc-addr" className="fld" value={address} onChange={(e) => setAddress(e.target.value)} />
-            <span className="hint mono">{p[1].toFixed(5)}, {p[0].toFixed(5)} · clic en otro punto para moverlo</span></div>
-          <div className="field"><label htmlFor="inc-note">Qué informaron <span className="hint">(opcional)</span></label><textarea id="inc-note" className="fld" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ej.: robo de celular, dos personas en moto hacia el sur" /></div>
-          <div className="inc-actions">
-            <button type="button" className="btn ghost sm" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn primary sm" disabled={!ok}>Registrar</button>
-          </div>
-        </form>
-      )}
-      {p && children && <div className="inc-who"><span className="mc2-lbl">¿Quién llega a este punto?</span>{children}</div>}
+        ) : (
+          <form className="inc-step" onSubmit={(e) => { e.preventDefault(); save(); }}>
+            <h3 className="inc-step-hd" id="inc-what"><span className="inc-num">1</span>¿Qué pasó?</h3>
+            <div className="inc-kinds" role="radiogroup" aria-labelledby="inc-what">
+              {KINDS.map((k) => <button type="button" key={k} role="radio" aria-checked={kind === k} className={`inc-kind ${kind === k ? 'on' : ''}`} onClick={() => setKind(k)}><Icon name={INCIDENT_ICON[k]} /><span>{INCIDENT_LABEL[k]}</span></button>)}
+            </div>
+            <div className="field"><label htmlFor="inc-addr">Dirección</label><input id="inc-addr" className="fld" value={address} onChange={(e) => setAddress(e.target.value)} />
+              <span className="hint">Clic en el mapa para mover el punto</span></div>
+            {withNote
+              ? <div className="field"><label htmlFor="inc-note">Qué informaron</label><textarea id="inc-note" className="fld" rows={2} autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ej.: robo de celular, dos personas en moto hacia el sur" /></div>
+              : <button type="button" className="linklike inc-addnote" onClick={() => setWithNote(true)}><Icon name="add" />Agregar lo que informaron</button>}
+            <button type="submit" className="btn primary" style={{ width: '100%' }} disabled={!ok}>{kind ? 'Registrar' : 'Elegí qué pasó'}</button>
+          </form>
+        )}
+        {done && children
+          ? <div className="inc-step inc-who"><h3 className="inc-step-hd"><span className="inc-num">2</span>Mandar unidades</h3>{children}</div>
+          : children && <div className="inc-step inc-who locked" aria-disabled><h3 className="inc-step-hd"><span className="inc-num">2</span>Mandar unidades<small>después de registrar</small></h3></div>}
+      </>}
     </section>
   );
 }

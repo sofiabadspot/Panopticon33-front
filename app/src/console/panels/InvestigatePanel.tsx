@@ -5,7 +5,7 @@
    y la línea de tiempo de abajo lo sigue (InvestigationDock). */
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { audit, createInvestigation, grantVehicle, moveInvestigation, pinPlate, placeLabel, placePatterns, unpinPlate, useApi, whatHappened } from '../../api';
-import { dateTime, fromLocalInput, hhmm, toLocalInput } from '../../api/format';
+import { ago, dateTime, fromLocalInput, hhmm, toLocalInput } from '../../api/format';
 import { CAMERA_LABEL, KIND_PHRASE, SEARCH_REASONS } from '../../api/labels';
 import { circleRing } from '../../api/place';
 import type { Investigation, LngLat } from '../../api/types';
@@ -18,6 +18,7 @@ const RADII = [100, 250, 500];
 export function InvestigatePanel() {
   const c = useConsole();
   const invs = useApi((s) => s.investigations);
+  const stories = useApi((s) => s.stories);
   const [creating, setCreating] = useState(false);
   useEffect(() => { if (c.invDraft) { c.setInvId(null); setCreating(true); } }, [c.invDraft]); // eslint-disable-line react-hooks/exhaustive-deps
   const inv = invs.find((x) => x.id === c.invId);
@@ -35,6 +36,19 @@ export function InvestigatePanel() {
             <li key={k.id}><button className="item" style={{ gridTemplateColumns: '1fr auto' }} onClick={() => c.setInvId(k.id)}>
               <div><div className="t">{k.title}</div><div className="s">{k.place.label} · {dateTime(k.from)}</div></div>
               <div className="r"><span className="mono">{k.id}</span><span>{k.plates.length} {k.plates.length === 1 ? 'vehículo' : 'vehículos'}</span></div>
+            </button></li>
+          ))}
+        </ul>
+      </div>
+      {/* Historias abiertas: clic la vuelve a abrir (ya tiene su motivo). */}
+      <div className="box flush">
+        <div className="bh"><h3>Historias</h3><span className="sub">{stories.length}</span></div>
+        <ul className="list bb">
+          {!stories.length && <li className="empty">Todavía no abriste historias. Buscá una placa o una persona y elegí «Historia de…».</li>}
+          {stories.map((h) => (
+            <li key={h.id}><button className="item" style={{ gridTemplateColumns: '1fr auto' }} onClick={() => c.setStoryId(h.id)}>
+              <div><div className="t">{h.subject.k === 'placa' ? <span className="plate">{h.title}</span> : h.title}</div><div className="s">{h.reason}</div></div>
+              <div className="r"><span className="mono">{h.id}</span><span title={dateTime(h.createdAt)}>{ago(h.createdAt)}</span></div>
             </button></li>
           ))}
         </ul>

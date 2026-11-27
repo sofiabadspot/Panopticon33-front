@@ -1767,7 +1767,6 @@ body > .sv-menu.jules-ds .sv-menu__content { min-width: 240px; }
 
 
 /* ¿Quién llega?: atajo para elegir las más cercanas y unidades que no se pueden mandar, apagadas. */
-.wa-quick { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--ink-muted); }
 .mc2-list li.off { opacity: .5; }
 .mc2-list li input[type="checkbox"] { margin: 0; }
 .mc2-list li:has(> input) { grid-template-columns: auto 24px minmax(0, 1fr) auto; }
@@ -2473,10 +2472,6 @@ button.st-top:disabled { cursor: default; }
 .cmd-pop dd { margin: 0; color: var(--ink-muted); }
 
 /* Registro de incidente: misma tarjeta que ¿Quién llega? */
-.inc-form { display: grid; gap: 10px; }
-.inc-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
-.inc-kinds .lchip { height: 28px; }
-.inc-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 /* Incidente en el mapa: una chapa con el signo de alerta y su tipo, la punta en el lugar. */
 .mk-incident { display: flex; flex-direction: column; align-items: center; gap: 3px; pointer-events: auto; }
@@ -2485,17 +2480,75 @@ button.st-top:disabled { cursor: default; }
 .mk-incident.new i { background: var(--hud-bg); color: var(--ink); box-shadow: 0 0 0 2px var(--ink), 0 4px 10px #0009; }
 .mk-incident b { order: 1; font: 500 var(--fs-xs) var(--font-sans); white-space: nowrap; padding: 2px 6px; background: var(--hud-bg); border: 1px solid var(--hud-line); border-radius: var(--radius-xs); color: var(--ink); }
 
-.inc-kinds .lchip .ms { font-size: 15px; }
-.inc-who { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-.inc-done { display: grid; gap: 6px; }
-.inc-done .hint { font-size: var(--fs-xs); color: var(--ink-subtle); }
+.inc-who { padding-top: 14px; border-top: 1px solid var(--hud-line); }
+
+/* Registrar incidente: un paso por vez. El paso activo lleva número y título en la letra de la consola;
+   el que todavía no toca se ve como una sola línea apagada; el ya hecho, como una línea con su check. */
+.inc-card { gap: 14px; }
+.inc-step { display: grid; gap: 12px; }
+.inc-step-hd { margin: 0; display: flex; align-items: center; gap: 10px; font: var(--type-label); color: var(--ink); }
+.inc-step-hd > small { margin-left: auto; font-size: var(--fs-xs); font-weight: 400; color: var(--ink-subtle); }
+.inc-step-t { display: grid; min-width: 0; font-family: var(--font-mono); font-weight: 500; }
+.inc-step-t small { font: 400 var(--fs-xs) var(--font-sans); color: var(--ink-subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inc-num { flex: none; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--ink); color: var(--surface); font: 600 var(--fs-xs) var(--font-mono); }
+.inc-num.ok { background: var(--status-positive-tint); color: var(--status-positive-text); box-shadow: inset 0 0 0 1px var(--status-positive-line); }
+.inc-num .ms { font-size: var(--fs-base); }
+.inc-who.locked .inc-step-hd { color: var(--ink-subtle); }
+.inc-who.locked .inc-num { background: none; color: var(--ink-subtle); box-shadow: inset 0 0 0 1px var(--border-strong); }
+/* Tipos: botones parejos en dos columnas, para leerlos de un vistazo. */
+.inc-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.inc-kind { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 10px; text-align: left; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--glass-strong); color: var(--ink-muted); font-size: var(--fs-md); line-height: 1.25; }
+.inc-kind .ms { flex: none; font-size: var(--fs-lg); }
+.inc-kind:hover { background: var(--surface-raised); color: var(--ink); }
+.inc-kind.on { border-color: var(--ink); background: var(--surface-raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.inc-addnote { justify-self: start; display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-sm); }
+.inc-addnote .ms { font-size: var(--fs-base); }
+
+/* ¿Quién llega?: filas que se eligen enteras; el tiempo de llegada es lo que más se ve. */
+.wa-list li { display: block; padding: 0; }
+.wa-u { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 6px; margin: 0 -6px; border-radius: var(--radius-xs); }
+.wa-u:has(> input) { grid-template-columns: auto 22px minmax(0, 1fr) auto; }
+label.wa-u { cursor: pointer; }
+label.wa-u:hover { background: var(--surface-raised); }
+.wa-u.on { background: var(--surface-raised); box-shadow: inset 2px 0 0 var(--status-positive); }
+.wa-u.off { opacity: .45; cursor: not-allowed; }
+.wa-u input[type="checkbox"] { margin: 0; }
+.wa-id { display: grid; min-width: 0; }
+.wa-id b { font-size: var(--fs-md); font-weight: 500; color: var(--ink); }
+.wa-id small { font-size: var(--fs-xs); color: var(--ink-subtle); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wa-av.av-ocupada { color: var(--status-alert-text); }
+.wa-eta { display: inline-flex; align-items: baseline; gap: 2px; min-width: 40px; justify-content: flex-end; color: var(--ink); }
+.wa-eta b { font-size: var(--fs-lg); font-weight: 500; }
+.wa-eta small { font-size: var(--fs-2xs); color: var(--ink-subtle); }
+.wa-more { justify-self: start; font-size: var(--fs-xs); }
+.wa-empty { padding: 8px 0; font-size: var(--fs-sm); color: var(--ink-muted); }
 .inc-card { width: 320px; max-height: calc(100% - 96px); overflow-y: auto; }
 
 /* =====================================================================
    Historia del analista (console/story): el sujeto a la izquierda, los capítulos a la derecha y el
    reproductor abajo. Lo inferido (tramos sin cámara) se marca punteado; lo agregado, con barra gris.
    ===================================================================== */
-.story-player-slot { grid-row: 3; grid-column: 2 / -1; }
+.story-player { grid-row: 3; grid-column: 2 / -1; display: grid; grid-template-columns: auto minmax(150px, 220px) 1fr auto auto; gap: 18px; align-items: center; padding: 8px 20px; min-height: 72px; background: var(--surface-panel); border-top: 1px solid var(--border); }
+.story-play { width: 40px; height: 40px; border-radius: 50%; background: var(--ink); display: grid; place-items: center; }
+.story-play:disabled { opacity: .4; }
+.story-play svg { width: 14px; height: 14px; fill: var(--surface-panel); }
+.story-cur { min-width: 0; display: grid; gap: 2px; }
+.story-cur b { font: 500 var(--fs-lg) var(--font-mono); white-space: nowrap; }
+.story-cur span { font-size: var(--fs-xs); color: var(--ink-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.story-track { position: relative; height: 54px; min-width: 0; }
+.story-track .hrs { position: absolute; top: 0; font: var(--fs-2xs) var(--font-mono); color: var(--ink-subtle); }
+.story-track .hrs.l { left: 0; } .story-track .hrs.r { right: 0; }
+.story-track .rail { position: absolute; left: 10px; right: 10px; top: 0; bottom: 0; }
+.story-track .line, .story-track .done { position: absolute; left: 0; top: 26px; height: 2px; }
+.story-track .line { right: 0; background: var(--border-strong); }
+.story-track .done { background: var(--ink); }
+.story-track .pt { position: absolute; top: 21px; width: 12px; height: 12px; margin-left: -6px; padding: 0; border-radius: 50%; background: var(--surface-panel); border: 2px solid var(--ink-muted); cursor: pointer; }
+.story-track .pt::after { content: ''; position: absolute; inset: -8px; }
+.story-track .pt.on { background: var(--ink); border-color: var(--ink); }
+.story-track .pt.analista { border-radius: 1px; transform: rotate(45deg); }
+.story-track .pt.antecedente { border-style: dashed; }
+.story-track .pt.head { width: 16px; height: 16px; margin-left: -8px; top: 19px; background: var(--ink); border-color: var(--ink); box-shadow: 0 0 10px var(--ink); }
+.story-track .star { position: absolute; top: 8px; margin-left: -5px; font-size: 11px; line-height: 1; color: var(--ink); pointer-events: none; }
 .story-lbl { font: var(--type-hud-label); letter-spacing: var(--type-hud-tracking); text-transform: uppercase; color: var(--ink-subtle); }
 .story-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .story-body { flex: 1; min-height: 0; overflow-y: auto; }
@@ -2526,6 +2579,14 @@ button.st-top:disabled { cursor: default; }
 .story-keys em { font: var(--fs-xs) var(--font-mono); font-style: normal; color: var(--ink-subtle); }
 .story-foot { flex: none; padding: 12px 16px; border-top: 1px solid var(--border); }
 .story-foot .kbd { margin-left: 4px; }
+/* Agregar evidencia: measure-card, como Registrar incidentes. */
+.ev-card { width: min(340px, calc(100% - 32px)); max-height: calc(100% - 96px); overflow-y: auto; }
+.ev-form { display: grid; gap: 10px; }
+.ev-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ev-chips .lchip { height: 28px; }
+.ev-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ev-pt { font-size: var(--fs-xs); color: var(--ink-subtle); }
+.ev-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 .story-chapters { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .story-chd { flex: none; padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
@@ -2558,3 +2619,34 @@ button.st-top:disabled { cursor: default; }
 .story-ment-link { color: var(--ink); text-decoration: underline dotted; text-underline-offset: 2px; }
 .story-gap { padding: 3px 16px 3px 54px; font: var(--fs-2xs) var(--font-mono); color: var(--ink-subtle); border-top: 1px dashed var(--border-strong); }
 .story-gap + .story-ch { border-top: 0; }
+
+/* ¿Quién llega?: la tarjeta no pasa del alto del mapa y el botón de mandar queda fijo abajo, siempre a la vista. */
+.measure-card { max-height: calc(100% - 96px); overflow-y: auto; overflow-x: hidden; }
+.wa-send { position: sticky; bottom: -14px; z-index: 1; margin: 0 -14px -14px; padding: 10px 14px 14px; background: var(--surface); border-top: 1px solid var(--hud-line); }
+
+/* ---------- Analista, versión simple: buscador a la izquierda, recorrido en el mapa, ▶ abajo ---------- */
+.ss { display: grid; gap: 12px; padding: 14px 16px; align-content: start; }
+.ss-search { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface); }
+.ss-search .ms { font-size: 18px; color: var(--ink-muted); }
+.ss-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; font-size: var(--fs-lg); color: var(--ink); }
+.ss-search:focus-within { border-color: var(--ink-muted); }
+.ss-hint { margin: 0; font-size: var(--fs-md); color: var(--ink-muted); line-height: 1.5; }
+.ss-hint b { color: var(--ink); font-weight: 500; }
+.ss-grp { font: var(--type-hud-label); letter-spacing: var(--type-hud-tracking); text-transform: uppercase; color: var(--ink-subtle); margin-top: 4px; }
+.ss-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.ss-list button { width: 100%; display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); text-align: left; }
+.ss-list button:hover { background: var(--surface-raised); border-color: var(--border-strong); }
+.ss-list .ms { color: var(--ink-muted); }
+.ss-list b { display: block; font-weight: 500; color: var(--ink); }
+.ss-list small { display: block; font-size: var(--fs-xs); color: var(--ink-subtle); }
+.sbar { grid-row: 3; grid-column: 2 / -1; display: flex; align-items: center; gap: 16px; padding: 10px 20px; min-height: 72px; background: var(--surface-panel); border-top: 1px solid var(--border); }
+.sbar-play { width: 48px; height: 48px; flex: none; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: var(--on-primary); }
+.sbar-play .ms { font-size: 24px; }
+.sbar-play:disabled { opacity: .4; cursor: not-allowed; }
+.sbar-txt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.sbar-txt b { font: 500 var(--fs-lg) var(--font-mono); letter-spacing: .04em; }
+.sbar-txt span { font-size: var(--fs-sm); color: var(--ink-muted); }
+
+/* Línea de tiempo de la historia: la hora de cada hecho debajo de su punto. */
+.story-track .pt-t { position: absolute; top: 38px; transform: translateX(-50%); font: var(--fs-2xs) var(--font-mono); color: var(--ink-subtle); white-space: nowrap; pointer-events: none; }
+.story-track .pt-t.now { color: var(--ink); }
