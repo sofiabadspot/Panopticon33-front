@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { INCIDENT_LABEL, placeLabel, registerIncident } from '../api';
 import type { IncidentKind, LngLat } from '../api/types';
 import { useSession } from '../shell/session';
-import { Icon } from '../ui/kit';
+import { Icon, useToast } from '../ui/kit';
 import { QuickFan } from './QuickFan';
 
 export type Tool = 'mover' | 'incidente' | 'medir' | 'evidencia';
@@ -145,23 +145,43 @@ export const INCIDENT_ICON: Record<IncidentKind, string> = { robo: 'front_hand',
     3) Solo registrar, sin mandar a nadie.
     Por ahora se mandan unidades policiales. Mapeado para después: otros tipos de unidad según el hecho
     (ambulancias en un accidente, bomberos…), con su propia fuente de ubicación. */
-export function IncidentFan({ p, xy, onClose, onDone, children }: { p: LngLat; xy: [number, number]; onClose: () => void; onDone: (label: string) => void;
-  /** ¿Quién llega? a ese punto, para mandar unidades. */ children?: React.ReactNode }) {
+export function IncidentFan({ p, xy, onClose, onSignal, onFinish, renderUnits }: { p: LngLat; xy: [number, number]; onClose: () => void;
+  /** Lo registrado o despachado: se anuncia sobre el punto del mapa. */ onSignal: (label: string) => void;
+  /** Terminado (despachado y etiquetado, o «Ahora no»): se cierra el abanico y la barra vuelve a Mover. */ onFinish: () => void;
+  /** ¿Quién llega? a ese punto, para mandar unidades: avisa con `onSent` cuando se mandan. */ renderUnits?: (onSent: (ids: string[]) => void) => React.ReactNode }) {
   const { user } = useSession();
+  const toast = useToast();
   const [active, setActive] = useState<string | null>(null);
   const [address, setAddress] = useState('');
   const [note, setNote] = useState('');
   const [withNote, setWithNote] = useState(false);
   /** Registrado en este punto: el panel ofrece mandar unidades. */
   const [done, setDone] = useState<{ label: string; kind: IncidentKind } | null>(null);
-  useEffect(() => { setAddress(placeLabel(p[1], p[0])); setDone(null); setActive(null); setNote(''); setWithNote(false); }, [p[0], p[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Unidades mandadas desde «Mandar unidades» (sin incidente todavía): falta etiquetar qué pasó. */
+  const [sent, setSent] = useState<string[] | null>(null);
+  useEffect(() => { setAddress(placeLabel(p[1], p[0])); setDone(null); setSent(null); setActive(null); setNote(''); setWithNote(false); }, [p[0], p[1]]); // eslint-disable-line react-hooks/exhaustive-deps
   const kind = KINDS.find((k) => k === active) ?? null;
+  const who = (ids: string[]) => `${ids.length === 1 ? 'va' : 'van'} ${ids.join(', ')}`;
+  const register = (k: IncidentKind, n = note) => {
+    const x = registerIncident({ kind: k, lat: p[1], lon: p[0], address: address.trim(), note: n.trim() }, user);
+    return `${x.id} · ${INCIDENT_LABEL[x.kind]}`;
+  };
   const save = () => {
     if (!kind || address.trim().length <= 2) return;
-    const k = registerIncident({ kind, lat: p[1], lon: p[0], address: address.trim(), note: note.trim() }, user);
-    const label = `${k.id} · ${INCIDENT_LABEL[k.kind]}`;
-    setDone({ label, kind: k.kind }); setNote(''); setWithNote(false); onDone(label);
+    const label = register(kind);
+    setDone({ label, kind }); setNote(''); setWithNote(false); onSignal(`Registrado · ${label}`);
   };
+  /* Al mandar: si ya hay incidente, se termina; si no, se pide etiquetarlo (o «Ahora no»). */
+  const onSent = (ids: string[]) => {
+    if (done) { toast(`${done.label}: ${who(ids)} al lugar`); onSignal(`${done.label} · ${who(ids)}`); onFinish(); return; }
+    setSent(ids); setActive('unidades');
+  };
+  const label = (k: IncidentKind) => {
+    const l = register(k, '');
+    toast(`Registrado ${l}: ${who(sent!)} al lugar`); onSignal(`${l} · ${who(sent!)}`); onFinish();
+  };
+  const skip = () => { toast(`Unidades en camino: ${who(sent!)}`); onSignal(`En camino · ${sent!.join(', ')}`); onFinish(); };
+
   const items = [
     { id: 'unidades', label: 'Mandar unidades', icon: 'send', tone: 'danger' as const, hint: 'Mandar ya; qué pasó se elige después' },
     ...KINDS.map((k) => ({ id: k, label: INCIDENT_LABEL[k], icon: INCIDENT_ICON[k] })),
@@ -172,18 +192,29 @@ export function IncidentFan({ p, xy, onClose, onDone, children }: { p: LngLat; x
         <button className="on" aria-pressed>Policía</button>
         <button disabled title="Próximamente: según el hecho, también ambulancias o bomberos">Ambulancia</button>
       </div>
-      {children}
+      {renderUnits?.(onSent)}
     </div>
   );
   return (
-    <QuickFan xy={xy} items={items} active={active} onPick={setActive} onClose={onClose} label="Registrar incidente en este punto">
-      <div className="mc2-hd"><span className="mc2-lbl">{active === 'unidades' ? 'Mandar unidades' : kind ? INCIDENT_LABEL[kind] : ''}</span></div>
-      {active === 'unidades' ? <>
+    <QuickFan xy={xy} items={sent ? items.slice(0, 1) : items} active={active} onPick={(id) => { if (!sent) setActive(id); }} onClose={onClose} label="Registrar incidente en este punto">
+      <div className="mc2-hd"><span className="mc2-lbl">{sent ? 'Unidades en camino' : active === 'unidades' ? 'Mandar unidades' : kind ? INCIDENT_LABEL[kind] : ''}</span></div>
+      {sent ? (
+        /* Mandadas: se confirma y se pide qué pasó, con las mismas opciones del abanico. */
+        <div className="qf-sec">
+          <p className="qf-done"><span className="inc-num ok"><Icon name="check" /></span><span className="inc-step-t">{sent.join(', ')}<small>{sent.length === 1 ? 'Va' : 'Van'} a {address}</small></span></p>
+          <h3 className="inc-step-hd" id="inc-tag">¿Qué pasó?<small>para registrarlo</small></h3>
+          <div className="inc-kinds" role="group" aria-labelledby="inc-tag">
+            {KINDS.map((k) => <button type="button" key={k} className="inc-kind" onClick={() => label(k)}><Icon name={INCIDENT_ICON[k]} /><span>{INCIDENT_LABEL[k]}</span></button>)}
+          </div>
+          <button type="button" className="btn secondary sm" style={{ width: '100%' }} onClick={skip}>Ahora no</button>
+        </div>
+      ) : active === 'unidades' ? <>
         {units}
-        <p className="qf-hint">{done ? <>Registrado como <b className="mono">{done.label}</b></> : 'Qué pasó lo elegís después, en los otros botones.'}</p>
+        <p className="qf-hint">{done ? <>Registrado como <b className="mono">{done.label}</b></> : 'Al mandar, te pregunto qué pasó para registrarlo.'}</p>
       </> : done && done.kind === kind ? <>
         <p className="qf-done"><span className="inc-num ok"><Icon name="check" /></span><span className="inc-step-t">{done.label}<small>{address}</small></span></p>
-        {children && <><span className="qf-sub">Mandar unidades</span>{units}</>}
+        {renderUnits && <><span className="qf-sub">Mandar unidades</span>{units}</>}
+        <button type="button" className="btn secondary sm" style={{ width: '100%' }} onClick={onFinish}>Listo, sin mandar unidades</button>
       </> : (
         <form className="qf-form" onSubmit={(e) => { e.preventDefault(); save(); }}>
           <div className="field"><label htmlFor="inc-addr">Dirección</label><input id="inc-addr" className="fld sm" value={address} onChange={(e) => setAddress(e.target.value)} />

@@ -11,7 +11,9 @@ import { UnitHex } from '../map/icons';
 import { useSession } from '../shell/session';
 import { Icon, useToast } from '../ui/kit';
 
-export function WhoArrives({ p }: { p: LngLat }) {
+export function WhoArrives({ p, onSent }: { p: LngLat;
+  /** Se mandaron unidades: quien muestra la lista sigue el flujo (p. ej. etiquetar el incidente). Sin esto, avisa con un toast. */
+  onSent?: (ids: string[]) => void }) {
   const { user, role } = useSession();
   const toast = useToast();
   const units = useApi((s) => s.units);
@@ -27,7 +29,8 @@ export function WhoArrives({ p }: { p: LngLat }) {
   const send = () => {
     const ids = ready; if (!ids.length) return;
     sendUnitsTo({ lat: p[1], lon: p[0] }, ids, user);
-    toast(`${ids.length === 1 ? 'Va' : 'Van'} ${ids.join(', ')} a este punto`); setPicked([]);
+    if (onSent) onSent(ids); else toast(`${ids.length === 1 ? 'Va' : 'Van'} ${ids.join(', ')} a este punto`);
+    setPicked([]);
   };
   // Quien manda ve primero las que pueden ir; las demás quedan plegadas. Quien solo mide las ve todas.
   const blocked = opts.filter((o) => !o.free);

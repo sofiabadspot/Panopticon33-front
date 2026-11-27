@@ -397,7 +397,9 @@ function Layout() {
             </section>
           )}
           {tool === 'incidente' && !story && (incAt && fanXY
-            ? <IncidentFan p={incAt} xy={fanXY} onClose={() => setIncAt(null)} onDone={(label) => c.setSignal({ lat: incAt[1], lon: incAt[0], label: `Registrado · ${label}`, key: String(Date.now()) })}>{whoArrives}</IncidentFan>
+            ? <IncidentFan p={incAt} xy={fanXY} onClose={() => setIncAt(null)} onFinish={() => setTool('mover')}
+                onSignal={(label) => c.setSignal({ lat: incAt[1], lon: incAt[0], label, key: String(Date.now()) })}
+                renderUnits={(onSent) => (policeSource ? <WhoArrives key={incAt.join(',')} p={incAt} onSent={onSent} /> : whoArrives)} />
             : <div className="map-hint" role="status"><Icon name="my_location" />Hacé clic en el mapa donde pasó</div>)}
           {/* Analista: la barra solo dentro de una investigación (Evidencia). «¿Quién llega?» es de los roles
               que despachan o miden en vivo, no del analista. */}
