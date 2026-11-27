@@ -1,9 +1,9 @@
 /* Ficha de evento masivo y su alta/edición. El mapa encuadra las zonas del evento;
    en el formulario, las zonas se eligen haciendo clic en el mismo mapa. */
 import { useState, type FormEvent } from 'react';
-import { eventStatus, newEventId, newZoneId, saveEvent, saveZone, territoryAt, useApi } from '../../api';
+import { cancelEvent, endEventNow, eventStatus, newEventId, restoreEvent, setEventEnd, newZoneId, saveEvent, saveZone, territoryAt, useApi } from '../../api';
 import { cellsArea, cellsShape, toggleCell, zoneHexes, zonesTouching } from '../../api/coverage';
-import { closeUp, HexPicker } from './configPlace';
+import { closeUp, ConfirmDelete, HexPicker } from './configPlace';
 import { dateShort, fmt, fmtCrowd, fromLocalInput, hhmm, pct, toLocalInput, inTime } from '../../api/format';
 import { KIND_PHRASE } from '../../api/labels';
 import type { MassEvent } from '../../api/types';
@@ -14,11 +14,17 @@ import { useConsole, useOverlay, useUnsavedGuard } from '../ctx';
 import { EventTag } from '../panels/EventsPanel';
 import { SheetHead, SheetNotFound } from './SheetHead';
 import { usePermissions } from '../permissions';
-import { DateRangeField, rangeErrors } from '../../ui/Field';
+import { DateRangeField, Field, rangeErrors } from '../../ui/Field';
 
 export function EventSheet({ id }: { id: string }) {
   const perm = usePermissions();
   const c = useConsole();
+  const { user } = useSession();
+  const toast = useToast();
+  /* Acciones del evento (Configuración): cancelar uno programado o terminar ahora uno en curso. */
+  const [ask, setAsk] = useState<'cancelar' | 'terminar' | null>(null);
+  const [reason, setReason] = useState('');
+  const [triedCancel, setTriedCancel] = useState(false);
   const now = useNow(5000);
   const events = useApi((s) => s.events);
   const zones = useApi((s) => s.zones);
@@ -44,12 +50,13 @@ export function EventSheet({ id }: { id: string }) {
   return (
     <>
       <SheetHead kicker={<><span className="mono">{ev.id}</span>·<span>{dateShort(ev.start)} {hhmm(ev.start)}–{hhmm(ev.end)}</span></>} title={ev.name} sub={`${ev.venue} · registrado por ${ev.createdBy}`}
-        aside={<><EventTag s={st} />{perm.config && <button className="btn secondary xs" onClick={() => c.open({ k: 'evento-form', id: ev.id })}><Icon name="edit_note" />Editar</button>}</>} />
+        aside={<><EventTag s={st} cancelled={!!ev.cancelled} />{perm.config && !ev.cancelled && st !== 'finalizado' && <button className="btn secondary xs" onClick={() => c.open({ k: 'evento-form', id: ev.id })}><Icon name="edit_note" />Editar</button>}</>} />
       <div className="pb">
         {/* Cuándo: lo primero que se pregunta de un evento en curso es hasta qué hora dura */}
         <div className={`ev-when ${st}`}>
           <Icon name="schedule" />
-          {st === 'en_curso' ? <span>Termina a las <b>{hhmm(ev.end)}</b> · {inTime(ev.end, now)} <small>(empezó a las {hhmm(ev.start)})</small></span>
+          {ev.cancelled ? <span>Cancelado el {dateShort(ev.cancelled.at)} a las <b>{hhmm(ev.cancelled.at)}</b> por {ev.cancelled.by} <small>({ev.cancelled.reason})</small></span>
+            : st === 'en_curso' ? <span>Termina a las <b>{hhmm(ev.end)}</b> · {inTime(ev.end, now)} <small>(empezó a las {hhmm(ev.start)})</small></span>
             : st === 'programado' ? <span>Empieza el {dateShort(ev.start)} a las <b>{hhmm(ev.start)}</b> · {inTime(ev.start, now)} <small>(termina a las {hhmm(ev.end)})</small></span>
             : <span>Terminó el {dateShort(ev.end)} a las <b>{hhmm(ev.end)}</b></span>}
         </div>
@@ -79,7 +86,31 @@ export function EventSheet({ id }: { id: string }) {
             </ul>
           </div>
         )}
+        {perm.config && !ev.cancelled && st !== 'finalizado' && (
+          <div className="danger-zone">
+            {st === 'programado'
+              ? <><button type="button" className="btn ghost danger sm" onClick={() => { setReason(''); setTriedCancel(false); setAsk('cancelar'); }}><Icon name="close" />Cancelar evento</button>
+                <span className="dim">Si el evento no va a ocurrir. Sus zonas vuelven a su aforo y a sus umbrales.</span></>
+              : <><button type="button" className="btn ghost danger sm" onClick={() => setAsk('terminar')}><Icon name="stop" />Terminar ahora</button>
+                <span className="dim">Si el evento terminó antes de las {hhmm(ev.end)}. Sus zonas vuelven a su aforo y a sus umbrales.</span></>}
+          </div>
+        )}
       </div>
+      {ask === 'cancelar' && (
+        <ConfirmDelete title={`¿Cancelar «${ev.name}»?`} action="Cancelar evento" onClose={() => setAsk(null)}
+          onConfirm={() => { if (!reason.trim()) { setTriedCancel(true); return; } cancelEvent(ev.id, reason.trim(), user); setAsk(null); toast(`${ev.name}: cancelado`, { undo: () => restoreEvent(ev.id, user) }); }}>
+          <span style={{ display: 'grid', gap: 'var(--space-3)' }}>
+            <span>El evento queda en la lista como cancelado y deja de cambiar el aforo y los umbrales de sus zonas.</span>
+            <Field label="Motivo" error={triedCancel && !reason.trim() ? 'Escribe el motivo de la cancelación.' : null}>{(p) => <input {...p} className="fld sm" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Por ejemplo: suspendido por lluvia" autoFocus />}</Field>
+          </span>
+        </ConfirmDelete>
+      )}
+      {ask === 'terminar' && (
+        <ConfirmDelete title={`¿Terminar «${ev.name}» ahora?`} action="Terminar ahora" tone="primary" onClose={() => setAsk(null)}
+          onConfirm={() => { const prev = endEventNow(ev.id, user); setAsk(null); toast(`${ev.name}: terminado`, { undo: () => setEventEnd(ev.id, prev, user) }); }}>
+          Estaba previsto hasta las {hhmm(ev.end)}. Desde ahora sus zonas vuelven a su aforo y a sus umbrales.
+        </ConfirmDelete>
+      )}
     </>
   );
 }

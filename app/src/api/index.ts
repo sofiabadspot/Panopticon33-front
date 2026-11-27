@@ -62,7 +62,7 @@ interface State {
 export type Scenario = 'normal' | 'gestionadas' | 'sin_alertas' | 'sin_eventos' | 'cargando' | 'sin_maic';
 export const SCENARIO_LABEL: Record<Scenario, string> = {
   normal: 'Con alertas por revisar', gestionadas: 'Todo gestionado', sin_alertas: 'Sin alertas ni coincidencias', sin_eventos: 'Sin eventos',
-  cargando: 'Cargando datos', sin_maic: 'Sin conexión con Maic',
+  cargando: 'Cargando datos', sin_maic: 'Sin conexión con MAIC',
 };
 const SCENARIOS = Object.keys(SCENARIO_LABEL) as Scenario[];
 const readScenario = (): Scenario => { try { const v = localStorage.getItem('p33.escenario'); return SCENARIOS.includes(v as Scenario) ? (v as Scenario) : 'normal'; } catch { return 'normal'; } };
@@ -109,7 +109,7 @@ function alertsFor(sc: Scenario): Alert[] {
     if (a.review === 'por_revisar' && a.kind === 'camara_caida')
       return { ...a, review: 'descartada', reviewedBy: 'Karla Méndez', discardReason: 'La cámara volvió a enviar video', updatedAt: at, timeline: [...a.timeline, { at, label: 'Descartada: la cámara volvió a enviar video', by: 'Karla Méndez' }] };
     if (a.review === 'por_revisar')
-      return { ...a, review: 'confirmada', reviewedBy: 'Karla Méndez', dispatch: 'en_lugar', updatedAt: at, timeline: [...a.timeline, { at, label: 'Confirmada: se envía 1 unidad', by: 'Karla Méndez' }, { at: at + 6 * 60000, label: 'Llegó la unidad · refuerzos en el lugar' }] };
+      return { ...a, review: 'confirmada', reviewedBy: 'Karla Méndez', dispatch: 'en_lugar', updatedAt: at, timeline: [...a.timeline, { at, label: 'Confirmada: se envía 1 unidad', by: 'Karla Méndez' }, { at: at + 6 * 60000, label: 'Llegó la unidad · unidades en el lugar' }] };
     return a.dispatch === 'en_camino' ? { ...a, dispatch: 'en_lugar' } : a;
   });
 }
@@ -206,7 +206,7 @@ export function sightingsOf(a: Alert): Sighting[] {
   return [{ at: a.createdAt, cameraId: a.cameraId, street: cam?.street ?? '', lat: a.lat, lon: a.lon, confidence: a.plate?.confidence ?? 0, evidence: a.evidence }];
 }
 /** Una placa en lista vuelve a pasar por una cámara. Si el vehículo ya tiene una alerta abierta (por
-    revisar, o confirmada con refuerzos en camino), se actualiza esa: dónde está ahora, una lectura más y una línea en su
+    revisar, o confirmada con unidades en camino), se actualiza esa: dónde está ahora, una lectura más y una línea en su
     historia; sube al principio de la lista. Si no, se crea una alerta nueva. Una sola alerta por vehículo:
     si no, la bandeja se llena con el mismo auto. */
 function plateSighting(alerts: Alert[], now: number): Alert[] {
@@ -309,7 +309,7 @@ const ALREADY_M = 150;
     · en_lugar: ya está donde hace falta (a menos de ALREADY_M). No es refuerzo.
     · sin_reporte / desconocida: no se sabe dónde está o qué hace. No se puede mandar. */
 export type UnitAvail = 'disponible' | 'ocupada' | 'asignada' | 'en_lugar' | 'sin_reporte' | 'desconocida';
-export const AVAIL_LABEL: Record<UnitAvail, string> = { disponible: 'Disponible', ocupada: 'Ocupada', asignada: 'Asignada', en_lugar: 'Ya en el lugar', sin_reporte: 'Sin reporte', desconocida: 'Estado desconocido' };
+export const AVAIL_LABEL: Record<UnitAvail, string> = { disponible: 'Disponible', ocupada: 'Ocupada', asignada: 'Asignada', en_lugar: 'Ya en el lugar', sin_reporte: 'Sin reporte reciente', desconocida: 'Estado desconocido' };
 /** Una unidad para mandar a un punto: cuánto tarda, qué está haciendo y si se puede elegir. */
 export interface UnitOption { unit: Unit; eta: number; dist: number; avail: UnitAvail; free: boolean;
   /** Detalle del estado: la zona que cuida, adónde va. */ detail?: string;
@@ -361,7 +361,7 @@ function sendUnits(ids: string[], target: { lat: number; lon: number; label: str
 /** Unidades que llegaron en este ciclo. */
 let arrivals: { alertId: string; unitId: string }[] = [];
 /** Llegó una unidad. Si van varias, cada llegada queda en la línea de tiempo; cuando llega la última,
-    la alerta (y, si es una placa, las lecturas confirmadas del mismo vehículo) queda con los refuerzos en el lugar. */
+    la alerta (y, si es una placa, las lecturas confirmadas del mismo vehículo) queda con los unidades en el lugar. */
 function closeArrived(alerts: Alert[], units: Unit[], now: number): Alert[] {
   if (!arrivals.length) return alerts;
   const done = arrivals; arrivals = [];
@@ -369,7 +369,7 @@ function closeArrived(alerts: Alert[], units: Unit[], now: number): Alert[] {
     const hits = done.filter(({ alertId }) => { const a = alerts.find((y) => y.id === alertId); return x.id === alertId || (!!a?.plate && x.plate?.listed === a.plate.listed); });
     if (!hits.length || x.review !== 'confirmada' || x.dispatch !== 'en_camino') return x;
     const stillGoing = units.some((u) => u.enRoute?.alertId && hits.some((h) => h.alertId === u.enRoute!.alertId));
-    const timeline = [...x.timeline, ...hits.map((h, i) => ({ at: now, label: !stillGoing && i === hits.length - 1 ? `Llegó ${h.unitId} · refuerzos en el lugar` : `Llegó ${h.unitId}` }))];
+    const timeline = [...x.timeline, ...hits.map((h, i) => ({ at: now, label: !stillGoing && i === hits.length - 1 ? `Llegó ${h.unitId} · unidades en el lugar` : `Llegó ${h.unitId}` }))];
     return { ...x, dispatch: stillGoing ? x.dispatch : 'en_lugar', updatedAt: now, timeline };
   });
 }
@@ -386,7 +386,7 @@ function advanceUnits(units: Unit[], now: number): Unit[] {
     return { ...u, lat: u.lat + (go.lat - u.lat) * k, lon: u.lon + (go.lon - u.lon) * k, lastReportAt: now };
   });
 }
-// Demo: las alertas con refuerzos en camino al abrir tienen sus unidades viajando (desde un poco más lejos, para que se vea el viaje).
+// Demo: las alertas con unidades en camino al abrir tienen sus unidades viajando (desde un poco más lejos, para que se vea el viaje).
 for (const a of state.alerts) if (a.dispatch === 'en_camino') {
   let ids = unitOptions(a).filter((o) => o.free && o.dist > 900).slice(0, suggestedUnits(a)).map((o) => o.unit.id);
   if (!ids.length) ids = nearestFree(a, suggestedUnits(a)); // si no hay lejos, las más cercanas
@@ -405,14 +405,29 @@ export function confirmAlert(id: string, user: User, unitIds: string[] = []) {
   const now = Date.now();
   const a = state.alerts.find((x) => x.id === id); if (!a) return;
   patchAlert(id, (x) => ({ ...x, review: 'confirmada', reviewedBy: user.name, dispatch: unitIds.length ? 'en_camino' : null, updatedAt: now,
-    timeline: [...x.timeline, { at: now, label: unitIds.length ? `Confirmada: se ${unitIds.length === 1 ? 'envía' : 'envían'} ${unitsTxt(unitIds.length)} (${unitIds.join(', ')})` : 'Confirmada sin refuerzos', by: user.name }] }));
+    timeline: [...x.timeline, { at: now, label: unitIds.length ? `Confirmada: se ${unitIds.length === 1 ? 'envía' : 'envían'} ${unitsTxt(unitIds.length)} (${unitIds.join(', ')})` : 'Confirmada sin enviar unidades', by: user.name }] }));
   sendUnits(unitIds, { lat: a.lat, lon: a.lon, label: followLabel(a), alertId: id });
-  audit(user, 'Confirmar alerta', id, unitIds.length ? `Refuerzos: ${unitIds.join(', ')}` : 'Sin refuerzos');
+  audit(user, 'Confirmar alerta', id, unitIds.length ? `Unidades: ${unitIds.join(', ')}` : 'Sin enviar unidades');
+}
+/** POST /v1/dispatch/recall { units } — retira unidades que iban como refuerzo: vuelven a su puesto.
+    Si iban a una alerta y no queda ninguna en camino, la alerta queda confirmada sin refuerzos. */
+export function recallUnits(unitIds: string[], user: User) {
+  if (!unitIds.length) return;
+  const now = Date.now(), set = new Set(unitIds);
+  const alertIds = new Set(state.units.filter((u) => set.has(u.id) && u.enRoute?.alertId).map((u) => u.enRoute!.alertId!));
+  const units = state.units.map((u) => (set.has(u.id) ? { ...u, status: 'disponible' as const, enRoute: null } : u));
+  commit({ units });
+  for (const aid of alertIds) {
+    const left = units.some((u) => u.enRoute?.alertId === aid);
+    patchAlert(aid, (x) => ({ ...x, dispatch: left ? x.dispatch : null, updatedAt: now,
+      timeline: [...x.timeline, { at: now, label: `Se ${unitIds.length === 1 ? 'retira' : 'retiran'} ${unitIds.join(', ')}${left ? '' : ': sin unidades en camino'}`, by: user.name }] }));
+  }
+  audit(user, 'Retirar unidades', unitIds.join(', '), alertIds.size ? `Alerta ${[...alertIds].join(', ')}` : 'Envío a un punto');
 }
 /** POST /v1/dispatch { point, units } — manda unidades a un punto del mapa ("¿Quién llega?"). */
-export function sendUnitsTo(p: { lat: number; lon: number }, unitIds: string[], user: User, label = 'Refuerzo a un punto del mapa') {
+export function sendUnitsTo(p: { lat: number; lon: number }, unitIds: string[], user: User, label = 'Envío a un punto del mapa') {
   sendUnits(unitIds, { lat: p.lat, lon: p.lon, label });
-  audit(user, 'Mandar unidades', unitIds.join(', '), `${unitsTxt(unitIds.length)} a ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`);
+  audit(user, 'Enviar unidades', unitIds.join(', '), `${unitsTxt(unitIds.length)} a ${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`);
 }
 
 /** POST /v1/alerts/{id}/discard { reason } — el motivo alimenta el ajuste de umbrales. */
@@ -462,6 +477,28 @@ export function saveEvent(ev: MassEvent, user: User) {
   audit(user, exists ? 'Editar evento' : 'Crear evento', ev.id, `${ev.name} · ${ev.zoneIds.length} zonas${ev.thresholds ? ' · umbrales propios' : ''}`);
 }
 export const newEventId = () => 'EV-' + (1212 + state.events.length);
+/** POST /v1/events/{id}/cancel — un evento programado que no va a ocurrir. Queda en la lista como cancelado. */
+export function cancelEvent(id: string, reason: string, user: User) {
+  commit({ events: state.events.map((e) => (e.id === id ? { ...e, cancelled: { at: Date.now(), by: user.name, reason } } : e)) });
+  audit(user, 'Cancelar evento', id, state.events.find((e) => e.id === id)?.name ?? '', reason);
+}
+/** Deshace la cancelación (dentro de los segundos del aviso). */
+export function restoreEvent(id: string, user: User) {
+  commit({ events: state.events.map((e) => (e.id === id ? { ...e, cancelled: null } : e)) });
+  audit(user, 'Deshacer cancelación de evento', id, state.events.find((e) => e.id === id)?.name ?? '');
+}
+/** POST /v1/events/{id}/end — un evento en curso que terminó antes de lo previsto. Devuelve el fin anterior (para deshacer). */
+export function endEventNow(id: string, user: User): number {
+  const prev = state.events.find((e) => e.id === id)!.end;
+  const now = Date.now();
+  commit({ events: state.events.map((e) => (e.id === id ? { ...e, end: now } : e)) });
+  audit(user, 'Terminar evento', id, state.events.find((e) => e.id === id)?.name ?? '');
+  return prev;
+}
+export function setEventEnd(id: string, end: number, user: User) {
+  commit({ events: state.events.map((e) => (e.id === id ? { ...e, end } : e)) });
+  audit(user, 'Deshacer fin de evento', id, state.events.find((e) => e.id === id)?.name ?? '');
+}
 
 /* ---------------- Configuración ---------------- */
 /** PATCH /v1/rules/{id} */
@@ -569,7 +606,7 @@ export function roleProblems(r: RoleConfig, all: RoleConfig[], me: Role): { erro
   const name = r.name.trim();
   if (!name) errors.push('Ponle un nombre al rol.');
   else if (all.some((x) => x.role !== r.role && x.name.trim().toLowerCase() === name.toLowerCase())) errors.push(`Ya hay un rol que se llama ${name}.`);
-  if (!r.tabs.length && !r.config) errors.push('El rol no ve nada: dale al menos una pestaña o el acceso a Configuración.');
+  if (!r.tabs.length && !r.config) errors.push('El rol no ve nada: asígnale al menos una pestaña o el acceso a Configuración.');
   const before = all.find((x) => x.role === r.role);
   if (before?.config && !r.config) {
     if (r.role === me) errors.push('No puedes quitarle Configuración a tu propio rol: no podrías volver a entrar.');
@@ -577,7 +614,7 @@ export function roleProblems(r: RoleConfig, all: RoleConfig[], me: Role): { erro
   }
   const seesAlerts = r.tabs.includes('alertas') || r.layers.alerts !== 'oculta';
   if ((r.actions.includes('decidir') || r.actions.includes('despachar')) && !seesAlerts) warnings.push('Puede actuar sobre alertas, pero no tiene la pestaña Alertas ni la capa Alertas: no va a poder llegar a ellas.');
-  if (r.actions.includes('despachar') && r.layers.units === 'oculta') warnings.push('Puede mandar unidades, pero la capa Unidades policiales está oculta.');
+  if (r.actions.includes('despachar') && r.layers.units === 'oculta') warnings.push('Puede enviar unidades, pero la capa Unidades policiales está oculta.');
   if (r.actions.includes('decidir_facial') && !r.tabs.includes('verificacion')) warnings.push('Puede decidir coincidencias faciales, pero no tiene la pestaña Personas.');
   if (r.config) warnings.push('Tiene Configuración: es administrador. Puede cambiar zonas, reglas, roles y usuarios.');
   return { errors, warnings };
@@ -685,6 +722,53 @@ export function loadListEntries(id: string, entries: number, user: User) {
   audit(user, 'Cargar lista', id, `${entries} entradas desde archivo`);
 }
 export const LIST_MODES: ListMode[] = ['API', 'Copia periódica', 'Carga manual'];
+/** PATCH /v1/lists/{id} — nombre, origen, cómo se actualiza y el plazo para avisar. */
+export function updateList(id: string, patch: Partial<Pick<WatchList, 'name' | 'origin' | 'mode' | 'maxAgeMin'>>, user: User) {
+  commit({ lists: state.lists.map((l) => (l.id === id ? { ...l, ...patch } : l)) });
+  audit(user, 'Editar lista', id, Object.keys(patch).join(', '));
+}
+/** DELETE /v1/lists/{id} — sus entradas dejan de generar alertas. Devuelve la lista (para deshacer). */
+export function deleteList(id: string, user: User): WatchList | null {
+  const l = state.lists.find((x) => x.id === id); if (!l) return null;
+  commit({ lists: state.lists.filter((x) => x.id !== id) });
+  audit(user, 'Eliminar lista', id, `${l.name} · ${l.entries} entradas`);
+  return l;
+}
+export function restoreList(l: WatchList, user: User) {
+  if (state.lists.some((x) => x.id === l.id)) return;
+  commit({ lists: [...state.lists, l] });
+  audit(user, 'Deshacer eliminación de lista', l.id, l.name);
+}
+/** DELETE /v1/rules/{id} — deja de crear ese tipo de alerta. Devuelve la regla y su lugar (para deshacer). */
+export function deleteRule(id: string, user: User): { rule: Rule; index: number } | null {
+  const index = state.rules.findIndex((x) => x.id === id); if (index < 0) return null;
+  const rule = state.rules[index];
+  commit({ rules: state.rules.filter((x) => x.id !== id) });
+  audit(user, 'Eliminar regla', id, rule.name);
+  return { rule, index };
+}
+export function restoreRule(r: { rule: Rule; index: number }, user: User) {
+  if (state.rules.some((x) => x.id === r.rule.id)) return;
+  const rules = [...state.rules]; rules.splice(r.index, 0, r.rule);
+  commit({ rules });
+  audit(user, 'Deshacer eliminación de regla', r.rule.id, r.rule.name);
+}
+/** DELETE /v1/cameras/{id} — sale de su zona (que puede quedar sin medición). Devuelve la cámara (para deshacer). */
+export function deleteCamera(id: string, user: User): Camera | null {
+  const cam = state.cameras.find((c) => c.id === id); if (!cam) return null;
+  const cameras = state.cameras.filter((c) => c.id !== id);
+  const zones = state.zones.map((z) => (z.cameras.includes(id) ? { ...z, cameras: z.cameras.filter((x) => x !== id) } : z));
+  commit({ cameras, zones, zoneStatus: measure({ ...state, cameras, zones }) });
+  audit(user, 'Eliminar cámara', id, cam.street);
+  return cam;
+}
+export function restoreCamera(cam: Camera, user: User) {
+  if (state.cameras.some((c) => c.id === cam.id)) return;
+  const cameras = [...state.cameras, cam];
+  const zones = state.zones.map((z) => (z.id === cam.zoneId && !z.cameras.includes(cam.id) ? { ...z, cameras: [...z.cameras, cam.id] } : z));
+  commit({ cameras, zones, zoneStatus: measure({ ...state, cameras, zones }) });
+  audit(user, 'Deshacer eliminación de cámara', cam.id, cam.street);
+}
 /** PATCH /v1/users/{id} { territory } */
 export function setUserTerritory(id: string, territory: string, user: User) {
   commit({ users: state.users.map((u) => (u.id === id ? { ...u, territory } : u)) });
@@ -701,7 +785,9 @@ export const SECTOR = { name: 'Sector Salvador del Mundo', lat: seed.ORIGIN.lat,
 
 /* ---------------- Utilidades derivadas ---------------- */
 export const isListStale = (l: WatchList, now: number) => now - l.lastSyncAt > l.maxAgeMin * MIN;
+/** Un evento cancelado cuenta como finalizado (no está en curso ni por venir); su ficha dice "Cancelado". */
 export function eventStatus(e: MassEvent, now: number): 'programado' | 'en_curso' | 'finalizado' {
+  if (e.cancelled) return 'finalizado';
   return now < e.start ? 'programado' : now > e.end ? 'finalizado' : 'en_curso';
 }
 

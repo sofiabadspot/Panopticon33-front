@@ -1,7 +1,7 @@
 /* Bandeja de alertas — operador 911 (y lectura para mando y analista).
    La más nueva arriba y la más vieja abajo. Abrir una alerta abre su ficha a la derecha
    y mueve el mapa hacia ella; la bandeja sigue a la vista. */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { forOperator, inScope, isListStale, useApi } from '../../api';
 import { ago } from '../../api/format';
 import { KIND_LABEL, KIND_PHRASE, REVIEW_LABEL, SEVERITY_TARGET_MIN } from '../../api/labels';
@@ -71,6 +71,23 @@ export function QueuePanel() {
     return !prev && !nxt ? '' : !prev ? 'g-first' : !nxt ? 'g-last' : 'g-mid';
   };
   const openId = c.sheet?.k === 'alerta' ? c.sheet.id : null;
+  /* Cuando entra una alerta arriba (o el orden cambia por urgencia), la que el operador tiene abierta no se
+     mueve de lugar en la pantalla: se compensa el desplazamiento. Las nuevas quedan arriba, con un aviso. */
+  const listRef = useRef<HTMLUListElement>(null);
+  const [scrolled, setScrolled] = useState(false);
+  // Alertas nuevas que quedaron arriba, fuera de la vista (solo si la lista está desplazada).
+  const openIdx = openId ? shown.findIndex((x) => x.id === openId) : -1;
+  const newAbove = scrolled && openIdx > 0 ? shown.slice(0, openIdx).filter(isFresh).length : 0;
+  const anchor = useRef<{ id: string; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const ul = listRef.current; if (!ul) return;
+    const sel = openId ? ul.querySelector<HTMLElement>(`[data-alert="${openId}"]`) : null;
+    if (sel && anchor.current?.id === openId) {
+      const d = sel.getBoundingClientRect().top - anchor.current.top;
+      if (Math.abs(d) > 1) ul.scrollTop += d;
+    }
+    anchor.current = sel && openId ? { id: openId, top: sel.getBoundingClientRect().top } : null;
+  });
   const stale = lists.filter((l) => isListStale(l, now));
   const where = (zoneId: string | null, camId: string) => zones.find((z) => z.id === zoneId)?.name ?? cameras.find((x) => x.id === camId)?.street ?? camId;
 
@@ -104,10 +121,11 @@ export function QueuePanel() {
       </div>
       {scoped && hidden > 0 && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="layers" /><span>Alertas de <b>{user.territory}</b>{hidden > 0 && ` · ${hidden} de otros territorios no se muestran`}.</span></div>}
       {!perm.can('decidir') && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: tu rol no confirma ni descarta alertas.</span></div>}
-      <ul className="list pb flush">
+      {newAbove > 0 && <button className="new-above" onClick={() => listRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}><Icon name="arrow_upward" />{newAbove === 1 ? '1 alerta nueva arriba' : `${newAbove} alertas nuevas arriba`}</button>}
+      <ul ref={listRef} className="list pb flush" onScroll={() => setScrolled((listRef.current?.scrollTop ?? 0) > 8)}>
         {shown.length === 0 && <li><QueueEmpty tab={tab} query={q.trim()} alerts={alerts} cameras={cameras.length} going={units.filter((u) => u.enRoute).length} onTab={setTab} onClearQuery={() => setQ('')} /></li>}
         {shown.map((a, i) => (
-          <li key={a.id}>
+          <li key={a.id} data-alert={a.id}>
             <button className={`item ${groupPos(i)} ${a.review === 'por_revisar' ? 'g-open' : ''} ${a.id === openId ? 'sel' : ''} ${a.review === 'descartada' ? 'done' : ''} ${c.hoverAlert === a.id ? 'hov' : ''} ${isFresh(a) ? 'is-new' : ''}`} style={{ gridTemplateColumns: '104px 1fr auto', borderTop: i ? undefined : 0 }}
               onClick={() => c.open({ k: 'alerta', id: a.id })} aria-current={a.id === openId}
               onMouseEnter={() => c.setHoverAlert(a.id)} onMouseLeave={() => c.setHoverAlert(null)}>
@@ -141,13 +159,13 @@ export function QueuePanel() {
 function QueueEmpty({ tab, query, alerts, cameras, going, onTab, onClearQuery }: {
   tab: Tab; query?: string; alerts: Alert[]; cameras: number; going: number; onTab: (t: Tab) => void; onClearQuery: () => void;
 }) {
-  if (query) return <EmptyState icon="search_off" title={`Nada para “${query}”`} action={<button className="btn secondary sm" onClick={onClearQuery}>Borrar búsqueda</button>}>No hay alertas {tab === 'todas' ? '' : 'en esta pestaña '}que coincidan.</EmptyState>;
-  if (!alerts.length) return <EmptyState icon="visibility" title="Sin alertas">Panopticon sigue mirando {cameras} cámaras. Cuando una regla se cumpla, la alerta aparece acá y suena un aviso.</EmptyState>;
+  if (query) return <EmptyState icon="search_off" title={`Nada para «${query}»`} action={<button className="btn secondary sm" onClick={onClearQuery}>Borrar búsqueda</button>}>No hay alertas {tab === 'todas' ? '' : 'en esta pestaña '}que coincidan.</EmptyState>;
+  if (!alerts.length) return <EmptyState icon="visibility" title="Sin alertas">Panopticon 33 sigue mirando {cameras} cámaras. Cuando una regla se cumpla, la alerta aparece aquí y suena un aviso.</EmptyState>;
   if (tab !== 'por_revisar') return <EmptyState icon="history" title={tab === 'confirmada' ? 'Ninguna confirmada todavía' : tab === 'descartada' ? 'Ninguna descartada todavía' : 'Sin alertas'} />;
   const conf = alerts.filter((a) => a.review === 'confirmada').length, desc = alerts.filter((a) => a.review === 'descartada').length;
   return (
     <EmptyState icon="done_all" tone="ok" title="Todo gestionado" action={<button className="btn secondary sm" onClick={() => onTab('confirmada')}>Ver confirmadas</button>}>
-      {conf} {conf === 1 ? 'confirmada' : 'confirmadas'} y {desc} {desc === 1 ? 'descartada' : 'descartadas'} en el turno.{going > 0 && ` ${going} ${going === 1 ? 'unidad sigue' : 'unidades siguen'} en camino.`} Las nuevas aparecen acá.
+      {conf} {conf === 1 ? 'confirmada' : 'confirmadas'} y {desc} {desc === 1 ? 'descartada' : 'descartadas'} en el turno.{going > 0 && ` ${going} ${going === 1 ? 'unidad sigue' : 'unidades siguen'} en camino.`} Las nuevas aparecen aquí.
     </EmptyState>
   );
 }

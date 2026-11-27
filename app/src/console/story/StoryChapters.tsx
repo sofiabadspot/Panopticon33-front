@@ -57,7 +57,7 @@ export function StoryChapters({ story }: { story: Story }) {
           {q && <button className="iconbtn" onClick={() => setQ('')} aria-label="Borrar búsqueda" title="Borrar búsqueda"><Icon name="close" /></button>}
         </div>
         <ol className="story-list">
-          {!rows.length && <li className="empty">Ningún capítulo coincide con “{q.trim()}”.</li>}
+          {!rows.length && <li className="empty">Ningún capítulo coincide con «{q.trim()}».</li>}
           {rows.map(({ c, i }, k) => {
             const gap = gapBefore(chs, i);
             const now = i === at;

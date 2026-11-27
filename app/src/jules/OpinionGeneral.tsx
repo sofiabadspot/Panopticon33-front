@@ -8,13 +8,13 @@ import { Tabs } from './ds/Tabs';
 import { Textarea } from './ds/basicos';
 
 const TEXTOS = {
-  titulo: 'Contanos cómo te va con Jules',
+  titulo: 'Cuéntanos tu experiencia con Jules',
   bajada: 'Lo leemos para mejorarlo.',
   tipo: 'Tipo de opinión',
   tipos: [
-    { value: 'problema', label: 'Algo no anda', pregunta: '¿Qué pasó?', ayuda: 'Ej.: le pregunté por el andén 4 y me respondió sobre otro.' },
-    { value: 'idea', label: 'Una idea', pregunta: '¿Qué te gustaría que haga Jules?', ayuda: 'Ej.: que me avise cuando un andén pase la meta.' },
-    { value: 'comentario', label: 'Un comentario', pregunta: '¿Cómo podemos mejorar Jules?', ayuda: 'Escribí lo que quieras contarnos.' },
+    { value: 'problema', label: 'Algo no anda', pregunta: '¿Qué pasó?', ayuda: 'Ej.: pregunté por la Plaza Salvador del Mundo y respondió sobre otra zona.' },
+    { value: 'idea', label: 'Una idea', pregunta: '¿Qué te gustaría que haga Jules?', ayuda: 'Ej.: que avise cuando una zona pase su aforo.' },
+    { value: 'comentario', label: 'Un comentario', pregunta: '¿Cómo podemos mejorar Jules?', ayuda: 'Escribe lo que quieras contarnos.' },
   ] as const,
   enviar: 'Enviar',
   cancelar: 'Cancelar',

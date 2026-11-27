@@ -50,5 +50,5 @@ export function SkeletonLinea({ ancho = '100%' }: { ancho?: string }) {
   return <div className="sv-skeleton svx-skeleton-texto" style={{ width: ancho }} />;
 }
 
-const FORMATO = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
+const FORMATO = new Intl.NumberFormat('es-SV', { maximumFractionDigits: 1 });
 export const numero = (valor: number | null | undefined) => (valor == null ? '—' : FORMATO.format(valor));

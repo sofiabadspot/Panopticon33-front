@@ -5,6 +5,7 @@
 import { useId, type ReactNode } from 'react';
 import { Icon } from './kit';
 import { fromLocalInput, toLocalInput } from '../api/format';
+import { DateTimeInput, display } from './DatePicker';
 
 export interface ControlProps { id: string; 'aria-describedby'?: string; 'aria-invalid'?: boolean }
 
@@ -25,8 +26,8 @@ export function Field({ label, hint, error, optional, className = '', children }
 }
 
 /* ---------- Fecha y hora ----------
-   Hoy usan el control del navegador (datetime-local) en hora de El Salvador (UTC−6). Toda fecha de la
-   consola pasa por acá: si se decide un selector propio con 24 h fijas, se cambia solo este archivo. */
+   Selector propio (ui/DatePicker.tsx): 24 h fijas, en hora de El Salvador (UTC−6), con el aspecto del
+   sistema. Toda fecha de la consola pasa por acá. */
 
 /** Valor del campo (texto "aaaa-mm-ddThh:mm") ↔ instante. Vacío o incompleto: NaN. */
 export const toField = (t: number | null | undefined) => (t == null || !Number.isFinite(t) ? '' : toLocalInput(t));
@@ -36,10 +37,14 @@ export function DateTimeField({ label, value, onChange, error, hint, optional, m
   label: ReactNode; value: string; onChange: (v: string) => void; error?: string | null; hint?: ReactNode; optional?: boolean;
   /** Límites como instante (ms). */ min?: number; max?: number; size?: 'sm' | 'md';
 }) {
+  const lo = min != null && Number.isFinite(min) ? toField(min) : undefined, hi = max != null && Number.isFinite(max) ? toField(max) : undefined;
+  // Fuera de los límites: se avisa acá mismo, salvo que quien usa el campo ya tenga su propio error.
+  const t = fromField(value);
+  const range = !Number.isFinite(t) ? null : lo && value < lo ? `No puede ser anterior a ${display(lo)}.` : hi && value > hi ? `No puede ser posterior a ${display(hi)}.` : null;
+  const err = error ?? range;
   return (
-    <Field label={label} error={error} hint={hint} optional={optional}>
-      {(p) => <input {...p} type="datetime-local" className={`fld mono ${size === 'sm' ? 'sm' : ''}`} value={value}
-        min={min != null ? toField(min) : undefined} max={max != null ? toField(max) : undefined} onChange={(e) => onChange(e.target.value)} />}
+    <Field label={label} error={err} hint={hint} optional={optional}>
+      {(p) => <DateTimeInput id={p.id} describedBy={p['aria-describedby']} invalid={!!err} value={value} onChange={onChange} min={lo} max={hi} size={size} />}
     </Field>
   );
 }
@@ -48,8 +53,9 @@ export function DateTimeField({ label, value, onChange, error, hint, optional, m
 export function rangeErrors(from: string, to: string, labels: [string, string] = ['el inicio', 'el fin']) {
   const a = fromField(from), b = fromField(to);
   const e: { from?: string; to?: string } = {};
-  if (!Number.isFinite(a)) e.from = `Falta ${labels[0]}.`;
-  if (!Number.isFinite(b)) e.to = `Falta ${labels[1]}.`;
+  const bad = 'La fecha no es válida. Usa el formato dd/mm/aaaa hh:mm.';
+  if (!Number.isFinite(a)) e.from = from.trim() ? bad : `Falta ${labels[0]}.`;
+  if (!Number.isFinite(b)) e.to = to.trim() ? bad : `Falta ${labels[1]}.`;
   else if (Number.isFinite(a) && b <= a) e.to = `${labels[1][0].toUpperCase()}${labels[1].slice(1)} tiene que ser posterior a ${labels[0]}.`.replace(/ a el /, ' al ');
   return e;
 }

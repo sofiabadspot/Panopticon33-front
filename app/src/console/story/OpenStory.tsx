@@ -70,7 +70,7 @@ function ReasonDialog({ s }: { s: StorySubject }) {
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="btn ghost sm" type="button" onClick={close}>Cancelar</button>
-          <button className="btn primary sm" type="submit" disabled={!pick} title={pick ? undefined : 'Elegí un motivo'}><Icon name="play_arrow" />Abrir y reproducir</button>
+          <button className="btn primary sm" type="submit" disabled={!pick} title={pick ? undefined : 'Elige un motivo'}><Icon name="play_arrow" />Abrir y reproducir</button>
         </div>
       </form>
     </Dialog>

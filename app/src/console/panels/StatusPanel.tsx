@@ -104,7 +104,7 @@ export function StatusPanel() {
           {perm.config && <button className="btn ghost xs st-act" onClick={() => c.open({ k: 'evento-form' })}><Icon name="add" />Registrar</button>}
         </div>
         {!events.length ? (
-          <div className="st-body"><EmptyState icon="flag" title="Sin eventos registrados">Un evento masivo agrupa zonas y les da umbrales propios mientras dure. {perm.config ? 'Registralo antes de que empiece.' : 'Los registra el administrador.'}</EmptyState></div>
+          <div className="st-body"><EmptyState icon="flag" title="Sin eventos registrados">Un evento masivo agrupa zonas y les da umbrales propios mientras dure. {perm.config ? 'Regístralo antes de que empiece.' : 'Los registra el administrador.'}</EmptyState></div>
         ) : (
           <ul className="list st-events">
             {[...live, ...next].map((e) => <EventRow key={e.id} e={e} now={now} />)}
@@ -181,7 +181,7 @@ function EventRow({ e, now }: { e: MassEvent; now: number }) {
             <div className="s"><b className={`st-ev-n ${people > e.expected ? 'st-late' : ''}`}>{fmtCrowd(people)} personas</b> · esperaban {fmtCrowd(e.expected)}</div>
           </>}
         </div>
-        {st !== 'en_curso' && <div className="r"><EventTag s={st} /></div>}
+        {st !== 'en_curso' && <div className="r"><EventTag s={st} cancelled={!!e.cancelled} /></div>}
       </button>
     </li>
   );

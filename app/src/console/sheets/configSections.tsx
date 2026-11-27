@@ -27,18 +27,18 @@ type Level = 'ver' | 'decidir' | 'despachar' | 'personalizado';
 const LEVELS: [Level, string, AlertAction[]][] = [
   ['ver', 'Solo ver', []],
   ['decidir', 'Decidir', ['decidir', 'decidir_facial']],
-  ['despachar', 'Decidir y despachar', ['decidir', 'decidir_facial', 'despachar', 'registrar']],
+  ['despachar', 'Decidir y enviar unidades', ['decidir', 'decidir_facial', 'despachar', 'registrar']],
   ['personalizado', 'Personalizado', []],
 ];
 const ACTIONS: [AlertAction, string, string][] = [
   ['decidir', 'Confirmar o descartar alertas', 'Con motivo cuando descarta'],
   ['decidir_facial', 'Confirmar o descartar coincidencias faciales', 'Si el rostro es el de la persona de la lista'],
-  ['despachar', 'Mandar unidades', 'Elige cuántos policías van y cuáles'],
+  ['despachar', 'Enviar unidades', 'Elige cuántos policías van y cuáles'],
   ['registrar', 'Registrar incidentes', 'Marca en el mapa algo que pasó'],
 ];
 const sameSet = (a: AlertAction[], b: AlertAction[]) => a.length === b.length && a.every((x) => b.includes(x));
 const levelOf = (acts: AlertAction[]): Level => LEVELS.find(([k, , xs]) => k !== 'personalizado' && sameSet(xs, acts))?.[0] ?? 'personalizado';
-const LEVEL_TEXT: Record<Level, string> = { ver: 'Solo ve las alertas', decidir: 'Decide alertas', despachar: 'Decide y despacha', personalizado: 'Gestión personalizada' };
+const LEVEL_TEXT: Record<Level, string> = { ver: 'Solo ve las alertas', decidir: 'Decide alertas', despachar: 'Decide y envía unidades', personalizado: 'Gestión personalizada' };
 
 /** Con qué abre la consola este rol, en palabras. */
 const opensWith = (r: RoleConfig) => (r.tabs[0] ? TAB_LABEL[r.tabs[0]] : r.config ? 'Configuración' : '—');
@@ -57,7 +57,7 @@ export function RolesSection() {
   const create = (e: FormEvent) => {
     e.preventDefault(); if (!ok) return;
     const r = createRole(f.name, configs.find((x) => x.role === f.from) ?? null, user);
-    toast(`Rol "${r.name}" creado. Revisa qué ve y qué puede hacer.`);
+    toast(`Rol «${r.name}» creado. Revisa qué ve y qué puede hacer.`);
     setAdding(false); setF({ name: '', from: '' });
     c.open({ k: 'config', tab: 'roles', id: r.role });
   };
@@ -99,7 +99,7 @@ export function RolesSection() {
             })}
           </ul>
         </div>
-        <div className="callout"><Icon name="info" /><span className="grow">Qué rol tiene cada persona se decide en Keycloak. Acá se define qué significa cada rol. Ver <button className="linklike" onClick={() => c.open({ k: 'config', tab: 'usuarios' })}>Usuarios</button>.</span></div>
+        <div className="callout"><Icon name="info" /><span className="grow">Qué rol tiene cada persona se decide en Keycloak. Aquí se define qué significa cada rol. Ver <button className="linklike" onClick={() => c.open({ k: 'config', tab: 'usuarios' })}>Usuarios</button>.</span></div>
       </div>
     </>
   );
@@ -140,7 +140,7 @@ export function RoleDetail({ id }: { id: string }) {
     let name = `${saved.name} (copia)`, n = 2;
     while (configs.some((r) => r.name === name)) name = `${saved.name} (copia ${n++})`;
     const r = createRole(name, saved, user);
-    toast(`Rol "${r.name}" creado`);
+    toast(`Rol «${r.name}» creado`);
     c.open({ k: 'config', tab: 'roles', id: r.role });
   };
 
@@ -246,10 +246,10 @@ export function RoleDetail({ id }: { id: string }) {
         {errors.filter((x) => x !== nameErr).map((x) => <span key={x} className="err"><Icon name="error" />{x}</span>)}
         {warnings.map((x) => <div key={x} className="callout warn"><Icon name="warning" /><span className="grow">{x}</span></div>)}
 
-        {!saved.system && <>
-          <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} disabled={holders.length > 0} onClick={() => setDel(true)}><Icon name="remove" />Eliminar rol</button>
-          {holders.length > 0 && <span className="dim" style={{ fontSize: 'var(--fs-sm)' }}>No se puede eliminar mientras {holders.length === 1 ? 'un usuario lo tenga' : `${holders.length} usuarios lo tengan`}. Cámbiales el rol en Keycloak primero.</span>}
-        </>}
+        {!saved.system && <div className="danger-zone">
+          <button type="button" className="btn ghost danger sm" disabled={holders.length > 0} onClick={() => setDel(true)}><Icon name="remove" />Eliminar rol</button>
+          {holders.length > 0 && <span className="dim">No se puede eliminar mientras {holders.length === 1 ? 'un usuario lo tenga' : `${holders.length} usuarios lo tengan`}. Cámbiales el rol en Keycloak primero.</span>}
+        </div>}
       </form>
       <UnsavedGuard dirty={dirty} />
       <div className="pf"><button type="button" className="btn ghost sm" onClick={() => c.open({ k: 'config', tab: 'roles' })}>Volver a roles</button>

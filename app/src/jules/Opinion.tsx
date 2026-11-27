@@ -19,7 +19,7 @@ const TEXTOS = {
     titulo: '¿Qué le faltó a esta respuesta?',
     ayuda: 'Ej.: el dato estaba mal, no respondió lo que pregunté.',
   },
-  etiqueta: 'Contanos más (opcional)',
+  etiqueta: 'Cuéntanos más (opcional)',
   cancelar: 'Cancelar',
   enviar: 'Enviar',
   gracias: 'Gracias, lo vamos a tener en cuenta.',

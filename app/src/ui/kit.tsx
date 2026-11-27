@@ -26,7 +26,7 @@ export function StatusChip({ alert }: { alert: Alert }) {
   if (alert.review === 'por_revisar') return <span className="chip outline">{REVIEW_LABEL.por_revisar}</span>;
   if (alert.review === 'descartada') return <span className="chip">Descartada</span>;
   /* Despacho de refuerzos, desde la plataforma. En camino: punto que late · En el lugar: verde ·
-     Confirmada sin refuerzos: terminada, gris. */
+     Confirmada sin enviar unidades: terminada, gris. */
   if (alert.dispatch === 'en_camino') return <span className="chip sending"><span className="pulse-dot" aria-hidden />{DISPATCH_LABEL.en_camino}</span>;
   if (alert.dispatch === 'en_lugar') return <span className="chip ok"><Icon name="done_all" />{DISPATCH_LABEL.en_lugar}</span>;
   return <span className="chip closed"><Icon name="check" />Confirmada</span>;

@@ -3,7 +3,7 @@
    manda desde acá, sin Maic; descartar pide un motivo de una lista corta. A Maic le llega el evento
    por el backend. Tras decidir, la ficha ofrece pasar a la siguiente alerta por revisar. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { audit, AVAIL_LABEL, confirmAlert, discardAlert, reopenAlert, forOperator, inScope, nearestFree, openAlert, readsOf, sightingsOf, suggestedUnits, unitOptions, useApi } from '../../api';
+import { audit, AVAIL_LABEL, confirmAlert, discardAlert, recallUnits, reopenAlert, forOperator, inScope, nearestFree, openAlert, readsOf, sightingsOf, suggestedUnits, unitOptions, useApi } from '../../api';
 import { ago, dateTime, dec1, fmt, fmtCrowd, hhmm, pct } from '../../api/format';
 import { DISCARD_REASONS, DISPATCH_LABEL, KIND_LABEL, KIND_PHRASE } from '../../api/labels';
 import type { Alert, PlateRead, Zone } from '../../api/types';
@@ -19,6 +19,7 @@ import { useOpenStory } from '../story/OpenStory';
 import type { RouteStop } from '../../map/MapView';
 import { UnitHex } from '../../map/icons';
 import { usePermissions } from '../permissions';
+import { ConfirmDelete } from './configPlace';
 
 export function AlertSheet({ id, inWall = false }: { id: string; inWall?: boolean }) {
   const { user } = useSession();
@@ -54,6 +55,10 @@ export function AlertSheet({ id, inWall = false }: { id: string; inWall?: boolea
      numeradas y con hora, terminando en la lectura de esta alerta. Queda en la bitácora. */
   const [trace, setTrace] = useState(false);
   const [sent, setSent] = useState(false);
+  /* Unidades que van a esta alerta: se pueden retirar (vuelven a su puesto). */
+  const allUnits = useApi((s) => s.units);
+  const goingHere = allUnits.filter((u) => u.enRoute?.alertId === id);
+  const [recalling, setRecalling] = useState(false);
   const [txSolo, setTxSolo] = useState(false); // el avance del despacho ocupa sola la ficha
   const [composing, setComposing] = useState(false); // eligiendo los refuerzos antes de confirmar
   // Al abrir una alerta de placa, el recorrido arranca solo (no hace falta pedirlo). Queda en la bitácora.
@@ -133,7 +138,7 @@ export function AlertSheet({ id, inWall = false }: { id: string; inWall?: boolea
           {/* Analista: abrir una investigación con el lugar y la hora de esta alerta ya cargados */}
           {perm.has('investigar') && <button className="chip outline" onClick={() => { c.setInvDraft({ title: `${KIND_PHRASE[a.kind]}${a.plate ? ` ${a.plate.listed}` : ''}`, lat: a.lat, lon: a.lon, label: cam?.street ?? zone?.name ?? a.cameraId, from: a.createdAt - 3600e3, to: a.createdAt + 1800e3 }); c.setPanel('investigar'); }}><Icon name="timeline" />Investigar esto</button>}
           {/* Analista: la historia de la placa (pide motivo). Las alertas de persona no son suyas. */}
-          {perm.has('investigar') && a.plate && <button className="chip outline" onClick={() => openStory({ k: 'placa', plate: a.plate!.listed })}><Icon name="play_arrow" />Ver recorrido</button>}
+          {perm.has('investigar') && a.plate && <button className="chip outline" onClick={() => openStory({ k: 'placa', plate: a.plate!.listed })}><Icon name="play_arrow" />Abrir investigación</button>}
         </>}
       />
       <div className={`pb ${!sent ? '' : txSolo ? 'tx-alone' : 'tx-after'}`}>
@@ -186,7 +191,7 @@ export function AlertSheet({ id, inWall = false }: { id: string; inWall?: boolea
 
       <div className="pf">
         {canDecide && !discarding && !composing && <>
-          <button className="btn positive" style={{ flex: 1 }} onClick={startConfirm}><Icon name="check" />Confirmar{suggestedUnits(a) > 0 ? ' y enviar refuerzos' : ''}<span className="kbd" style={{ color: 'inherit', borderColor: 'currentColor' }}>C</span></button>
+          <button className="btn positive" style={{ flex: 1 }} onClick={startConfirm}><Icon name="check" />Confirmar{suggestedUnits(a) > 0 ? ' y enviar unidades' : ''}<span className="kbd" style={{ color: 'inherit', borderColor: 'currentColor' }}>C</span></button>
           <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />Descartar<span className="kbd">D</span></button>
         </>}
         {canDecide && discarding && <>
@@ -200,7 +205,20 @@ export function AlertSheet({ id, inWall = false }: { id: string; inWall?: boolea
           : <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> No quedan alertas por revisar.</span>)}
         {a.review === 'confirmada' && !sent && <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> Confirmada por {a.reviewedBy}.</span>}
         {a.review === 'descartada' && <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Descartada por {a.reviewedBy}: {a.discardReason}.</span>}
+        {/* Reabrir: un descarte equivocado se corrige; la alerta vuelve a la bandeja por revisar. */}
+        {a.review === 'descartada' && perm.can('decidir') && a.kind !== 'persona_en_lista' && (
+          <button className="btn secondary sm" style={{ marginLeft: 'auto' }} onClick={() => { reopenAlert(a.id, user); toast(`${a.id}: vuelve a la bandeja por revisar`); }}><Icon name="undo" />Volver a la bandeja</button>
+        )}
+        {a.review === 'confirmada' && goingHere.length > 0 && perm.can('despachar') && (
+          <button className="btn ghost danger sm" onClick={() => setRecalling(true)}><Icon name="undo" />Retirar {goingHere.length === 1 ? goingHere[0].id : `${goingHere.length} unidades`}</button>
+        )}
       </div>
+      {recalling && (
+        <ConfirmDelete title={goingHere.length === 1 ? `¿Retirar ${goingHere[0].id}?` : `¿Retirar ${goingHere.length} unidades?`} action="Retirar" onClose={() => setRecalling(false)}
+          onConfirm={() => { const ids = goingHere.map((u) => u.id); recallUnits(ids, user); setRecalling(false); toast(`${ids.join(', ')}: ${ids.length === 1 ? 'vuelve' : 'vuelven'} a su puesto`); }}>
+          {goingHere.map((u) => u.id).join(', ')} {goingHere.length === 1 ? 'deja' : 'dejan'} de ir a {a.id} y {goingHere.length === 1 ? 'vuelve' : 'vuelven'} a su puesto. La alerta sigue confirmada; queda en la línea de tiempo quién las retiró.
+        </ConfirmDelete>
+      )}
     </>
   );
 }
@@ -236,7 +254,7 @@ function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids:
   const busy = chosen.map(byId).filter((o) => o?.avail === 'ocupada');
   const k = chosen.length;
   return (<>
-    <SheetHead kicker={<><span className="mono">{a.id}</span>·<span>{KIND_LABEL[a.kind]}</span></>} title="Enviar refuerzos" sub={KIND_PHRASE[a.kind]} />
+    <SheetHead kicker={<><span className="mono">{a.id}</span>·<span>{KIND_LABEL[a.kind]}</span></>} title="Enviar unidades" sub={KIND_PHRASE[a.kind]} />
     <div className="pb rf-pane">
       <button className="linklike rf-back" onClick={onCancel}><Icon name="arrow_back" />Volver a la alerta</button>
       <div className="seg rf-seg" role="group" aria-label="Qué unidades">
@@ -254,7 +272,7 @@ function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids:
           ? <ul className="rf-chips" aria-label="Van">{chosen.map((id) => { const o = byId(id)!; return (
               <li key={id} className={o.avail === 'ocupada' ? 'busy' : ''}><UnitHex type={o.unit.type} size={18} /><span className="mono">{id}</span><small>{min(o)}</small></li>
             ); })}</ul>
-          : <p className="rf-hint">No hay unidades para mandar.</p>}
+          : <p className="rf-hint">No hay unidades para enviar.</p>}
       </> : <>
         <input type="search" className="fld" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar unidad, tipo o estado" aria-label="Buscar unidades" autoFocus />
         <ul className="rf-list">
@@ -280,7 +298,7 @@ function Reinforcements({ a, onConfirm, onCancel }: { a: Alert; onConfirm: (ids:
     </div>
     <div className="pf">
       <button className="btn positive" style={{ flex: 1 }} disabled={!k} onClick={() => onConfirm(chosen)}><Icon name="send" />Confirmar y enviar {k} {k === 1 ? 'unidad' : 'unidades'}</button>
-      <button className="btn secondary" onClick={() => onConfirm([])}>Sin refuerzos</button>
+      <button className="btn secondary" onClick={() => onConfirm([])}>Sin enviar unidades</button>
     </div>
   </>);
 }
@@ -292,7 +310,7 @@ const TX_SOLO_MIN_MS = 2400, TX_RISE_MS = 600;
 function Transmission({ a, onSolo }: { a: Alert; onSolo?: (solo: boolean) => void }) {
   // Las que van y las que ya llegaron
   const going = useApi((s) => s.units).filter((u) => u.enRoute?.alertId === a.id);
-  // "Llegó U-12" / "Llegó U-12 · refuerzos en el lugar" → "U-12"
+  // "Llegó U-12" / "Llegó U-12 · unidades en el lugar" → "U-12"
   const landed = a.timeline.filter((x) => x.label.startsWith('Llegó'));
   const total = going.length + landed.length;
   const lvl = !a.dispatch ? 1 : a.dispatch === 'en_lugar' ? 3 : 2;
@@ -301,9 +319,9 @@ function Transmission({ a, onSolo }: { a: Alert; onSolo?: (solo: boolean) => voi
   const ids = going.map((u) => u.id).join(', ');
   const steps = a.dispatch ? [
     { t: 'Confirmada por el operador', s: `${a.reviewedBy ?? ''}${at('Confirmada') ? ' · ' + hhmm(at('Confirmada')!) : ''}` },
-    { t: 'Refuerzos en camino', s: going.length ? `${units(going.length)}: ${ids}` : landed.length ? 'Todas llegaron' : units(total) },
+    { t: 'Unidades en camino', s: going.length ? `${units(going.length)}: ${ids}` : landed.length ? 'Todas llegaron' : units(total) },
     { t: 'En el lugar', s: landed.length ? `${landed.length} de ${total}${landed.length < total ? ` · ${going.length} en camino` : ` · ${hhmm(landed[landed.length - 1].at)}`}` : 'Cuando llegue la primera' },
-  ] : [{ t: 'Confirmada sin refuerzos', s: `${a.reviewedBy ?? ''}${at('Confirmada') ? ' · ' + hhmm(at('Confirmada')!) : ''}` }];
+  ] : [{ t: 'Confirmada sin enviar unidades', s: `${a.reviewedBy ?? ''}${at('Confirmada') ? ' · ' + hhmm(at('Confirmada')!) : ''}` }];
   const done = Math.min(steps.length, lvl);
 
   // Fase: sola en la ficha → arriba, con el resto debajo
@@ -406,7 +424,8 @@ function PlateBlocks({ a, camId, place, onCamera }: { a: Alert; camId?: string; 
 function PlateTag({ text, other }: { text: string; other?: string }) {
   return (
     <span className="plate-tag" aria-label={text}>
-      {[...text].map((ch, i) => <span key={i} className={other !== undefined && other[i] !== ch ? 'diff' : undefined} aria-hidden>{ch}</span>)}
+      {/* El espacio va como espacio duro: en un contenedor flex, un elemento con solo un espacio desaparece ("P512-884"). */}
+      {[...text].map((ch, i) => <span key={i} className={other !== undefined && other[i] !== ch ? 'diff' : undefined} aria-hidden>{ch === ' ' ? '\u00a0' : ch}</span>)}
     </span>
   );
 }
@@ -547,7 +566,7 @@ const PLATE_EV: Ev = { type: 'pendiente', caption: 'Recorte de la placa' };
 function Resolved({ a }: { a: Alert }) {
   const ok = a.review === 'confirmada';
   const at = a.timeline.find((t) => t.label.startsWith(ok ? 'Confirmada' : 'Descartada'))?.at;
-  const how = a.dispatch ? DISPATCH_LABEL[a.dispatch].toLowerCase() : 'sin refuerzos';
+  const how = a.dispatch ? DISPATCH_LABEL[a.dispatch].toLowerCase() : 'sin enviar unidades';
   return (
     <section className={`resolved ${ok ? 'ok' : 'off'}`} role="status">
       <span className="rs-check" aria-hidden><svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 6.8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></span>

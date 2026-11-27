@@ -22,8 +22,8 @@ export function layersFor(tab: string | null): AdminLayers {
   }
 }
 
-/** Color de las zonas en el mapa de configuración (no es un color de estado). */
-export const ZONE_COLOR = '#5B9CFF';
+/** Color de las zonas en el mapa de configuración (no es un color de estado): token --zone de app.css. */
+export const zoneColor = () => getComputedStyle(document.documentElement).getPropertyValue('--zone').trim() || '#5B9CFF';
 /** Lo que falta configurar. */
 export const cameraPending = (c: Camera) => c.status !== 'operativa' || !c.zoneId || !c.presets.length;
 export const zonePending = (z: Zone, cameras: Camera[]) => !cameras.some((c) => c.zoneId === z.id) && !z.cameras.length;

@@ -84,7 +84,7 @@ export function AgentFeed({ user, saludo, onLook }: { user: User; saludo: string
   const tone: Tone = current?.k === 'propuesta' ? current.p.tone : 'ok';
 
   const approve = (f: Extract<Finding, { k: 'propuesta' }>) => { f.p.approve(user); resolve(f, f.p.doneText.replace(/^Listo\. /, ''), 'ok', f.p.doneText); };
-  const skip = (f: Extract<Finding, { k: 'propuesta' }>) => { dismiss(f.p.key, user); resolve(f, `No mandé refuerzos a ${f.p.subject}.`, 'skip', 'Entendido, no lo mando. Si empeora, te lo vuelvo a proponer.'); };
+  const skip = (f: Extract<Finding, { k: 'propuesta' }>) => { dismiss(f.p.key, user); resolve(f, `No envié unidades a ${f.p.subject}.`, 'skip', 'Entendido, no lo mando. Si empeora, te lo vuelvo a proponer.'); };
   const keep = (f: Extract<Finding, { k: 'hecho' }>) => resolve(f, f.d.text, 'ok', 'Perfecto. Sigo revisando.');
   const revert = (f: Extract<Finding, { k: 'hecho' }>) => { undo(f.d.key, user); resolve(f, `Deshice: ${f.d.text.charAt(0).toLowerCase()}${f.d.text.slice(1)}`, 'undo', 'Listo, lo deshice.'); };
 
@@ -123,7 +123,7 @@ export function AgentFeed({ user, saludo, onLook }: { user: User; saludo: string
             <TextoJules as="h3" className="ag-lead" texto={current.d.text} ritmo={RITMO} onTermina={reveal} />
             {typed && <div className="ag-more svx-entrar">
               <div className="ag-row">
-                <button className="ag-btn primary" onClick={() => keep(current)}>Bien, seguí</button>
+                <button className="ag-btn primary" onClick={() => keep(current)}>Continuar</button>
                 {current.d.look && <button className="ag-btn link" onClick={() => onLook(current.d.look!)}>{current.d.look.label}</button>}
                 <button className="ag-btn link" onClick={() => revert(current)}>Deshacer</button>
               </div>

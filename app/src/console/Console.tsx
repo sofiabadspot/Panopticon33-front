@@ -36,7 +36,7 @@ import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { ZoneSheet } from './sheets/ZoneSheet';
 import { EventSheet, EventFormSheet } from './sheets/EventSheet';
 import { MAP_TABS, type ConfigTab } from './sheets/configTabs';
-import { ADMIN_LAYERS, AdminMapLegend, AdminMapLayers, cameraPending, layersFor, ZONE_COLOR, zonePending, type AdminLayers } from './AdminMapLayers';
+import { ADMIN_LAYERS, AdminMapLegend, AdminMapLayers, cameraPending, layersFor, zoneColor, zonePending, type AdminLayers } from './AdminMapLayers';
 import { CameraSheet } from './sheets/CameraSheet';
 import { ConfigSheet } from './sheets/ConfigSheet';
 import { AuditSheet } from './sheets/AuditSheet';
@@ -56,6 +56,7 @@ import { EvidenceFan, EvidenceLoose } from './story/EvidenceCard';
 import { StoryScene } from './story/StoryScene';
 import { OpenStoryHost } from './story/OpenStory';
 import { Segmented } from '../ui/Segmented';
+import { useOverflowEdges } from '../ui/useOverflowEdges';
 
 /** Iniciales para el avatar (solo palabras con mayúscula: sin títulos como "Cmdte."). */
 const initials = (name: string) => name.split(' ').filter((w) => /^[A-ZÁÉÍÓÚ]/.test(w) && !/\.$/.test(w)).slice(0, 2).map((w) => w[0]).join('');
@@ -92,6 +93,8 @@ function Layout() {
   const events = useApi((s) => s.events);
   const maic = useApi((s) => s.maic);
   const net = useOnline();
+  const strip = useRef<HTMLDivElement>(null);
+  useOverflowEdges(strip);
   const loading = useApi((s) => s.loading);
   const roleConfigs = useApi((s) => s.roleConfigs);
   const scenario = useApi((s) => s.scenario);
@@ -234,7 +237,9 @@ function Layout() {
 
   const selectedZone = c.sheet?.k === 'zona' ? c.sheet.id : null;
   // Lo que está abierto en el lateral: en el mapa se destaca y el resto queda atenuado.
-  const focusSel = c.sheet && (c.sheet.k === 'alerta' || c.sheet.k === 'zona' || c.sheet.k === 'camara') ? { k: c.sheet.k, id: c.sheet.id } : null;
+  // Solo si existe: un enlace a algo borrado o inventado no atenúa el mapa ni dice "Enfocado en" un id suelto.
+  const focusExists = (k: string, id: string) => (k === 'zona' ? zones.some((z) => z.id === id) : k === 'camara' ? cameras.some((x) => x.id === id) : alerts.some((x) => x.id === id));
+  const focusSel = c.sheet && (c.sheet.k === 'alerta' || c.sheet.k === 'zona' || c.sheet.k === 'camara') && focusExists(c.sheet.k, c.sheet.id) ? { k: c.sheet.k, id: c.sheet.id } : null;
   /* Con una ficha abierta el mapa atenúa lo demás. Si la persona toca una capa (o "Ver todo"),
      el foco se suelta solo: la ficha sigue abierta, pero el mapa vuelve a mostrar todo.
      Al abrir otra ficha, el foco vuelve. */
@@ -245,8 +250,8 @@ function Layout() {
     : focusSel.k === 'camara' ? `cámara ${focusSel.id}`
     : (() => { const al = alerts.find((x) => x.id === focusSel.id); return al ? `${KIND_LABEL[al.kind].toLowerCase()}${al.plate ? ` ${al.plate.listed}` : ''}` : focusSel.id; })();
   const openAlerts = alerts.filter((a) => forOperator(a) && inScope(a, user) && (a.review === 'por_revisar' || a.dispatch === 'en_camino'));
-  // En el mapa, las alertas abiertas: las que esperan decisión y las confirmadas con refuerzos en camino
-  // (se ven con "Refuerzos en camino" hasta que llegan). Las descartadas y las ya resueltas no se dibujan.
+  // En el mapa, las alertas abiertas: las que esperan decisión y las confirmadas con unidades en camino
+  // (se ven con "Unidades en camino" hasta que llegan). Las descartadas y las ya resueltas no se dibujan.
   // La alerta abierta en el lateral se ve siempre, aunque ya esté resuelta.
   const openAlertId = c.sheet?.k === 'alerta' ? c.sheet.id : null;
   const mapAlerts = inv
@@ -322,7 +327,7 @@ function Layout() {
         {/* Muro de video: flujo aparte, junto al buscador */}
         {!admin && <button className={`btn secondary sm wall-btn ${wallOpen ? 'on' : ''}`} aria-pressed={wallOpen} onClick={() => setWallOpen((w) => !w)} title="Muro de video: todas las cámaras"><Icon name="grid_view" />Muro de video</button>}
         <div className="right">
-          <span className={`chip ${maic.connected ? 'ok' : 'critica'}`} title={`Maic ${maic.mode} · último mensaje ${hhmmss(maic.lastMessageAt)}`}><span className="dot" aria-hidden />Maic</span>
+          <span className={`chip ${maic.connected ? 'ok' : 'critica'}`} title={`MAIC ${maic.mode} · último mensaje ${hhmmss(maic.lastMessageAt)}`}><span className="dot" aria-hidden />MAIC</span>
           <button className={`iconbtn sound ${c.sound ? 'on' : ''}`} onClick={() => c.setSound(!c.sound)} aria-pressed={c.sound} aria-label={c.sound ? 'Silenciar avisos' : 'Activar sonido de avisos'} title={c.sound ? 'Sonido de alertas nuevas y mensajes de Jules: activado' : 'Sonido de alertas nuevas y mensajes de Jules: silenciado'}><Icon name={c.sound ? 'volume_up' : 'volume_off'} /></button>
           <span className="clock">{hhmmss(now)}</span>
           {/* Cuenta: quién tiene la sesión, los roles de la demostración y, al final, cerrar sesión.
@@ -339,7 +344,11 @@ function Layout() {
               // Roles de la demostración (en producción el rol llega del token de Keycloak).
               ...roleConfigs.map((r) => ({
                 label: r.name, detalle: sessionFor(r.role).user.name, marcado: r.role === role,
-                onSelect: () => { if (r.role !== role) { setRole(r.role); navigate('/'); } },
+                onSelect: () => { if (r.role !== role) {
+                  // Cambio de rol: la consola se vuelve a armar sin la entrada animada (que es para venir del ingreso).
+                  document.documentElement.dataset.roleSwitch = '1'; setTimeout(() => { delete document.documentElement.dataset.roleSwitch; }, 1500);
+                  setRole(r.role); navigate('/');
+                } },
               })),
               // Escenario de la consola: para revisar cada estado de la interfaz (vacía, cargando, sin Maic…)
               ...(Object.keys(SCENARIO_LABEL) as Scenario[]).map((sc, i) => ({
@@ -388,7 +397,7 @@ function Layout() {
         <div className="mapwrap">
           <MapView
             zones={zones} zoneStatus={admin ? undefined : inv ? NO_STATUS : loading ? undefined : status} cameras={admin && adm.pending ? pendingCams : cameras} units={admin ? null : policeSource && !inv ? units : null} alerts={admin ? [] : mapAlerts}
-            zonePaint={admin ? { color: () => ZONE_COLOR, dim: (z) => adm.pending && !pendingZones.includes(z) } : undefined}
+            zonePaint={admin ? { color: zoneColor, dim: (z) => adm.pending && !pendingZones.includes(z) } : undefined}
             layers={admin ? { zones: adm.zones, events: adm.events, cameras: adm.cameras, fov: adm.cameras && adm.fov, alerts: false, units: false, hex: null, drones: false, helis: false } : { ...layers, zones: layers.zones && seen('zones'), events: layers.events && seen('events'), alerts: layers.alerts && seen('alerts'), cameras: layers.cameras && seen('cameras'), drones: layers.drones && seen('drones'), helis: layers.helis && seen('helis'), hex: layers.hex && seen('hex') && !hexOff(layers.hex) ? layers.hex : null, units: layers.units && seen('units') && policeSource && !inv }} severityOf={sevOf} eventOf={inv ? undefined : eventOf} selectedZone={selectedZone} focusSel={mapFocus} hoverAlert={c.hoverAlert} onAlertHover={c.setHoverAlert} freshAlerts={c.fresh}
             highlightZones={c.overlay.highlightZones} route={story ? sr.stops : c.overlay.route} routeLabel={story ? story.title : c.overlay.routeLabel} routeAt={story ? sr.at : null} routeCount={story ? sr.count : null} routeOverview={!!story && sr.overview} routeCard={story ? sr.card : undefined} routeLead={story ? sr.lead : null} sketch={c.overlay.sketch} pickCells={c.overlay.pickCells} pin={c.pin} signal={c.signal}
             bounds={boundsOf(fit.points, 0.0008)} fitKey={fit.key} backOutKey={backOut} padding={{ top: 24, right: 24, bottom: 24, left: 24 }}
@@ -411,13 +420,13 @@ function Layout() {
           {story && loose && <EvidenceLoose key={story.id} story={story} onClose={() => setLoose(false)} />}
           {story && tool === 'evidencia' && (evAt && fanXY
             ? <EvidenceFan key={story.id} story={story} p={evAt} xy={fanXY} onClose={() => setEvAt(null)} />
-            : <div className="map-hint" role="status"><Icon name="my_location" />Hacé clic en el mapa donde pasó</div>)}
+            : <div className="map-hint" role="status"><Icon name="my_location" />Haz clic en el mapa donde pasó</div>)}
           {admin && !c.overlay.onMapClick && <AdminMapLegend l={adm} cameras={adm.pending ? pendingCams : cameras} />}
           {measuring && (
             <section className="measure-card" aria-live="polite">
               <div className="mc2-hd"><span className="mc2-lbl">¿Quién llega a este punto?</span><button className="iconbtn" onClick={() => { setMeasuring(false); setMeasureAt(null); }} aria-label="Cerrar medición" title="Cerrar medición"><Icon name="close" /></button></div>
               <Segmented label="Radio" showLabel value={radius} onChange={setRadius} options={[250, 500, 1000].map((r) => ({ value: r, label: r < 1000 ? `${r} m` : '1 km' }))} />
-              {!measure ? <p className="mc2-hint">Hacé clic en el mapa donde querés medir. Te muestro qué unidades policiales están dentro del radio y cuánto tardarían en llegar.</p> : (<>
+              {!measure ? <p className="mc2-hint">Haz clic en el mapa donde quieres medir. Se muestran las unidades policiales que están dentro del radio y cuánto tardarían en llegar.</p> : (<>
                 <p className={`mc2-state ${measure.state}`}><i />{measure.state === 'cubierta' ? `Cubierta: ${measure.within.length} ${measure.within.length === 1 ? 'unidad' : 'unidades'} en el radio` : measure.state === 'cerca' ? `Sin unidades en el radio; la más cercana llega en ${Math.round(measure.nearest!.eta)} min` : 'Sin cobertura: ninguna unidad llega en menos de 4 min'}</p>
                 {policeSource && <WhoArrives key={measure.p.join(',')} p={measure.p} />}
               </>)}
@@ -427,7 +436,7 @@ function Layout() {
             ? <IncidentFan p={incAt} xy={fanXY} onClose={() => setIncAt(null)} onFinish={() => setTool('mover')}
                 onSignal={(label) => c.setSignal({ lat: incAt[1], lon: incAt[0], label, key: String(Date.now()) })}
                 renderUnits={(onSent) => (policeSource ? <WhoArrives key={incAt.join(',')} p={incAt} onSent={onSent} /> : whoArrives)} />
-            : <div className="map-hint" role="status"><Icon name="my_location" />Hacé clic en el mapa donde pasó</div>)}
+            : <div className="map-hint" role="status"><Icon name="my_location" />Haz clic en el mapa donde pasó</div>)}
           {/* Analista: la barra solo dentro de una investigación (Evidencia). «¿Quién llega?» es de los roles
               que despachan o miden en vivo, no del analista. */}
           {(story || (!inv && !p.has('investigar'))) && !loading && !c.overlay.onMapClick && !admin && (
@@ -455,12 +464,12 @@ function Layout() {
           {/* Estado de los datos: cargando, o el enlace con Maic caído (los eventos le llegan cuando vuelve) */}
           {!inv && loading && <div className="map-state" role="status"><i className="spin" aria-hidden /><span><b>Cargando datos</b> · cámaras, zonas y unidades</span></div>}
           {!net.online && <div className={`map-state warn ${focusSel && !c.overlay.route ? 'below' : ''}`} role="alert"><Icon name="warning" /><span><b>Sin conexión con la plataforma</b> desde las {hhmm(net.since)} · lo que se ve puede estar desactualizado</span></div>}
-          {net.online && !inv && !loading && !maic.connected && <div className={`map-state warn ${focusSel && !c.overlay.route ? 'below' : ''}`} role="alert"><Icon name="warning" /><span><b>Sin conexión con Maic</b> desde las {hhmm(maic.lastMessageAt)} · las confirmaciones quedan en cola</span></div>}
+          {net.online && !inv && !loading && !maic.connected && <div className={`map-state warn ${focusSel && !c.overlay.route ? 'below' : ''}`} role="alert"><Icon name="warning" /><span><b>Sin conexión con MAIC</b> desde las {hhmm(maic.lastMessageAt)} · las confirmaciones quedan en cola</span></div>}
           {inv && !story && <div className="hist-pill" role="status"><Icon name="history" /><span>Histórico · <b>{dateTime(inv.from)} → {hhmm(inv.to)}</b>{c.invPick ? ' · haz clic en el mapa para mover el lugar' : ' · solo lo que pasó en esa ventana'}</span></div>}
           {c.overlay.onMapClick && !inv && !p.has('investigar') && <div className="chip" style={{ position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)', zIndex: 'var(--z-map-hud)', background: 'var(--surface-panel)' }}><Icon name="edit_note" />{c.overlay.pickCells ? 'Haz clic en un hexágono para sumarlo o quitarlo · acércate para ver la grilla' : 'Haz clic en el mapa para marcar el punto'}</div>}
         </div>
         {/* Tocar cualquier capa con una ficha abierta suelta el foco: así la capa se ve al instante. */}
-        <div className="mstrip" role="group" aria-label="Capas del mapa" onClickCapture={() => { if (focusSel && !unfocus) setUnfocus(true); }}>
+        <div ref={strip} className="mstrip" role="group" aria-label="Capas del mapa" onClickCapture={() => { if (focusSel && !unfocus) setUnfocus(true); }}>
           {admin ? <AdminMapLayers l={adm} set={setAdm} pendingZones={pendingZones.length} pendingCams={pendingCams.length} /> : <>
           {/* Mapa de calor + qué muestra: un solo control, como Cámaras + Visión. Por dentro son hexágonos
               (la forma de tomar el dato); para el usuario es un mapa de calor. Las lecturas aparecen pegadas
@@ -468,7 +477,7 @@ function Layout() {
               elegida) va una vez, en el chip Mapa de calor. */}
           {seen('hex') && <div className={`lchip-group ${layers.hex ? 'on' : ''}`} role="group" aria-label="Mapa de calor">
             <button className={`lchip ${layers.hex && !hexOff(layers.hex) ? 'on' : ''}`} aria-pressed={!!layers.hex && !hexOff(layers.hex)}
-              title="Mapa de calor sobre toda la ciudad: elegí qué muestra" onClick={() => setLayers((l) => ({ ...l, hex: l.hex && !hexOff(l.hex) ? null : !hexOff(hexPick) ? hexPick : inv ? 'alertas' : 'personas' }))}>
+              title="Mapa de calor sobre toda la ciudad: elige qué muestra" onClick={() => setLayers((l) => ({ ...l, hex: l.hex && !hexOff(l.hex) ? null : !hexOff(hexPick) ? hexPick : inv ? 'alertas' : 'personas' }))}>
               {hexIcon(layers.hex && !hexOff(layers.hex) ? layers.hex : hexPick)}Mapa de calor
             </button>
             {layers.hex && !hexOff(layers.hex) && HEX_OPTS.map(([m, label, help]) => (
@@ -546,7 +555,8 @@ function ArrivalBanner() {
   if (!a) return null;
   const where = zones.find((z) => z.id === a.zoneId)?.name ?? cameras.find((x) => x.id === a.cameraId)?.street ?? a.cameraId;
   return (
-    <div className="arrival" role="alert" key={a.id + ':' + (a.kind === 'persona_en_lista' ? a.observations : a.sightings?.length ?? 1)}>
+    /* Con un recorrido en el mapa, su tarjeta ocupa el centro de arriba: el aviso va a la esquina. */
+    <div className={`arrival ${c.overlay.route ? 'aside' : ''}`} role="alert" key={a.id + ':' + (a.kind === 'persona_en_lista' ? a.observations : a.sightings?.length ?? 1)}>
       <AlertTile kind={a.kind} size={34} severity={a.severity} />
       <div className="arrival-txt">
         {/* Una placa que vuelve a leerse no es una alerta nueva: es una lectura más de la misma. */}

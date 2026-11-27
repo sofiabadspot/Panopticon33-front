@@ -10,7 +10,7 @@ const LAYER_NAME: Record<LayerKey, string> = {
   zones: 'Zonas', events: 'Eventos', alerts: 'Alertas', units: 'Unidades policiales', cameras: 'Cámaras', hex: 'Mapa de calor', drones: 'Drones', helis: 'Helicópteros',
 };
 const ACTION_NAME: Record<AlertAction, string> = {
-  decidir: 'decidir alertas', despachar: 'mandar unidades', registrar: 'registrar incidentes', decidir_facial: 'decidir coincidencias faciales',
+  decidir: 'decidir alertas', despachar: 'enviar unidades', registrar: 'registrar incidentes', decidir_facial: 'decidir coincidencias faciales',
 };
 const list = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} y ${xs[xs.length - 1]}`);
 /** Cada cambio se avisa una vez, aunque el efecto corra de nuevo (modo estricto de React en desarrollo). */

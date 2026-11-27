@@ -42,13 +42,13 @@ export const SEVERITY_TARGET_MIN: Record<Severity, number> = { critica: 2, media
 
 export const REVIEW_LABEL: Record<ReviewStatus, string> = { por_revisar: 'Por revisar', confirmada: 'Confirmada', descartada: 'Descartada' };
 
-export const DISPATCH_LABEL: Record<DispatchStatus, string> = { en_camino: 'Refuerzos en camino', en_lugar: 'Refuerzos en el lugar' };
+export const DISPATCH_LABEL: Record<DispatchStatus, string> = { en_camino: 'Unidades en camino', en_lugar: 'Unidades en el lugar' };
 
 export const CAMERA_LABEL: Record<CameraStatus, string> = { operativa: 'Operativa', degradada: 'Degradada', caida: 'Caída', fuera_de_preset: 'Fuera de preset' };
 
-export const UNIT_LABEL: Record<UnitStatus, string> = { disponible: 'Disponible', en_servicio: 'En servicio', sin_reporte: 'Sin reporte reciente', desconocida: 'Sin identificar' };
+export const UNIT_LABEL: Record<UnitStatus, string> = { disponible: 'Disponible', en_servicio: 'En servicio', sin_reporte: 'Sin reporte reciente', desconocida: 'Estado desconocido' };
 
-export const COVERAGE_LABEL: Record<Coverage, string> = { medida: 'Medida', sin_cobertura: 'Sin medición', sin_datos: 'Sin datos' };
+export const COVERAGE_LABEL: Record<Coverage, string> = { medida: 'Medida', sin_cobertura: 'Sin medición', sin_datos: 'Sin dato' };
 
 /** Motivos de descarte: lista corta, un clic. Alimentan el ajuste de umbrales. */
 export const DISCARD_REASONS = [

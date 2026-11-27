@@ -363,3 +363,69 @@ Todo en `app/src/ui/`. Probado en el navegador como Administrador y como Analist
 **Encontrado en el camino:**
 - Con un enlace a una zona que no existe (`?s=zona.ZN-NOEXISTE`), el mapa muestra "Enfocado en ZN-NOEXISTE".
 - Los ejemplos del formulario de opinión de Jules hablan de "andenes", que vienen de Sync y no corresponden a esta consola.
+
+## Decisiones tomadas (27-nov)
+
+1. **Textos:** tuteo, con registro formal.
+2. **Fechas:** un selector propio, en 24 h y con el sistema de diseño.
+3. **Acciones que faltaban:** se hacen todas.
+4. **Legal** (rostros sin registro): pendiente.
+
+## Avance: limpieza, bugs, selector de fecha, acciones y textos (27-nov, tarde)
+
+**Limpieza**
+- Se borraron `InvestigatePanel.tsx`, `InvestigationDock.tsx` y la rama del visor que nunca se usaba.
+- Se borraron 158 reglas de CSS que apuntaban a 73 clases que ya no usa nadie, sobre todo versiones viejas de Jules y del expediente.
+- Se unieron 7 selectores duplicados. Quedan 15 sin unir, porque tienen otras reglas del mismo componente en el medio y unirlas cambiaría la cascada. Se comprobó con una foto de todos los estilos calculados antes y después.
+- Los colores del mapa salen del tema: `--status-positive`, `--surface` y `--zone`. El azul de las zonas en Configuración queda como token: para pasarlo a gris se cambia un solo valor.
+
+**Bugs visuales**
+- Un enlace a algo que no existe ya no atenúa el mapa ni dice "Enfocado en ZN-…".
+- La barra de capas avisa con un degradado cuando hay capas escondidas a un costado, y se desplaza con la rueda del mouse.
+- Con un recorrido en el mapa, el aviso de alerta nueva va a la esquina y ya no tapa la tarjeta del recorrido. La placa no se corta en dos líneas.
+- En la bandeja, la alerta abierta no se mueve cuando entra otra arriba. Aparece "N alertas nuevas arriba".
+- Al cambiar de rol la consola aparece al instante, sin la pantalla negra.
+
+**Selector de fecha propio** (`ui/DatePicker.tsx`)
+- Se puede escribir en formato dd/mm/aaaa hh:mm o abrir el calendario (botón o Alt + ↓).
+- En el calendario: ← → ↑ ↓ mueven el día, Re Pág y Av Pág el mes, Enter elige y Esc cierra.
+- Hora en 24 h, en hora de El Salvador. Atajo "Ahora". Respeta los límites mínimo y máximo.
+- Se usa en todos los campos de fecha: evento, evidencia y bitácora.
+- Se agregó el ícono `calendar_today` a `data/icons.js`.
+
+**Acciones nuevas**, todas con confirmación y registro en la bitácora:
+
+| Acción | Dónde | Deshacer |
+|---|---|---|
+| Cancelar evento (programado), con motivo | Ficha del evento | Sí |
+| Terminar ahora (en curso) | Ficha del evento | Sí |
+| Volver a la bandeja (alerta descartada) | Ficha de alerta | No hace falta |
+| Retirar unidades enviadas a una alerta | Ficha de alerta | No |
+| Editar lista | Configuración → Listas | — |
+| Eliminar lista | Configuración → Listas | Sí |
+| Eliminar regla | Diálogo de la regla | Sí |
+| Eliminar cámara | Ficha de la cámara | Sí |
+
+Las acciones de borrar, cancelar y terminar van en una "zona de peligro" al final de la ficha, con un botón rojo de contorno. "Eliminar zona" y "Eliminar rol" pasaron al mismo lugar y al mismo estilo.
+
+**Textos**
+- **Registro:** no queda voseo en lo que se ve. 27 textos pasaron a tuteo formal; por ejemplo "Bien, seguí" ahora es "Continuar".
+- **MAIC:** siempre en mayúsculas.
+- **Nombre del producto:** "Panopticon 33" en todos los textos.
+- **Despacho:** se dice siempre "Enviar unidades" (52 textos). Las variantes "Refuerzos en camino" y "Mandar" desaparecieron.
+- **Investigaciones:** "evento" pasó a decir "lectura" o "momento", porque "evento" queda solo para el evento masivo.
+- **Recorrido:** "Ver recorrido en el mapa" es la capa del mapa; "Abrir investigación" abre la historia.
+- **Datos que faltan:** "Sin dato" en lugar de "Sin datos". Los estados de unidad dicen lo mismo en todos lados.
+- **Comillas y adverbios:** «…» en los textos (los CSV y los atributos HTML conservan las comillas rectas), y "aquí" en lugar de "acá".
+- **Números:** Jules usa el formato de El Salvador.
+- **Placa:** siempre "P 512-884". La ficha perdía el espacio.
+- **Ejemplos de Jules:** ya no hablan de "andenes".
+- **Ingreso:** "POC" pasó a "Beta".
+
+**Sigue pendiente**
+- MediaViewer, Tabs y Combobox.
+- Pasar los formularios que faltan al campo compartido.
+- La plantilla única de las fichas y la regla única de permisos.
+- Lo que depende del backend.
+- Legal.
+- Los escenarios de demo siguen visibles en el menú de cuenta; hay que ocultarlos en la build de producción.

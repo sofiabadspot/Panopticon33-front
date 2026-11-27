@@ -21,7 +21,7 @@ import { AIRCRAFT, airAt, airTrail } from '../api/aircraft';
 import { SEVERITY_RANK } from '../api/labels';
 import { waitingSince } from '../views/shared';
 
-/** Confirmada con refuerzos en camino: se ve gestionada (gris con tick) y lo dice, hasta que llegan. */
+/** Confirmada con unidades en camino: se ve gestionada (gris con tick) y lo dice, hasta que llegan. */
 const goingTo = (a: Alert) => a.review === 'confirmada' && a.dispatch === 'en_camino';
 import { GOOGLE_LOGO, googleCopyright, googleSession, googleTiles, hasGoogleKey, type GoogleBase } from './google';
 import { provideConsoleMap } from './handoff';
@@ -236,6 +236,7 @@ export function MapView(p: Props) {
     map.on('pitch', () => setView((v) => ({ ...v, pitch: map.getPitch() })));
     map.on('load', () => {
       const negative = token('--status-negative'), alertC = token('--status-alert'), muted = token('--ink-muted'), subtle = token('--ink-subtle'), ink = token('--ink');
+      const positive = token('--status-positive'), surface = token('--surface');
       for (const st of ['operativa', 'degradada', 'fuera_de_preset', 'caida'] as const) {
         const img = new Image(48, 48);
         img.onload = () => { if (!map.hasImage('cam-' + st)) map.addImage('cam-' + st, img, { pixelRatio: 2 }); };
@@ -315,10 +316,10 @@ export function MapView(p: Props) {
       map.addLayer({ id: 'pick-cells', type: 'line', source: 'pick', filter: ['==', ['get', 'k'], 'cell'], paint: { 'line-color': ink, 'line-opacity': 0.45, 'line-width': 1 } });
       map.addLayer({ id: 'pick-line', type: 'line', source: 'pick', filter: ['==', ['get', 'k'], 'outline'], layout: { 'line-join': 'round' }, paint: { 'line-color': ink, 'line-width': 2.4 } });
       map.addLayer({ id: 'sketch-pts', type: 'circle', source: 'sketch', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 4, 'circle-color': ink } });
-      map.addLayer({ id: 'measure-fill', type: 'fill', source: 'measure', filter: ['==', ['get', 'k'], 'circle'], paint: { 'fill-color': ['match', ['get', 'st'], 'cubierta', '#6cd300', 'cerca', alertC, negative], 'fill-opacity': 0.1 } });
+      map.addLayer({ id: 'measure-fill', type: 'fill', source: 'measure', filter: ['==', ['get', 'k'], 'circle'], paint: { 'fill-color': ['match', ['get', 'st'], 'cubierta', positive, 'cerca', alertC, negative], 'fill-opacity': 0.1 } });
       map.addLayer({ id: 'measure-cells', type: 'line', source: 'measure', filter: ['==', ['get', 'k'], 'cell'], paint: { 'line-color': ink, 'line-opacity': 0.25, 'line-width': 0.8 } });
-      map.addLayer({ id: 'measure-center', type: 'circle', source: 'measure', filter: ['==', ['get', 'k'], 'center'], paint: { 'circle-radius': 5, 'circle-color': ink, 'circle-stroke-color': '#090909', 'circle-stroke-width': 2 } });
-      map.addLayer({ id: 'measure-line', type: 'line', source: 'measure', filter: ['==', ['get', 'k'], 'circle'], paint: { 'line-color': ['match', ['get', 'st'], 'cubierta', '#6cd300', 'cerca', alertC, negative], 'line-width': 2, 'line-dasharray': [2, 1.5] } });
+      map.addLayer({ id: 'measure-center', type: 'circle', source: 'measure', filter: ['==', ['get', 'k'], 'center'], paint: { 'circle-radius': 5, 'circle-color': ink, 'circle-stroke-color': surface, 'circle-stroke-width': 2 } });
+      map.addLayer({ id: 'measure-line', type: 'line', source: 'measure', filter: ['==', ['get', 'k'], 'circle'], paint: { 'line-color': ['match', ['get', 'st'], 'cubierta', positive, 'cerca', alertC, negative], 'line-width': 2, 'line-dasharray': [2, 1.5] } });
       map.on('click', 'zones-fill', (e: MapLayerMouseEvent) => { if (!cb.current.onMapClick && !(e.originalEvent.altKey && cb.current.onAltClick)) cb.current.onZoneClick?.(String(e.features?.[0]?.properties?.id)); });
       map.on('mouseenter', 'zones-fill', () => { if (cb.current.onZoneClick && !cb.current.onMapClick) map.getCanvas().style.cursor = 'pointer'; });
       map.on('mouseleave', 'zones-fill', () => { map.getCanvas().style.cursor = cb.current.onMapClick ? 'crosshair' : ''; });
@@ -878,7 +879,7 @@ export function MapView(p: Props) {
     if (P.alerts) for (const a of alertSplit.singles) {
       // Chapa con la punta en el lugar exacto: el dibujo dice el tipo, las barras la criticidad y el borde la espera.
       // .mk-alert-scale crece con el zoom del mapa (variable --az, ver onZoom), sin esperar a que termine.
-      add('a' + a.id, [a.lon, a.lat], <span className={`mk-alert-scale ${P.freshAlerts?.includes(a.id) ? 'is-new' : ''}`} onMouseEnter={() => P.onAlertHover?.(a.id)} onMouseLeave={() => P.onAlertHover?.(null)}><AlertMark kind={a.kind} severity={a.severity} since={waitingSince(a)} state={a.review === 'por_revisar' ? 'espera' : a.review === 'confirmada' ? 'confirmada' : 'descartada'} units={P.units?.filter((u) => u.enRoute?.alertId === a.id).length ?? 0} size={34} />{a.review === 'descartada' && <i className="mk-done" aria-label="Descartada" />}{goingTo(a) && <i className="mk-go-tag">Refuerzos en camino</i>}{P.freshAlerts?.includes(a.id) && <><i className="new-ring" /><i className="new-ring r2" /><i className="new-ring r3" /></>}</span>, P.onAlertClick ? () => P.onAlertClick!(a.id) : undefined, 'bottom', `Alerta ${a.id}${goingTo(a) ? ' · refuerzos en camino' : ''}`);
+      add('a' + a.id, [a.lon, a.lat], <span className={`mk-alert-scale ${P.freshAlerts?.includes(a.id) ? 'is-new' : ''}`} onMouseEnter={() => P.onAlertHover?.(a.id)} onMouseLeave={() => P.onAlertHover?.(null)}><AlertMark kind={a.kind} severity={a.severity} since={waitingSince(a)} state={a.review === 'por_revisar' ? 'espera' : a.review === 'confirmada' ? 'confirmada' : 'descartada'} units={P.units?.filter((u) => u.enRoute?.alertId === a.id).length ?? 0} size={34} />{a.review === 'descartada' && <i className="mk-done" aria-label="Descartada" />}{goingTo(a) && <i className="mk-go-tag">Unidades en camino</i>}{P.freshAlerts?.includes(a.id) && <><i className="new-ring" /><i className="new-ring r2" /><i className="new-ring r3" /></>}</span>, P.onAlertClick ? () => P.onAlertClick!(a.id) : undefined, 'bottom', `Alerta ${a.id}${goingTo(a) ? ' · unidades en camino' : ''}`);
     }
     if (selCam && !focus) add('csel' + selCam.id, [selCam.lon, selCam.lat], <span className="mk-camsel" aria-hidden><i /><i className="r2" /><b>{selCam.id}</b></span>);
     if (P.signal) add('sig' + P.signal.key, [P.signal.lon, P.signal.lat], <span className="mk-signal" aria-hidden><i /><i /><i /><s /><b /><em>{P.signal.label}</em></span>);
@@ -1095,8 +1096,8 @@ function ViewControl({ view, map }: { view: { bearing: number; pitch: number }; 
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
         onClick={() => { if (moved.current) { moved.current = false; return; } ease({ bearing: 0 }); }}
         onKeyDown={onKey}
-        aria-label={`Mira hacia ${card}, inclinación ${Math.round(view.pitch)}°. Arrastrá para girar e inclinar; flechas del teclado también. Clic: volver al norte`}
-        title="Arrastrá: ↔ girar · ↕ inclinar · Clic: volver al norte">
+        aria-label={`Mira hacia ${card}, inclinación ${Math.round(view.pitch)}°. Arrastra para girar e inclinar; flechas del teclado también. Clic: volver al norte`}
+        title="Arrastra: ↔ girar · ↕ inclinar · Clic: volver al norte">
         <svg viewBox="0 0 24 24" aria-hidden style={{ transform: `rotate(${-view.bearing}deg)` }}><path d="M12 3l3.2 9H8.8z" className="n" /><path d="M12 21l-3.2-9h6.4z" className="s" /></svg>
         <small>{card}</small>
       </button>

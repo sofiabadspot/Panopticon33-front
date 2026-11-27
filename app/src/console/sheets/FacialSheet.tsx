@@ -79,7 +79,7 @@ export function FacialPanel() {
         ))}
       </div>
       {/* Vacía: no hubo coincidencias. Con coincidencias pero ninguna pendiente: se dice antes de la lista. */}
-      {!matches.length && <EmptyState icon="visibility" title="Sin coincidencias">{list === 'todas' ? 'Los puntos de control no encontraron rostros de las listas. Si aparece uno, llega acá con un aviso.' : `Nada de ${FACIAL_LISTS[list].name.toLowerCase()}.`}</EmptyState>}
+      {!matches.length && <EmptyState icon="visibility" title="Sin coincidencias">{list === 'todas' ? 'Los puntos de control no encontraron rostros de las listas. Si aparece uno, llega aquí con un aviso.' : `Nada de ${FACIAL_LISTS[list].name.toLowerCase()}.`}</EmptyState>}
       {matches.length > 0 && !matches.some((m) => m.status === 'por_revisar') && <div className="es-inline"><span className="es-ic" aria-hidden><Icon name="done_all" /></span><span><b>Todo revisado.</b> Ninguna coincidencia espera decisión.</span></div>}
       <ul className="list pb flush">
         {matches.map((m) => {
@@ -227,7 +227,7 @@ export function FacialSheet({ id }: { id: string }) {
 
         <ul className="fc-facts">
           <li className={trip.ok ? '' : 'warn'}><Icon name="route" /><span>{m.detections.length} {m.detections.length === 1 ? 'detección' : 'detecciones'} hoy en {cams} {cams === 1 ? 'cámara' : 'cámaras'}{trip.ok ? '' : ' · el recorrido no cierra'}</span>
-            <button className="btn ghost xs" onClick={toggleTrace}>{trace ? 'Ocultar' : 'Ver en el mapa'}</button></li>
+            <button className="btn ghost xs" onClick={toggleTrace}>{trace ? 'Ocultar recorrido' : 'Ver recorrido en el mapa'}</button></li>
           <li><Icon name="location_on" /><span>Última: {d.place} · {ago(d.at, now)}</span></li>
           <li className={m.risk.level === 'alto' ? 'danger' : m.risk.level === 'medio' ? 'warn' : ''}><Icon name="warning" /><span>Riesgo {m.risk.level}: {m.risk.notes[0]}</span></li>
           {m.similarDiscarded > 0 && <li className="warn"><Icon name="group" /><span>Hay alguien que se le parece: {m.similarDiscarded} ya {m.similarDiscarded === 1 ? 'descartada' : 'descartadas'}</span></li>}

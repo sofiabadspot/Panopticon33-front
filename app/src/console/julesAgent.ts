@@ -104,14 +104,14 @@ export function runAgent(role: Role): AgentBrief {
       key, tone, lead, leadDetail, subject: z.name,
       ask: `¿Mando ${unitsTxt(ids.length)}? ${ids.length === 1 ? 'La más cercana' : 'Las más cercanas'} ${etaTxt}.`,
       doneText: `Listo. ${ids.length === 1 ? 'Va' : 'Van'} ${unitsTxt(ids.length)} a ${z.name} (${ids.join(', ')}); ${etaTxt}.`,
-      title: `Mandar ${unitsTxt(ids.length)}`,
+      title: `Enviar ${unitsTxt(ids.length)}`,
       effect: `${why ? why + ' ' : ''}${ids.length === 1 ? 'Llega' : 'Llegan'} en ${Math.max(1, Math.round(eta))} min (${ids.join(', ')}).`,
       cost: leave.length ? `Dejan ${leave.join(' y ')} con menos presencia.` : undefined,
       look: { label: 'Ver zona', sheet: { k: 'zona', id: z.id } },
       approve: (by) => {
-        sendUnitsTo(z, ids, by, `Refuerzo a ${z.name} (propuesto por Jules)`);
+        sendUnitsTo(z, ids, by, `Envío a ${z.name} (propuesto por Jules)`);
         settled.add(key);
-        log = [{ key: `hecho-${key}`, text: `Mandé ${unitsTxt(ids.length)} a ${z.name}, con la aprobación de ${by.name}.`, at: Date.now(), look: { label: 'Ver zona', sheet: { k: 'zona', id: z.id } } }, ...log];
+        log = [{ key: `hecho-${key}`, text: `Envié ${unitsTxt(ids.length)} a ${z.name}, con la aprobación de ${by.name}.`, at: Date.now(), look: { label: 'Ver zona', sheet: { k: 'zona', id: z.id } } }, ...log];
         emit();
       },
     });
@@ -144,7 +144,7 @@ export function runAgent(role: Role): AgentBrief {
   const watching: string[] = [];
   if (top && occ >= 0.75) watching.push(`${top.name}: si pasa el ${pct(Math.max(1, Math.ceil((occ + 0.1) * 10) / 10))}, te propongo más refuerzos.`);
   if (waiting.length) watching.push(`Las ${waiting.length} alertas sin decisión: si alguna crítica se atrasa, aviso al supervisor.`);
-  if (!watching.length) watching.push('Las zonas, las alertas y las cámaras: si algo cambia, te aviso acá.');
+  if (!watching.length) watching.push('Las zonas, las alertas y las cámaras: si algo cambia, te aviso aquí.');
 
   return { tone, headline, detail, proposals, done: log, watching };
 }

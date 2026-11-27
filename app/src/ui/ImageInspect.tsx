@@ -158,7 +158,7 @@ export function ImageViewer({ ev, title, sub, rotation, onRotate, onClose, nav }
         <span className="iv-hud" aria-hidden><i /><i /><i /><i /></span>
         <span className="iv-cross" aria-hidden />
         <span className="iv-read mono" aria-live="polite">ZOOM {Math.round(z * 100)}% · GIRO {rotation}°</span>
-        <span className={`iv-hint ${hint ? '' : 'gone'}`} aria-hidden><ScrollIcon />Rueda para acercar · arrastrá para mover · doble clic</span>
+        <span className={`iv-hint ${hint ? '' : 'gone'}`} aria-hidden><ScrollIcon />Rueda para acercar · arrastra para mover · doble clic</span>
       </div>
 
       <div className="iv-dock" role="toolbar" aria-label="Controles de la imagen">

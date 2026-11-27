@@ -3,6 +3,7 @@
    Las dos secciones dejan el mapa a la vista: lo que se elige en la lista se señala en el mapa. */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
+  deleteCamera, restoreCamera,
   addCameras, deleteZone, importZones, newCameraId, newZoneId, saveZone, setRuleOverrides,
   setCameraPreset, updateCamera, useApi,
 } from '../../api';
@@ -43,7 +44,7 @@ export function ConfirmDelete({ title, children, action, onConfirm, onClose, ton
       <button className="btn ghost sm" onClick={onClose}>Cancelar</button>
       <button className={`btn ${tone} sm`} onClick={onConfirm}>{action}</button>
     </>}>
-      <p className="muted" style={{ margin: 0, fontSize: 'var(--fs-md)' }}>{children}</p>
+      <div className="muted" style={{ fontSize: 'var(--fs-md)' }}>{children}</div>
     </Dialog>
   );
 }
@@ -102,7 +103,7 @@ export function ZonesSection() {
     const a = cellsArea(cells);
     const id = newZoneId();
     saveZone({ id, name: f.name.trim(), lat: shape.lat, lon: shape.lon, ring: shape.ring, cells, areaM2: a, capacity: Math.round((a * 4) / 100) * 100, cameras: [], territory }, user);
-    toast(`Zona "${f.name.trim()}" creada con ${cells.length} ${cells.length === 1 ? 'hexágono' : 'hexágonos'}. Revisa su capacidad y asígnale cámaras.`);
+    toast(`Zona «${f.name.trim()}» creada con ${cells.length} ${cells.length === 1 ? 'hexágono' : 'hexágonos'}. Revisa su capacidad y asígnale cámaras.`);
     setDrawing(false); setCells([]); setF({ name: '' });
     c.open({ k: 'config', tab: 'zonas', id });
   };
@@ -265,7 +266,7 @@ export function ZoneDetail({ id }: { id: string }) {
                 <span className="hint dim" style={{ fontSize: 'var(--fs-xs)' }}>{thr[r.id] ? `Propio de esta zona. Para todas las zonas es ${fmt(r.threshold ?? 0)}.` : `Vacío: usa el de todas las zonas (${fmt(r.threshold ?? 0)}).`}</span>
               </div>
             ))}
-            <span className="hint dim" style={{ fontSize: 'var(--fs-sm)' }}>Durante un evento, mandan los umbrales del evento. La criticidad de cada alerta se fija en la regla.</span>
+            <span className="hint dim" style={{ fontSize: 'var(--fs-sm)' }}>Durante un evento, rigen los umbrales del evento. La criticidad de cada alerta se fija en la regla.</span>
           </div>
         </div>
 
@@ -275,8 +276,10 @@ export function ZoneDetail({ id }: { id: string }) {
             <ul className="list bb">{usedBy.map((e) => <li key={e.id}><button type="button" className="item" style={{ gridTemplateColumns: '1fr auto' }} onClick={() => c.open({ k: 'evento', id: e.id })}><div className="t">{e.name}</div><Icon name="chevron_right" /></button></li>)}</ul>
           </div>
         )}
-        <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} disabled={!!usedBy.length} onClick={() => setDel(true)}><Icon name="remove" />Eliminar zona</button>
-        {usedBy.length > 0 && <span className="dim" style={{ fontSize: 'var(--fs-sm)' }}>No se puede eliminar mientras un evento la use. Quítala primero del evento.</span>}
+        <div className="danger-zone">
+          <button type="button" className="btn ghost danger sm" disabled={!!usedBy.length} onClick={() => setDel(true)}><Icon name="remove" />Eliminar zona</button>
+          {usedBy.length > 0 && <span className="dim">No se puede eliminar mientras un evento la use. Quítala primero del evento.</span>}
+        </div>
       </form>
       <UnsavedGuard dirty={dirty} />
       <div className="pf"><button type="button" className="btn ghost sm" onClick={() => c.open({ k: 'config', tab: 'zonas' })}>Volver a zonas</button>
@@ -310,7 +313,7 @@ function parseCamera(row: Record<string, string>, taken: string[], zones: { id: 
   if (taken.includes(id)) return { error: `${id} ya existe.` };
   if (!street) return { error: `${id}: falta la ubicación.` };
   if (!inSV(lat, lon)) return { error: `${id}: las coordenadas están fuera de El Salvador.` };
-  if (!(kind in KIND_SHORT)) return { error: `${id}: el tipo "${row.tipo}" no existe. Usa mixta, vehicular o peatonal.` };
+  if (!(kind in KIND_SHORT)) return { error: `${id}: el tipo «${row.tipo}» no existe. Usa mixta, vehicular o peatonal.` };
   if (zone && !zones.some((z) => z.id === zone)) return { error: `${id}: la zona ${zone} no existe.` };
   return { ok: newCamera({ id, street, lat, lon, kind, ptz: /^(si|sí|s|1|true|x)$/i.test(row.ptz?.trim() ?? ''), zoneId: zone }) };
 }
@@ -411,6 +414,7 @@ export function CameraDetail({ id }: { id: string }) {
   const [f, setF] = useState(() => init(cam));
   const [pick, setPick] = useState(false);
   const [preset, setPreset] = useState('');
+  const [delCam, setDelCam] = useState(false);
   const lat = num(f.lat), lon = num(f.lon);
   useEffect(() => { if (cam) { c.setPin({ lat: cam.lat, lon: cam.lon, label: cam.id }); c.focus([[cam.lon - 0.002, cam.lat - 0.0015], [cam.lon + 0.002, cam.lat + 0.0015]], 'cam' + cam.id); } return () => c.setPin(null); }, [cam?.id, cam?.lat, cam?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
   useOverlay(pick ? { onMapClick: ([x, y]) => { setF((p) => ({ ...p, lat: y.toFixed(5), lon: x.toFixed(5) })); setPick(false); } } : {}, [pick]);
@@ -486,7 +490,15 @@ export function CameraDetail({ id }: { id: string }) {
             <dt>Cuadros por segundo</dt><dd className="mono">{cam.status === 'caida' ? '—' : cam.fps}</dd>
           </dl>
         </div>
+        <div className="danger-zone">
+          <button type="button" className="btn ghost danger sm" onClick={() => setDelCam(true)}><Icon name="remove" />Eliminar cámara</button>
+          <span className="dim">Si la cámara se dio de baja. {cam.zoneId ? 'Su zona deja de medirse con ella.' : ''}</span>
+        </div>
       </form>
+      {delCam && <ConfirmDelete title={`¿Eliminar la cámara ${cam.id}?`} action="Eliminar cámara" onClose={() => setDelCam(false)}
+        onConfirm={() => { const k = deleteCamera(cam.id, user); setDelCam(false); c.open({ k: 'config', tab: 'camaras' }); if (k) toast(`${cam.id}: eliminada`, { undo: () => restoreCamera(k, user) }); }}>
+        Sale del mapa y de las listas de cámaras{cam.zoneId ? ', y su zona pierde esta medición' : ''}. Lo que ya registró en la bitácora queda.
+      </ConfirmDelete>}
       <UnsavedGuard dirty={dirty} />
       <div className="pf"><button type="button" className="btn ghost sm" onClick={() => c.open({ k: 'config', tab: 'camaras' })}>Volver a cámaras</button>
         <button type="submit" form="cam-form" className="btn primary sm" style={{ marginLeft: 'auto' }} disabled={!dirty || !okPos || !f.street.trim()}>Guardar cambios</button></div>

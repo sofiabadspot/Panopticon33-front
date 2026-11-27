@@ -5,7 +5,7 @@
    - Listas: contra qué se comparan placas y rostros. */
 import { useState } from 'react';
 import {
-  addList, eventStatus, isListStale, LIST_MODES, loadListEntries, newEventId, saveEvent, setRuleOverrides, setSeverityTargets, syncList, updateRule, useApi,
+  addList, deleteList, deleteRule, restoreList, restoreRule, updateList, eventStatus, isListStale, LIST_MODES, loadListEntries, newEventId, saveEvent, setRuleOverrides, setSeverityTargets, syncList, updateRule, useApi,
 } from '../../api';
 import { cellsAround, zoneHexes, zonesTouching } from '../../api/coverage';
 import { ago, dateShort, fmt, fmtCrowd, fromLocalInput, hhmm } from '../../api/format';
@@ -112,7 +112,7 @@ export function EventsSection() {
                     <div className="s">{dateShort(e.start)} · {hhmm(e.start)}–{hhmm(e.end)} · {e.zoneIds.length} {e.zoneIds.length === 1 ? 'zona' : 'zonas'}</div>
                     <div className="s">Aforo {fmtCrowd(cap)} · esperadas {fmtCrowd(e.expected)} · {fmt(e.plannedOfficers)} policías{e.thresholds ? ' · umbrales propios' : ''}</div>
                   </div>
-                  <div className="r"><EventTag s={st} /></div>
+                  <div className="r"><EventTag s={st} cancelled={!!e.cancelled} /></div>
                 </button></li>
               );
             })}
@@ -205,8 +205,16 @@ export function RuleDialog({ rule, onClose }: { rule: Rule; onClose: () => void 
   const [ovr, setOvr] = useState<RuleOverride[]>(rule.overrides);
   const free = (o: RuleOverride, i: number) => !ovr.some((x, j) => j !== i && x.targetId === o.targetId);
   const ovrOk = ovr.every((o, i) => o.targetId && o.threshold > 0 && free(o, i));
+  const [del, setDel] = useState(false);
+  if (del) return (
+    <ConfirmDelete title={`¿Eliminar la regla «${rule.name}»?`} action="Eliminar regla" onClose={() => setDel(false)}
+      onConfirm={() => { const r = deleteRule(rule.id, user); onClose(); if (r) toast(`${rule.name}: eliminada`, { undo: () => restoreRule(r, user) }); }}>
+      Deja de crear alertas de «{KIND_LABEL[rule.kind].toLowerCase()}» en {rule.scope.toLowerCase()}, incluidos los umbrales propios de sus zonas. Si solo quieres pausarla, apágala en la tabla.
+    </ConfirmDelete>
+  );
   return (
         <Dialog title={rule.name} onClose={() => onClose()} footer={<>
+          <button className="btn ghost danger sm" style={{ marginRight: 'auto' }} onClick={() => setDel(true)}><Icon name="remove" />Eliminar regla</button>
           <button className="btn ghost sm" onClick={() => onClose()}>Cancelar</button>
           <button className="btn primary sm" disabled={!(Number(v.threshold) > 0) || !ovrOk} onClick={() => {
             if (Number(v.threshold) !== rule.threshold) updateRule(rule.id, { threshold: Number(v.threshold), source: 'ministerio' }, user);
@@ -299,6 +307,9 @@ export function ListsSection() {
   const lists = useApi((s) => s.lists);
   const rules = useApi((s) => s.rules);
   const [adding, setAdding] = useState(false);
+  /* Editar usa el mismo diálogo que agregar; el tipo (vehículos o personas) no se cambia. */
+  const [editId, setEditId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<WatchList | null>(null);
   const [loading, setLoading] = useState<WatchList | null>(null);
   const [ruleEdit, setRuleEdit] = useState<Rule | null>(null);
   const [f, setF] = useState({ name: '', kind: 'vehiculos' as WatchList['kind'], origin: '', mode: 'Carga manual' as ListMode, maxAgeH: '24' });
@@ -330,9 +341,12 @@ export function ListsSection() {
                           <td className="r mono">{fmt(l.entries)}</td>
                           <td>{stale ? <span className="chip media"><Icon name="warning" />{ago(l.lastSyncAt, now)}</span> : <span>{ago(l.lastSyncAt, now)}</span>}
                             {stale && <div className="dim" style={{ fontSize: 'var(--fs-xs)' }}>Pasó el plazo de {l.maxAgeMin >= 60 ? `${Math.round(l.maxAgeMin / 60)} h` : `${l.maxAgeMin} min`}: el 911 ve un aviso.</div>}</td>
-                          <td className="r">{l.mode === 'Carga manual'
+                          <td className="r"><span className="row-acts">
+                            <button className="btn ghost xs" aria-label={`Editar ${l.name}`} onClick={() => { setF({ name: l.name, kind: l.kind, origin: l.origin, mode: l.mode, maxAgeH: String(Math.max(1, Math.round(l.maxAgeMin / 60))) }); setEditId(l.id); setAdding(true); }}>Editar</button>
+                            <button className="btn ghost danger xs" aria-label={`Eliminar ${l.name}`} onClick={() => setDeleting(l)}>Eliminar</button>
+                            {l.mode === 'Carga manual'
                             ? <button className="btn secondary xs" onClick={() => setLoading(l)}><Icon name="arrow_upward" />Cargar archivo</button>
-                            : <button className="btn ghost xs" onClick={() => { syncList(l.id, user); toast(`${l.name}: sincronizada`); }}><Icon name="sync" />Sincronizar ahora</button>}</td>
+                            : <button className="btn ghost xs" onClick={() => { syncList(l.id, user); toast(`${l.name}: sincronizada`); }}><Icon name="sync" />Sincronizar ahora</button>}</span></td>
                         </tr>
                       );
                     })}
@@ -346,17 +360,23 @@ export function ListsSection() {
       </div>
 
       {adding && (
-        <Dialog title="Agregar lista" onClose={() => setAdding(false)} footer={<>
-          <button className="btn ghost sm" onClick={() => setAdding(false)}>Cancelar</button>
+        <Dialog title={editId ? 'Editar lista' : 'Agregar lista'} onClose={() => { setAdding(false); setEditId(null); }} footer={<>
+          <button className="btn ghost sm" onClick={() => { setAdding(false); setEditId(null); }}>Cancelar</button>
           <button className="btn primary sm" disabled={!f.name.trim() || !f.origin.trim() || !(Number(f.maxAgeH) > 0)} onClick={() => {
-            addList({ name: f.name.trim(), kind: f.kind, origin: f.origin.trim(), mode: f.mode, maxAgeMin: Number(f.maxAgeH) * 60 }, user);
-            toast(f.mode === 'Carga manual' ? `Lista "${f.name.trim()}" creada. Ahora carga su archivo.` : `Lista "${f.name.trim()}" creada. Queda pendiente de conectar con ${f.origin.trim()}.`);
-            setAdding(false); setF({ name: '', kind: 'vehiculos', origin: '', mode: 'Carga manual', maxAgeH: '24' });
-          }}>Agregar lista</button>
+            if (editId) {
+              updateList(editId, { name: f.name.trim(), origin: f.origin.trim(), mode: f.mode, maxAgeMin: Number(f.maxAgeH) * 60 }, user);
+              toast(`Lista «${f.name.trim()}» guardada`);
+            } else {
+              addList({ name: f.name.trim(), kind: f.kind, origin: f.origin.trim(), mode: f.mode, maxAgeMin: Number(f.maxAgeH) * 60 }, user);
+              toast(f.mode === 'Carga manual' ? `Lista «${f.name.trim()}» creada. Ahora carga su archivo.` : `Lista «${f.name.trim()}» creada. Queda pendiente de conectar con ${f.origin.trim()}.`);
+            }
+            setAdding(false); setEditId(null); setF({ name: '', kind: 'vehiculos', origin: '', mode: 'Carga manual', maxAgeH: '24' });
+          }}>{editId ? 'Guardar cambios' : 'Agregar lista'}</button>
         </>}>
           <div className="field"><label htmlFor="ln">Nombre</label><input id="ln" className="fld" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Vehículos con orden de búsqueda" /></div>
           <div className="field"><span className="lbl">Qué contiene</span>
-            <Segmented label="Qué contiene" value={f.kind} onChange={(kind) => setF({ ...f, kind })} options={[{ value: 'vehiculos', label: 'Placas de vehículos' }, { value: 'personas', label: 'Personas' }]} /></div>
+            <Segmented label="Qué contiene" value={f.kind} onChange={(kind) => setF({ ...f, kind })} options={[{ value: 'vehiculos', label: 'Placas de vehículos', disabled: !!editId && f.kind !== 'vehiculos' }, { value: 'personas', label: 'Personas', disabled: !!editId && f.kind !== 'personas' }]} />
+            {editId && <span className="hint">El tipo de una lista no se cambia: crea otra lista.</span>}</div>
           <div className="field"><label htmlFor="lo">De dónde viene</label><input id="lo" className="fld" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} placeholder="PNC, Fiscalía, Ministerio…" /></div>
           <div className="form-row">
             <div className="field"><label htmlFor="lm">Cómo se actualiza</label>
@@ -367,6 +387,12 @@ export function ListsSection() {
         </Dialog>
       )}
       {ruleEdit && <RuleDialog rule={ruleEdit} onClose={() => setRuleEdit(null)} />}
+      {deleting && (
+        <ConfirmDelete title={`¿Eliminar la lista «${deleting.name}»?`} action="Eliminar lista" onClose={() => setDeleting(null)}
+          onConfirm={() => { const l = deleteList(deleting.id, user); setDeleting(null); if (l) toast(`${l.name}: eliminada`, { undo: () => restoreList(l, user) }); }}>
+          Sus {fmt(deleting.entries)} entradas dejan de generar alertas desde ahora. Las alertas que ya se crearon no cambian.
+        </ConfirmDelete>
+      )}
       {loading && (
         <CsvImport<Record<string, string>> title={`Cargar ${loading.name}`} what="entradas" columns={ENTRY_COLUMNS[loading.kind]} fileName={`plantilla-${loading.kind}.csv`}
           parse={(row) => {

@@ -22,7 +22,7 @@ type Mode = 'archivo' | 'titulo' | 'plataforma';
 const ITEMS: { id: Mode; label: string; icon: string; hint: string }[] = [
   { id: 'archivo', label: 'Adjuntar archivo', icon: 'description', hint: 'Imagen, video o documento' },
   { id: 'titulo', label: 'Solo título', icon: 'edit_note', hint: 'Lo que se sabe, sin archivo' },
-  { id: 'plataforma', label: 'De la plataforma', icon: 'videocam', hint: 'Video de una cámara de Panopticon' },
+  { id: 'plataforma', label: 'De la plataforma', icon: 'videocam', hint: 'Video de una cámara de Panopticon 33' },
 ];
 
 /** De dónde viene la evidencia: las fuentes del expediente facial y las externas habituales. */
@@ -52,7 +52,7 @@ function useWhenAndSource(story: Story) {
   const sourceField = (
     <div className="field"><label htmlFor="ev-src">Fuente</label>
       <select id="ev-src" className="fld sm" value={pick} onChange={(e) => setPick(e.target.value)}>
-        <option value="">Elegí de dónde viene…</option>{EVIDENCE_SOURCES.map((s) => <option key={s}>{s}</option>)}<option>{OTHER}</option>
+        <option value="">Elige de dónde viene…</option>{EVIDENCE_SOURCES.map((s) => <option key={s}>{s}</option>)}<option>{OTHER}</option>
       </select>
       {pick === OTHER && <input className="fld sm" autoFocus value={other} onChange={(e) => setOther(e.target.value)} placeholder="Nombre de la fuente" aria-label="Nombre de la fuente" />}</div>
   );
@@ -96,7 +96,7 @@ export function EvidenceFan({ story, p, xy, onClose }: { story: Story; p: LngLat
     if (!ok || !mode) return;
     const done = mode === 'plataforma'
       // El video de la cámara lo suma la historia sola (storyChapters) al tener cameraId.
-      ? add({ at: t!, lat: camera!.lat, lon: camera!.lon, place: camera!.street, cameraId: camera!.id, evidence: [{ type: 'pendiente', caption: title.trim() || `Video de la cámara ${camera!.id}` }], srcLabel: `Panopticon · Cámara ${camera!.id}` })
+      ? add({ at: t!, lat: camera!.lat, lon: camera!.lon, place: camera!.street, cameraId: camera!.id, evidence: [{ type: 'pendiente', caption: title.trim() || `Video de la cámara ${camera!.id}` }], srcLabel: `Panopticon 33 · Cámara ${camera!.id}` })
       : add({ at: t!, lat: p[1], lon: p[0], place: placeLabel(p[1], p[0]), evidence: [mode === 'archivo' ? evOf(file!, title.trim()) : { type: 'pendiente', caption: title.trim() }], srcLabel: source });
     if (done) onClose();
   };

@@ -152,6 +152,8 @@ export interface MassEvent {
   /** Umbrales propios: reemplazan a los de la zona mientras dura el evento. */
   thresholds: { occupancyPct: number; perOfficer: number; persistenceMin: number } | null;
   createdBy: string;
+  /** Cancelado antes de empezar: no cuenta como evento (sus zonas vuelven a su aforo y umbrales). */
+  cancelled?: { at: number; by: string; reason: string } | null;
 }
 
 export interface Rule {

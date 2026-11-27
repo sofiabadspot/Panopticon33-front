@@ -66,7 +66,7 @@ export function Search() {
       for (const u of UNKNOWN_FACES.filter((u) => has(u.label) || has(u.id) || (t.length >= 4 && has('persona sin identificar'))))
         out.push({ group: 'Investigar', icon: 'person_search', label: `Investigar a la persona sin identificar ${u.id}`, sub: u.label, ref: 'historia:sin_identificar:' + u.id, run: () => openStory({ k: 'sin_identificar', faceId: u.id }) });
     }
-    if (perm.jules) out.push({ group: 'Jules', icon: 'auto_awesome', label: `Preguntar a Jules: "${q.trim()}"`, sub: 'Consulta y recomienda; no ejecuta acciones', ref: 'jules:' + q.trim(), run: () => c.askJules(q.trim()) });
+    if (perm.jules) out.push({ group: 'Jules', icon: 'auto_awesome', label: `Preguntar a Jules: «${q.trim()}»`, sub: 'Consulta y recomienda; no ejecuta acciones', ref: 'jules:' + q.trim(), run: () => c.askJules(q.trim()) });
     if (PLATE_RE.test(q.trim())) {
       if (perm.has('investigar') && !/[*?]/.test(q)) out.push({ group: 'Placas', icon: 'badge', label: `Ficha del vehículo ${q.trim().toUpperCase()}`, sub: 'Pide motivo; queda en la bitácora', ref: 'vehiculo:' + q.trim().toUpperCase(), run: () => openVehicle(q.trim().toUpperCase()) });
       for (const a of alerts.filter((x) => x.plate && inScope(x, user) && (normalizePlate(x.plate.listed).includes(np.replace(/[*?]/g, '')) || normalizePlate(x.plate.read).includes(np.replace(/[*?]/g, ''))))) {

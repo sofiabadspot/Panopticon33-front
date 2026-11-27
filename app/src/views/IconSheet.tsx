@@ -26,7 +26,7 @@ export function IconSheet() {
   return (
     <main className="isheet">
       <header className="is-head">
-        <span className="is-lbl">Panóptico 33 · Sistema iconográfico</span>
+        <span className="is-lbl">Panopticon 33 · Sistema iconográfico</span>
         <h1>Cada cosa en el mapa se reconoce por su forma</h1>
         <ol className="is-rules">
           <li><b>La forma de afuera dice la categoría.</b> Alerta: chapa cuadrada con asta. Unidad: hexágono. Cámara: nodo con mira.</li>

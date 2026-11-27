@@ -107,7 +107,7 @@ const zoneSources = (zones: Zone[], status: Record<string, ZoneStatus>): Source[
   // Aureola: la gente que se acerca o sale, alrededor de la zona.
   return [...spots, { lat: z.lat, lon: z.lon, a: Math.min(0.4, occ * 0.22), sigma: Math.max(200, r * 1.8) }];
 });
-/** Alertas abiertas (por revisar, o confirmadas con refuerzos en camino), pesadas por criticidad. */
+/** Alertas abiertas (por revisar, o confirmadas con unidades en camino), pesadas por criticidad. */
 const SEV_W = { critica: 0.9, media: 0.6, baja: 0.35 } as const;
 const alertSources = (alerts: Alert[]): Source[] =>
   alerts.filter((a) => a.review === 'por_revisar' || a.dispatch === 'en_camino').map((a) => ({ lat: a.lat, lon: a.lon, a: SEV_W[a.severity], sigma: 280 }));

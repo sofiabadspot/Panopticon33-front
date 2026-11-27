@@ -2,7 +2,7 @@
    su atajo de teclado. Decidido en la reunión del 26/11:
    · Mover (V): el mapa como siempre.
    · Registrar incidentes (I): clic en el mapa → junto al punto se abre un abanico de botones (boceto del
-     27/11): Mandar unidades (rojo, el primero) y qué pasó (robo, riña…). Reemplaza al botón "¿Quién
+     27/11): Enviar unidades (rojo, el primero) y qué pasó (robo, riña…). Reemplaza al botón "¿Quién
      llega?" (renombrado en la reunión). Atajo directo: Alt + clic en el mapa.
    · Agregar evidencia (A): solo en la investigación del analista; mismo abanico (archivo, título, plataforma).
    · ¿Quién llega? (Q): solo para los roles que no registran incidentes (miden, no despachan).
@@ -104,7 +104,7 @@ export function CommandBar({ tool, setTool, canIncident, canMeasure, onNewEvent,
             <div ref={evMenu} className="cmd-pop cmd-menu" role="menu" aria-label="Agregar evidencia">
               <div className="cmd-pop-hd"><span>Agregar evidencia</span></div>
               <button role="menuitem" tabIndex={-1} className="cmd-opt" onClick={() => { setMenu(null); setTool('evidencia'); }}>
-                <Icon name="location_on" /><span><b>En un lugar del mapa</b><small>Tocás el punto donde pasó: un video, una foto o una cámara de la plataforma</small></span>
+                <Icon name="location_on" /><span><b>En un lugar del mapa</b><small>Toca el punto donde pasó: un video, una foto o una cámara de la plataforma</small></span>
               </button>
               <button role="menuitem" tabIndex={-1} className="cmd-opt" onClick={() => { setMenu(null); setTool('mover'); onLooseEvidence?.(); }}>
                 <Icon name="description" /><span><b>Sin lugar en el mapa</b><small>Un documento, fotos o un informe: se ve como una escena del recorrido</small></span>
@@ -124,7 +124,7 @@ export function CommandBar({ tool, setTool, canIncident, canMeasure, onNewEvent,
             <div className="cmd-pop-hd"><span>Atajos de teclado</span></div>
             <dl>
               <dt><kbd className="kbd">V</kbd></dt><dd>Mover el mapa</dd>
-              {canIncident && <><dt><kbd className="kbd">I</kbd></dt><dd>Registrar incidentes: clic en el mapa y elegí qué hacer</dd></>}
+              {canIncident && <><dt><kbd className="kbd">I</kbd></dt><dd>Registrar incidentes: clic en el mapa y elige qué hacer</dd></>}
               {canIncident && <><dt><kbd className="kbd">Alt</kbd> + clic</dt><dd>Registrar lo que pasó en ese punto, con cualquier herramienta</dd></>}
               {canEvidence && <><dt><kbd className="kbd">A</kbd></dt><dd>Agregar evidencia: en un lugar del mapa o sin lugar</dd></>}
               {!canIncident && !canEvidence && <><dt><kbd className="kbd">Q</kbd></dt><dd>¿Quién llega a un punto?</dd></>}
@@ -144,7 +144,7 @@ export const INCIDENT_ICON: Record<IncidentKind, string> = { robo: 'front_hand',
 
 /** Registrar un incidente en un punto: al tocar el mapa se abre un abanico de botones junto al punto
     (QuickFan). Tres caminos:
-    1) Mandar unidades primero (botón rojo, el primero): está pasando ahora; qué pasó se elige después.
+    1) Enviar unidades primero (botón rojo, el primero): está pasando ahora; qué pasó se elige después.
     2) Elegir qué pasó → Registrar → mandar unidades desde el mismo panel.
     3) Solo registrar, sin mandar a nadie.
     Por ahora se mandan unidades policiales. Mapeado para después: otros tipos de unidad según el hecho
@@ -161,7 +161,7 @@ export function IncidentFan({ p, xy, onClose, onSignal, onFinish, renderUnits }:
   const [withNote, setWithNote] = useState(false);
   /** Registrado en este punto: el panel ofrece mandar unidades. */
   const [done, setDone] = useState<{ label: string; kind: IncidentKind } | null>(null);
-  /** Unidades mandadas desde «Mandar unidades» (sin incidente todavía): falta etiquetar qué pasó. */
+  /** Unidades mandadas desde «Enviar unidades» (sin incidente todavía): falta etiquetar qué pasó. */
   const [sent, setSent] = useState<string[] | null>(null);
   useEffect(() => { setAddress(placeLabel(p[1], p[0])); setDone(null); setSent(null); setActive(null); setNote(''); setWithNote(false); }, [p[0], p[1]]); // eslint-disable-line react-hooks/exhaustive-deps
   const kind = KINDS.find((k) => k === active) ?? null;
@@ -187,7 +187,7 @@ export function IncidentFan({ p, xy, onClose, onSignal, onFinish, renderUnits }:
   const skip = () => { toast(`Unidades en camino: ${who(sent!)}`); onSignal(`En camino · ${sent!.join(', ')}`); onFinish(); };
 
   const items = [
-    { id: 'unidades', label: 'Mandar unidades', icon: 'send', tone: 'danger' as const, hint: 'Mandar ya; qué pasó se elige después' },
+    { id: 'unidades', label: 'Enviar unidades', icon: 'send', tone: 'danger' as const, hint: 'Enviar ya; qué pasó se elige después' },
     ...KINDS.map((k) => ({ id: k, label: INCIDENT_LABEL[k], icon: INCIDENT_ICON[k] })),
   ];
   const units = (
@@ -201,7 +201,7 @@ export function IncidentFan({ p, xy, onClose, onSignal, onFinish, renderUnits }:
   );
   return (
     <QuickFan xy={xy} items={sent ? items.slice(0, 1) : items} active={active} onPick={(id) => { if (!sent) setActive(id); }} onClose={onClose} label="Registrar incidente en este punto">
-      <div className="mc2-hd"><span className="mc2-lbl">{sent ? 'Unidades en camino' : active === 'unidades' ? 'Mandar unidades' : kind ? INCIDENT_LABEL[kind] : ''}</span></div>
+      <div className="mc2-hd"><span className="mc2-lbl">{sent ? 'Unidades en camino' : active === 'unidades' ? 'Enviar unidades' : kind ? INCIDENT_LABEL[kind] : ''}</span></div>
       {sent ? (
         /* Mandadas: se confirma y se pide qué pasó, con las mismas opciones del abanico. */
         <div className="qf-sec">
@@ -214,11 +214,11 @@ export function IncidentFan({ p, xy, onClose, onSignal, onFinish, renderUnits }:
         </div>
       ) : active === 'unidades' ? <>
         {units}
-        <p className="qf-hint">{done ? <>Registrado como <b className="mono">{done.label}</b></> : 'Al mandar, te pregunto qué pasó para registrarlo.'}</p>
+        <p className="qf-hint">{done ? <>Registrado como <b className="mono">{done.label}</b></> : 'Al enviar, se pregunta qué pasó para registrarlo.'}</p>
       </> : done && done.kind === kind ? <>
         <p className="qf-done"><span className="inc-num ok"><Icon name="check" /></span><span className="inc-step-t">{done.label}<small>{address}</small></span></p>
-        {renderUnits && <><span className="qf-sub">Mandar unidades</span>{units}</>}
-        <button type="button" className="btn secondary sm" style={{ width: '100%' }} onClick={onFinish}>Listo, sin mandar unidades</button>
+        {renderUnits && <><span className="qf-sub">Enviar unidades</span>{units}</>}
+        <button type="button" className="btn secondary sm" style={{ width: '100%' }} onClick={onFinish}>Listo, sin enviar unidades</button>
       </> : (
         <form className="qf-form" onSubmit={(e) => { e.preventDefault(); save(); }}>
           <div className="field"><label htmlFor="inc-addr">Dirección</label><input id="inc-addr" className="fld sm" value={address} onChange={(e) => setAddress(e.target.value)} />

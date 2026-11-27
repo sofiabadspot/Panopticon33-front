@@ -49,7 +49,7 @@ export function WhoArrives({ p, onSent }: { p: LngLat;
           return (
             <li key={o.unit.id}>
               <Row className={`wa-u ${on ? 'on' : ''} ${o.free ? '' : 'off'}`}>
-                {canSend && <input type="checkbox" aria-label={`Mandar ${o.unit.id}`} checked={on} disabled={!o.free} onChange={() => toggle(o.unit.id)} />}
+                {canSend && <input type="checkbox" aria-label={`Enviar ${o.unit.id}`} checked={on} disabled={!o.free} onChange={() => toggle(o.unit.id)} />}
                 <UnitHex type={o.unit.type} size={20} />
                 <span className="wa-id"><b className="mono">{o.unit.id}</b>
                   <small>{o.avail !== 'disponible' && <span className={`wa-av av-${o.avail}`}>{AVAIL_LABEL[o.avail]}{o.detail ? ` · ${o.detail}` : ''} · </span>}{o.unit.type} · {dist(o.dist)}</small></span>
@@ -62,7 +62,7 @@ export function WhoArrives({ p, onSent }: { p: LngLat;
       </ol>
       {canSend && blocked.length > 0 && <button className="linklike wa-more" onClick={() => setShowAll(!showAll)}>{showAll ? 'Ocultar las que no pueden ir' : `Ver ${blocked.length} que no pueden ir`}</button>}
       {/* Fijo abajo de la tarjeta: la lista puede ser larga y el botón tiene que verse siempre. */}
-      {canSend && free.length > 0 && <div className="wa-send"><button className="btn positive" style={{ width: '100%' }} disabled={!ready.length} onClick={send}><Icon name="send" />{ready.length ? `Mandar ${ready.length === 1 ? ready[0] : `${ready.length} unidades`}` : 'Marcá quién va'}</button></div>}
+      {canSend && free.length > 0 && <div className="wa-send"><button className="btn positive" style={{ width: '100%' }} disabled={!ready.length} onClick={send}><Icon name="send" />{ready.length ? `Enviar ${ready.length === 1 ? ready[0] : `${ready.length} unidades`}` : 'Marca quién va'}</button></div>}
     </>
   );
 }

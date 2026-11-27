@@ -307,7 +307,7 @@ addAudit(NOW - 6 * 60 * MIN + 4 * MIN, 'Lucía Hernández', 'analyst', 'Exportar
 addAudit(NOW - 97 * MIN + 30_000, 'José Portillo', 'operator_911', 'Abrir alerta', 'AL-4095', 'Placa en lista');
 addAudit(NOW - 95 * MIN, 'José Portillo', 'operator_911', 'Descartar alerta', 'AL-4095', 'Placa en lista', 'Lectura de placa errónea');
 addAudit(NOW - 57 * MIN, 'Karla Méndez', 'operator_911', 'Abrir alerta', 'AL-4098', 'Aglomeración · Alameda Roosevelt');
-addAudit(NOW - 56 * MIN, 'Karla Méndez', 'operator_911', 'Confirmar alerta', 'AL-4098', 'Refuerzos: 2 unidades');
+addAudit(NOW - 56 * MIN, 'Karla Méndez', 'operator_911', 'Confirmar alerta', 'AL-4098', 'Unidades enviadas: 2');
 addAudit(NOW - 40 * MIN, 'Cmdte. Ernesto Alfaro', 'command', 'Abrir zona', 'Z-01', 'Plaza Salvador del Mundo');
 addAudit(NOW - 12 * MIN, 'Roberto Martínez', 'command', 'Abrir evento', 'EV-1207', 'Festividades de diciembre');
 audit.sort((a, b) => b.at - a.at);

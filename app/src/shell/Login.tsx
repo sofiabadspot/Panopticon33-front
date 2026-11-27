@@ -94,10 +94,10 @@ export function Login({ onDone }: { onDone?: () => void }) {
           <header className="world-top">
             <BrandLockup size={20} />
             <h1 className="world-title">Presencia continua sobre el territorio.</h1>
-            <p className="world-sub">Panopticon observa cada cámara las 24 horas, detecta lo que importa y lo convierte en acción a través de MAIC.</p>
+            <p className="world-sub">Panopticon 33 observa cada cámara las 24 horas, detecta lo que importa y lo convierte en acción a través de MAIC.</p>
           </header>
           <dl className="world-stats">
-            {[[String(cameras.length), 'Cámaras del sector piloto'], ['24/7', 'Presencia de Panopticon'], ['1.4 s', 'De la detección a la alerta'], ['3', 'Capacidades: multitudes, placas, rostros']].map(([v, l]) => (
+            {[[String(cameras.length), 'Cámaras del sector piloto'], ['24/7', 'Presencia de Panopticon 33'], ['1.4 s', 'De la detección a la alerta'], ['3', 'Capacidades: multitudes, placas, rostros']].map(([v, l]) => (
               <div key={l} className="world-stat"><dt>{v}</dt><dd>{l}</dd></div>
             ))}
           </dl>
@@ -133,7 +133,7 @@ export function Login({ onDone }: { onDone?: () => void }) {
               <input id="lg-user" className="fld" autoComplete="username" autoFocus value={userName}
                 aria-invalid={tried && missingUser} aria-describedby={tried && missingUser ? 'lg-user-err' : undefined}
                 onChange={(e) => setUserName(e.target.value)} />
-              {tried && missingUser && <span id="lg-user-err" className="err"><Icon name="error" />Escribí tu usuario.</span>}
+              {tried && missingUser && <span id="lg-user-err" className="err"><Icon name="error" />Escribe tu usuario.</span>}
             </div>
 
             <div className="field">
@@ -147,7 +147,7 @@ export function Login({ onDone }: { onDone?: () => void }) {
                   <Icon name={show ? 'visibility_off' : 'visibility'} />
                 </button>
               </div>
-              {tried && missingPass && <span id="lg-pass-err" className="err"><Icon name="error" />Escribí tu contraseña.</span>}
+              {tried && missingPass && <span id="lg-pass-err" className="err"><Icon name="error" />Escribe tu contraseña.</span>}
             </div>
 
             {/* Acción principal del oscuro: vidrio blanco (relleno suave, borde fino, letra blanca). */}
@@ -181,7 +181,7 @@ function Ticker({ lines, live }: { lines: string[]; live: boolean }) {
 function WorldCard({ cameras, anchorRef }: { cameras: number; anchorRef?: RefObject<HTMLDivElement | null> }) {
   return (
     <div ref={anchorRef} className={`world-card glass ${anchorRef ? 'anchored' : ''}`}>
-      <div className="world-card-hd"><b>Centro de mando · San Salvador</b><span className="mono">POC</span></div>
+      <div className="world-card-hd"><b>Centro de mando · San Salvador</b><span className="mono">Beta</span></div>
       <span className="mono world-card-sub">{cameras} cámaras · Ministerio de Seguridad</span>
       <span className="mono world-card-live"><i className="live-dot" aria-hidden="true" />Panopticon 33 en línea</span>
     </div>

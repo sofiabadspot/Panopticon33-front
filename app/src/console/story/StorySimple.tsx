@@ -39,7 +39,7 @@ export function StorySearch() {
   const hits = useMemo<Hit[]>(() => {
     if (t.length < 2) return [];
     const has = (x: string) => x.toLowerCase().includes(t);
-    const out: Hit[] = storyPlates(q).map((p) => ({ key: 'p' + p.plate, icon: 'directions_car', label: p.plate, sub: `Placa · ${p.reads} ${p.reads === 1 ? 'evento' : 'eventos'} en 7 días${p.listed ? ' · en lista' : ''}`, s: { k: 'placa', plate: p.plate } }));
+    const out: Hit[] = storyPlates(q).map((p) => ({ key: 'p' + p.plate, icon: 'directions_car', label: p.plate, sub: `Placa · ${p.reads} ${p.reads === 1 ? 'lectura' : 'lecturas'} en 7 días${p.listed ? ' · en lista' : ''}`, s: { k: 'placa', plate: p.plate } }));
     for (const m of faces.filter((m) => (has(m.name) || has(m.listRef) || has(m.docId)) && canOpenStory({ k: 'persona', matchId: m.id })).slice(0, 5))
       out.push({ key: 'm' + m.id, icon: 'person', label: m.name, sub: `Persona · ${m.listRef}`, s: { k: 'persona', matchId: m.id } });
     for (const u of UNKNOWN_FACES.filter((u) => has(u.label) || has(u.id) || (t.length >= 4 && has('persona sin identificar'))))
@@ -50,11 +50,11 @@ export function StorySearch() {
     <div className="ss">
       <label className="ss-search">
         <Icon name="search" />
-        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscá una placa o una persona" aria-label="Buscar placa o persona" />
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Busca una placa o una persona" aria-label="Buscar placa o persona" />
       </label>
       {t.length < 2 ? (
         <>
-          <p className="ss-hint">Escribí una placa (por ejemplo <b>P 512</b>) o el nombre de una persona para empezar una investigación.</p>
+          <p className="ss-hint">Escribe una placa (por ejemplo <b>P 512</b>) o el nombre de una persona para empezar una investigación.</p>
           {saved.length > 0 && <div className="ss-grp">Investigaciones <span>{saved.length}</span></div>}
           <ul className="ss-cards">
             {saved.map((st) => <li key={st.id}><InvCard st={st} onOpen={() => c.setStoryId(st.id)} /></li>)}
@@ -66,7 +66,7 @@ export function StorySearch() {
             ))}
           </ul>
         </>
-      ) : !hits.length ? <p className="ss-hint">No hay eventos de «{q.trim()}».</p> : (
+      ) : !hits.length ? <p className="ss-hint">No hay lecturas ni detecciones de «{q.trim()}».</p> : (
         <ul className="ss-list">
           {hits.map((h) => (
             <li key={h.key}><button onClick={() => open(h.s)}><Icon name={h.icon} /><span><b>{h.label}</b><small>{h.sub}</small></span><Icon name="play_arrow" /></button></li>
@@ -95,7 +95,7 @@ export function StoryBar({ title, chapters, onPlay, played, onExit }: { title: s
   return (
     <div className="sbar" role="group" aria-label="Recorrido">
       <button className="sbar-play" onClick={onPlay} disabled={!n} aria-label={played ? 'Reproducir de nuevo' : 'Reproducir el recorrido'}><Icon name={played ? 'refresh' : 'play_arrow'} /></button>
-      <div className="sbar-txt"><b>{title}</b><span>{n ? `${n} ${n === 1 ? 'evento' : 'eventos'} en el mapa · ${played ? 'reproduciendo' : 'apretá ▶ para ver el recorrido'}` : 'Sin eventos con ubicación'}</span></div>
+      <div className="sbar-txt"><b>{title}</b><span>{n ? `${n} ${n === 1 ? 'momento' : 'momentos'} en el mapa · ${played ? 'reproduciendo' : 'presiona ▶ para ver el recorrido'}` : 'Sin momentos con ubicación'}</span></div>
       <button className="btn secondary sm" onClick={onExit}><Icon name="search" />Nueva búsqueda</button>
     </div>
   );

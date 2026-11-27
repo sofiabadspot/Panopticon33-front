@@ -29,29 +29,18 @@ const PROOF_TAG: Record<ProofKind, string> = { imagen: 'Imagen', video: 'Video',
 export const proofItem = (p: Proof): ViewItem => ({ src: '', tag: PROOF_TAG[p.kind], title: p.title, sub: `${p.src} · ${dateShort(p.at)}`, icon: PROOF_ICON[p.kind] });
 
 /** Visor grande que se navega: anterior / siguiente (también con las flechas), una tira con todas y,
-    si se pasa `compare`, la imagen de referencia al lado para comparar. `standalone`: se abre sobre toda
-    la pantalla y maneja Esc y las flechas (desde la ficha); si no, lo maneja el expediente. */
-export function Viewer({ items, index, onIndex, onClose, compare, standalone, render }: {
-  items: ViewItem[]; index: number; onIndex: (i: number) => void; onClose: () => void; compare?: ViewItem | null; standalone?: boolean;
+    si se pasa `compare`, la imagen de referencia al lado para comparar. Esc y las flechas los maneja el expediente. */
+export function Viewer({ items, index, onIndex, onClose, compare, render }: {
+  items: ViewItem[]; index: number; onIndex: (i: number) => void; onClose: () => void; compare?: ViewItem | null;
   /** Dibuja el material en grande en vez de una imagen (evidencias del expediente). */
   render?: (i: number) => ReactNode;
 }) {
   const n = items.length;
   const x = items[Math.min(index, n - 1)];
-  const cb = useRef({ onIndex, onClose, index, n }); cb.current = { onIndex, onClose, index, n };
-  useEffect(() => {
-    if (!standalone) return;
-    const k = (e: KeyboardEvent) => {
-      const c = cb.current;
-      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); c.onClose(); }
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); c.onIndex((c.index + (e.key === 'ArrowRight' ? 1 : c.n - 1)) % c.n); }
-    };
-    window.addEventListener('keydown', k, true); return () => window.removeEventListener('keydown', k, true);
-  }, [standalone]);
   if (!x) return null;
   const ref = compare && x.tag === 'Hoy' ? compare : null;
   const body = (
-    <div className={`lb ${standalone ? 'solo' : ''}`} role="dialog" aria-modal={standalone || undefined} aria-label={`${x.tag}: ${x.title}`}>
+    <div className="lb" role="dialog" aria-label={`${x.tag}: ${x.title}`}>
       <div className="lb-hd">
         <span className="mono">{index + 1} / {n}</span>
         <b><Icon name={x.icon} />{x.tag} · {x.title}</b>
@@ -71,7 +60,7 @@ export function Viewer({ items, index, onIndex, onClose, compare, standalone, re
       )}
     </div>
   );
-  return standalone ? createPortal(<div className="lb-scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>{body}</div>, document.body) : body;
+  return body;
 }
 
 /** Respaldos: un recuadro por cada imagen, video, documento o registro que comprueba un dato. */

@@ -48,7 +48,7 @@ export function ZoneSheet({ id }: { id: string }) {
         aside={<>{s && <CoverageChip coverage={s.coverage} noCamera={!!zone && !zone.cameras.length} />}{ev && <button className="chip outline" onClick={() => c.open({ k: 'evento', id: ev.id })}><Icon name="flag" />{ev.name.split(' · ')[0]} · hasta {hhmm(ev.end)}</button>}</>}
       />
       <div className="pb">
-        {nd && <div className="callout"><Icon name="visibility_off" /><span className="grow"><b>{!zone.cameras.length ? 'Sin cámara.' : s?.coverage === 'sin_cobertura' ? 'Sin medición.' : 'Sin datos.'}</b> {!zone.cameras.length ? 'La zona todavía no tiene cámaras: no se puede medir cuánta gente hay.' : s?.coverage === 'sin_cobertura' ? 'La cámara PTZ está fuera de su preset: se detectan personas pero la zona no se mide.' : 'Ninguna cámara de la zona envía video.'} No significa que esté vacía.</span></div>}
+        {nd && <div className="callout"><Icon name="visibility_off" /><span className="grow"><b>{!zone.cameras.length ? 'Sin cámara.' : s?.coverage === 'sin_cobertura' ? 'Sin medición.' : 'Sin dato.'}</b> {!zone.cameras.length ? 'La zona todavía no tiene cámaras: no se puede medir cuánta gente hay.' : s?.coverage === 'sin_cobertura' ? 'La cámara PTZ está fuera de su preset: se detectan personas pero la zona no se mide.' : 'Ninguna cámara de la zona envía video.'} No significa que esté vacía.</span></div>}
         <div className="kpis" style={{ borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', overflow: 'hidden' }}>
           <div className={`kpi ${nd ? 'nodata' : ''}`}><div className="v">{nd ? 'Sin medición' : fmtCrowd(s.count!)}</div><div className="l">Personas</div>{!nd && <div className="x">entre {fmtCrowd(s.low!)} y {fmtCrowd(s.high!)}</div>}</div>
           <div className={`kpi ${nd ? 'nodata' : s.occupancy! * 100 > occMax ? 'alert' : ''}`}>
@@ -102,7 +102,7 @@ export function ZoneSheet({ id }: { id: string }) {
             ))}
           </ul>
         </div>
-        <p className="dim" style={{ fontSize: 'var(--fs-xs)', margin: 0 }}>El refuerzo se manda desde la alerta o con «¿Quién llega?». Si varias cámaras cubren la zona, cuenta la de mayor cobertura.</p>
+        <p className="dim" style={{ fontSize: 'var(--fs-xs)', margin: 0 }}>Las unidades se envían desde la alerta o con «¿Quién llega?». Si varias cámaras cubren la zona, cuenta la de mayor cobertura.</p>
       </div>
     </>
   );

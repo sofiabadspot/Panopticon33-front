@@ -142,7 +142,7 @@ const ASSIGN_LABEL: Record<UnitAssignment['k'], string> = { alerta: 'Asignada a 
 function UnitAssigned({ u }: { u: Unit }) {
   useApi((s) => s.events); // se vuelve a leer al cambiar los eventos
   const a = unitAssignment(u);
-  const what = a.k === 'libre' ? 'Disponible para despacho' : a.label;
+  const what = a.k === 'libre' ? 'Disponible para enviar' : a.label;
   const sub = a.k === 'alerta' ? `En camino ${ago(a.since)}` : a.k === 'evento' ? `Cubre ${a.zone}` : a.k === 'tarea' ? `Desde ${ago(a.since)}` : a.k === 'zona' ? 'Sin evento en curso' : null;
   return (
     <div className={`mc-assign k-${a.k}`}>

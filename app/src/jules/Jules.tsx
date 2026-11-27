@@ -164,7 +164,7 @@ export function Jules({ store, nombre, intro, saludo, tarjetas, preguntas = [], 
   // Descargar: la charla en texto plano (.txt), con quién dijo qué.
   function descargar() {
     const lineas = mensajes.map((m) => (m.de === 'persona'
-      ? `Vos: ${m.texto}`
+      ? `Tú: ${m.texto}`
       : `Jules: ${[m.conclusion, m.texto, ...(m.datos ?? []).map((d) => `${d.etiqueta}: ${d.valor}`)].filter(Boolean).join('\n')}`));
     const archivo = new Blob([`${titulo}\n\n${lineas.join('\n\n')}\n`], { type: 'text/plain' });
     const enlace = document.createElement('a');
@@ -378,7 +378,7 @@ export function Jules({ store, nombre, intro, saludo, tarjetas, preguntas = [], 
           <div className="jules-bienvenida__saludo">
             <Nebulosa state={texto ? 'listen' : estado} size={96} />
             <div className="jules-bienvenida__textos">
-              <h2 className="jules-bienvenida__titulo">{saludo ?? `Hola ${nombre}, ¿qué querés revisar?`}</h2>
+              <h2 className="jules-bienvenida__titulo">{saludo ?? `Hola ${nombre}, ¿qué quieres revisar?`}</h2>
             </div>
           </div>
         ) : (

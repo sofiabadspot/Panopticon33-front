@@ -8,6 +8,7 @@ import { useSession } from '../../shell/session';
 import { Icon, download } from '../../ui/kit';
 import { useConsole, type Sheet } from '../ctx';
 import { SheetHead } from './SheetHead';
+import { DateTimeField, rangeErrors } from '../../ui/Field';
 
 const PAGE = 50;
 let logged = false;
@@ -46,8 +47,8 @@ export function AuditSheet({ action = '' }: { action?: string }) {
             <div className="field"><label htmlFor="au">Usuario</label><select id="au" className="fld sm" value={f.user} onChange={set('user')}><option value="">Todos</option>{usersList.map((u) => <option key={u}>{u}</option>)}</select></div>
             <div className="field"><label htmlFor="aa">Acción</label><select id="aa" className="fld sm" value={f.action} onChange={set('action')}><option value="">Todas</option>{actions.map((a) => <option key={a}>{a}</option>)}</select></div>
             <div className="field"><label htmlFor="ao">Objeto</label><input id="ao" className="fld sm" value={f.object} onChange={set('object')} placeholder="AL-4107, P512884, Z-01…" /></div>
-            <div className="field"><label htmlFor="af">Desde</label><input id="af" type="datetime-local" className="fld sm" value={f.from} onChange={set('from')} /></div>
-            <div className="field"><label htmlFor="at">Hasta</label><input id="at" type="datetime-local" className="fld sm" value={f.to} onChange={set('to')} /></div>
+            <DateTimeField label="Desde" value={f.from} onChange={(v) => setF({ ...f, from: v })} error={rangeErrors(f.from, f.to, ['el inicio', 'el fin']).from} />
+            <DateTimeField label="Hasta" value={f.to} onChange={(v) => setF({ ...f, to: v })} error={rangeErrors(f.from, f.to, ['el inicio', 'el fin']).to} />
           </div>
         </div>
       </div>
