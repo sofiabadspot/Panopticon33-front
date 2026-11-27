@@ -13,6 +13,7 @@ import { INCIDENT_LABEL, placeLabel, registerIncident } from '../api';
 import type { IncidentKind, LngLat } from '../api/types';
 import { useSession } from '../shell/session';
 import { Icon, useToast } from '../ui/kit';
+import { useMenuKeyboard } from '../ui/Menu';
 import { QuickFan } from './QuickFan';
 
 export type Tool = 'mover' | 'incidente' | 'medir' | 'evidencia';
@@ -50,6 +51,9 @@ interface Props {
 
 export function CommandBar({ tool, setTool, canIncident, canMeasure, onNewEvent, canEvidence, onLooseEvidence }: Props) {
   const [menu, setMenu] = useState<'atajos' | 'evidencia' | null>(null);
+  // Menú de evidencia: mismo teclado que el resto de los menús (flechas, Esc vuelve al botón).
+  const evBtn = useRef<HTMLButtonElement>(null), evMenu = useRef<HTMLDivElement>(null);
+  useMenuKeyboard(menu === 'evidencia', evMenu, evBtn, () => setMenu(null));
   const ref = useRef<HTMLDivElement>(null);
 
   // Atajos de teclado
@@ -91,18 +95,18 @@ export function CommandBar({ tool, setTool, canIncident, canMeasure, onNewEvent,
         /* Evidencia: las opciones salen del botón. En un lugar → se toca el mapa (abanico junto al punto);
            sin lugar → formulario de documentos, fotos o informes. */
         <div className="cmd-wrap">
-          <button className={`cmd-btn ${tool === 'evidencia' || menu === 'evidencia' ? 'on' : ''}`} aria-expanded={menu === 'evidencia'} aria-haspopup="menu"
+          <button ref={evBtn} className={`cmd-btn ${tool === 'evidencia' || menu === 'evidencia' ? 'on' : ''}`} aria-expanded={menu === 'evidencia'} aria-haspopup="menu"
             onClick={() => { if (tool === 'evidencia') { setTool('mover'); setMenu(null); } else setMenu(menu === 'evidencia' ? null : 'evidencia'); }}
             title="Agregar evidencia (A)" aria-keyshortcuts="A" aria-label="Agregar evidencia">
             {IC.evidencia}<span className="cmd-name" aria-hidden>Evidencia</span><span className="cmd-tip" aria-hidden>Agregar evidencia<kbd className="kbd">A</kbd></span>
           </button>
           {menu === 'evidencia' && (
-            <div className="cmd-pop cmd-menu" role="menu" aria-label="Agregar evidencia">
+            <div ref={evMenu} className="cmd-pop cmd-menu" role="menu" aria-label="Agregar evidencia">
               <div className="cmd-pop-hd"><span>Agregar evidencia</span></div>
-              <button role="menuitem" className="cmd-opt" onClick={() => { setMenu(null); setTool('evidencia'); }}>
+              <button role="menuitem" tabIndex={-1} className="cmd-opt" onClick={() => { setMenu(null); setTool('evidencia'); }}>
                 <Icon name="location_on" /><span><b>En un lugar del mapa</b><small>Tocás el punto donde pasó: un video, una foto o una cámara de la plataforma</small></span>
               </button>
-              <button role="menuitem" className="cmd-opt" onClick={() => { setMenu(null); setTool('mover'); onLooseEvidence?.(); }}>
+              <button role="menuitem" tabIndex={-1} className="cmd-opt" onClick={() => { setMenu(null); setTool('mover'); onLooseEvidence?.(); }}>
                 <Icon name="description" /><span><b>Sin lugar en el mapa</b><small>Un documento, fotos o un informe: se ve como una escena del recorrido</small></span>
               </button>
             </div>

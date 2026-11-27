@@ -2,6 +2,7 @@
    se sube el archivo, se revisa una vista previa fila por fila y recién ahí se importa. */
 import { useState, type ReactNode } from 'react';
 import { Dialog, Icon } from '../../ui/kit';
+import { FileInput } from '../../ui/FileInput';
 
 export interface CsvColumn { key: string; label: string; example: string; required?: boolean }
 export type RowResult<T> = { ok: T } | { error: string };
@@ -27,22 +28,26 @@ export function parseCsv(text: string): Record<string, string>[] {
 
 const template = (cols: CsvColumn[]) => [cols.map((c) => c.key).join(';'), cols.map((c) => c.example).join(';')].join('\n');
 
-export function CsvImport<T>({ title, what, columns, fileName, parse, preview, onImport, onClose }: {
+export function CsvImport<T>({ title, what, columns, fileName, parse, preview, onImport, onClose, replaces }: {
   title: string; what: string; columns: CsvColumn[]; fileName: string;
+  /** La importación reemplaza todo lo que hay (p. ej., las entradas de una lista): cuántas hay hoy. Se avisa antes. */
+  replaces?: number;
   parse: (row: Record<string, string>, i: number) => RowResult<T>;
   /** Celdas de la vista previa de una fila válida. */
   preview: { head: string[]; row: (x: T) => ReactNode[] };
   onImport: (items: T[]) => void; onClose: () => void;
 }) {
-  const [file, setFile] = useState('');
   const [rows, setRows] = useState<RowResult<T>[] | null>(null);
   const ok = (rows ?? []).filter((r): r is { ok: T } => 'ok' in r).map((r) => r.ok);
   const bad = (rows ?? []).length - ok.length;
 
   const load = async (f: File | undefined) => {
     if (!f) return;
-    setFile(f.name);
-    const data = parseCsv(await f.text());
+    let text: string;
+    try { text = await f.text(); } catch { setRows([{ error: 'No se pudo leer el archivo.' }]); return; }
+    if (/[\u0000-\u0008]/.test(text.slice(0, 2000))) { setRows([{ error: 'El archivo no es un CSV. En Excel se guarda como «CSV (delimitado por comas)».' }]); return; }
+    const data = parseCsv(text);
+    if (!data.length) { setRows([{ error: 'El archivo no tiene filas debajo de los títulos.' }]); return; }
     const missing = columns.filter((c) => c.required && data.length && !(c.key in data[0]));
     setRows(missing.length ? [{ error: `Faltan columnas: ${missing.map((c) => c.key).join(', ')}` }] : data.map(parse));
   };
@@ -54,7 +59,7 @@ export function CsvImport<T>({ title, what, columns, fileName, parse, preview, o
   return (
     <Dialog title={title} onClose={onClose} footer={<>
       <button className="btn ghost sm" onClick={onClose}>Cancelar</button>
-      <button className="btn solid sm" disabled={!ok.length} onClick={() => onImport(ok)}>Importar {ok.length > 1 ? `${ok.length} ${what}` : ok.length === 1 ? `1 ${what.replace(/s$/, '')}` : what}</button>
+      <button className={`btn ${replaces ? 'danger' : 'primary'} sm`} disabled={!ok.length} onClick={() => onImport(ok)}>{replaces ? 'Reemplazar con' : 'Importar'} {ok.length > 1 ? `${ok.length} ${what}` : ok.length === 1 ? `1 ${what.replace(/s$/, '')}` : what}</button>
     </>}>
       <ol className="muted" style={{ margin: 0, paddingLeft: 18, fontSize: 'var(--fs-md)', display: 'grid', gap: 4 }}>
         <li>Descarga la plantilla y complétala en Excel. Una fila por {what.replace(/s$/, '')}.</li>
@@ -63,12 +68,9 @@ export function CsvImport<T>({ title, what, columns, fileName, parse, preview, o
       </ol>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn secondary sm" onClick={download}><Icon name="download" />Descargar plantilla</button>
-        <label className="btn ghost sm" style={{ cursor: 'pointer' }}>
-          <Icon name="arrow_upward" />{file ? 'Cambiar archivo' : 'Subir archivo'}
-          <input type="file" accept=".csv,text/csv" hidden onChange={(e) => { load(e.target.files?.[0]); e.target.value = ''; }} />
-        </label>
-        {file && <span className="dim mono" style={{ fontSize: 'var(--fs-sm)' }}>{file}</span>}
+        <FileInput label="Subir archivo" variant="ghost" accept=".csv,text/csv" onFiles={(fs) => load(fs[0])} />
       </div>
+      {replaces != null && replaces > 0 && <div className="notice"><Icon name="warning" /><span>La carga <b>reemplaza</b> las {replaces.toLocaleString('es-SV')} entradas actuales de la lista. Las que no estén en el archivo dejan de generar alertas.</span></div>}
       <div className="dim" style={{ fontSize: 'var(--fs-sm)' }}>
         Columnas: {columns.map((c, i) => <span key={c.key}>{i > 0 && ', '}<span className="mono">{c.key}</span>{c.required ? '' : ' (opcional)'}</span>)}
       </div>

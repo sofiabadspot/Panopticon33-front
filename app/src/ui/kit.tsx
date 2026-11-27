@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import icons from '../data/generated/icons.json';
 import { Trend } from './Trend';
@@ -56,36 +56,68 @@ export function Sparkline(p: { values: (number | null)[]; threshold?: number | n
   return <Trend {...p} />;
 }
 
-export function Dialog({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+/** Diálogo modal sobre <dialog> nativo: el navegador atrapa el foco y deja inerte el resto.
+    Esc cierra solo el diálogo (no la ficha de abajo) y, al cerrar, el foco vuelve a quien lo abrió.
+    El clic afuera no cierra salvo `dismissOnBackdrop`: en un formulario se perdería lo escrito. */
+export function Dialog({ title, description, onClose, children, footer, dismissOnBackdrop = false, className = '' }: { title: string; description?: ReactNode; onClose: () => void; children?: ReactNode; footer?: ReactNode; dismissOnBackdrop?: boolean; className?: string }) {
+  const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
-  }, [onClose]);
-  // Al body: una ficha animada (transform) no debe atrapar el diálogo.
+    const d = ref.current; if (!d) return;
+    const before = document.activeElement as HTMLElement | null;
+    if (!d.open) d.showModal();
+    return () => { if (d.open) d.close(); if (before?.isConnected) before.focus(); };
+  }, []);
+  const esc = (e: ReactKeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onClose(); } };
   return createPortal(
-    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog" role="dialog" aria-modal aria-label={title}>
-        <div className="hd"><h2>{title}</h2><button className="iconbtn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Cerrar"><Icon name="close" /></button></div>
-        <div className="bd">{children}</div>
-        {footer && <div className="ft">{footer}</div>}
-      </div>
-    </div>,
+    <dialog ref={ref} className={`dialog ${className}`} role="dialog" aria-label={title} onKeyDown={esc} onCancel={(e) => e.preventDefault()}
+      onMouseDown={(e) => { if (dismissOnBackdrop && e.target === e.currentTarget) onClose(); }}>
+      <div className="hd"><h2>{title}</h2><button className="iconbtn" style={{ marginLeft: 'auto' }} onClick={onClose} aria-label="Cerrar" title="Cerrar (Esc)"><Icon name="close" /></button></div>
+      {(description || children) && <div className="bd">{description && <p className="dialog-desc">{description}</p>}{children}</div>}
+      {footer && <div className="ft">{footer}</div>}
+    </dialog>,
     document.body,
   );
 }
 
 /* ---------- Toasts ---------- */
-const ToastCtx = createContext<(msg: string) => void>(() => {});
+/* Aviso corto abajo a la derecha. tone "error": algo no salió (queda más tiempo y lo lee el lector de
+   pantalla al instante). undo: la acción se puede revertir durante 8 s con "Deshacer". */
+export interface ToastOpts { tone?: 'ok' | 'error'; undo?: () => void }
+type Toast = (msg: string, opts?: ToastOpts) => void;
+const ToastCtx = createContext<Toast>(() => {});
 export const useToast = () => useContext(ToastCtx);
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<{ id: number; msg: string }[]>([]);
-  const push = (msg: string) => { const id = Date.now() + Math.random(); setItems((x) => [...x, { id, msg }]); setTimeout(() => setItems((x) => x.filter((t) => t.id !== id)), 3800); };
+  const [items, setItems] = useState<({ id: number; msg: string } & ToastOpts)[]>([]);
+  const drop = (id: number) => setItems((x) => x.filter((t) => t.id !== id));
+  const push: Toast = (msg, opts = {}) => {
+    const id = Date.now() + Math.random();
+    setItems((x) => [...x, { id, msg, ...opts }]);
+    setTimeout(() => drop(id), opts.undo ? 8000 : opts.tone === 'error' ? 7000 : 3800);
+  };
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="toasts" aria-live="polite">{items.map((t) => <div key={t.id} className="toast"><Icon name="check_circle" />{t.msg}</div>)}</div>
+      <div className="toasts" aria-live="polite">{items.map((t) => (
+        <div key={t.id} className={`toast ${t.tone === 'error' ? 'error' : ''}`} role={t.tone === 'error' ? 'alert' : undefined}>
+          <Icon name={t.tone === 'error' ? 'error' : 'check_circle'} />
+          <span className="grow">{t.msg}</span>
+          {t.undo && <button className="btn ghost xs" onClick={() => { t.undo!(); drop(t.id); }}>Deshacer</button>}
+        </div>
+      ))}</div>
     </ToastCtx.Provider>
   );
+}
+
+/** Conexión de este equipo con la red. `since`: desde cuándo está caída (para decir desde qué hora
+    los datos pueden estar viejos). Cuando llegue el backend, sumar aquí el estado del canal en vivo. */
+export function useOnline() {
+  const [s, setS] = useState(() => ({ online: typeof navigator === 'undefined' ? true : navigator.onLine, since: Date.now() }));
+  useEffect(() => {
+    const on = () => setS({ online: true, since: Date.now() }), off = () => setS({ online: false, since: Date.now() });
+    window.addEventListener('online', on); window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+  return s;
 }
 
 /** Reloj compartido para "hace X min" sin re-render por segundo en toda la app. */

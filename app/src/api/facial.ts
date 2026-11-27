@@ -301,6 +301,11 @@ export function discardFacial(id: string, reason: string, user: User) {
   set((m) => ({ ...m, status: 'descartada', reviewedBy: user.name, discardReason: reason, timeline: [...m.timeline, { at: Date.now(), label: `Descartada: ${reason}`, by: user.name }] }), id);
   audit(user, 'Descartar coincidencia facial', id, 'Reconocimiento facial', reason);
 }
+/** Deshace un descarte: la coincidencia vuelve a esperar decisión. */
+export function reopenFacial(id: string, user: User) {
+  set((m) => ({ ...m, status: 'por_revisar', reviewedBy: undefined, discardReason: undefined, timeline: [...m.timeline, { at: Date.now(), label: 'Descarte deshecho: vuelve a revisión', by: user.name }] }), id);
+  audit(user, 'Deshacer descarte facial', id, 'Reconocimiento facial');
+}
 /** El 911 le pide al agente del punto de control que verifique el documento (la confirmación más fuerte). */
 export function requestFieldCheck(id: string, user: User) {
   set((m) => ({ ...m, fieldCheck: { at: Date.now(), by: user.name }, timeline: [...m.timeline, { at: Date.now(), label: `Se pide al ${m.agent.split(' (')[0]} verificar el documento`, by: user.name }] }), id);

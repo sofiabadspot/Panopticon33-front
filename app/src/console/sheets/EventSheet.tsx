@@ -10,12 +10,14 @@ import type { MassEvent } from '../../api/types';
 import { useSession } from '../../shell/session';
 import { Icon, KindIcon, StatusChip, useNow, useToast } from '../../ui/kit';
 import { useZoneSeverity } from '../../views/shared';
-import { useConsole, useOverlay } from '../ctx';
+import { useConsole, useOverlay, useUnsavedGuard } from '../ctx';
 import { EventTag } from '../panels/EventsPanel';
-import { SheetHead } from './SheetHead';
+import { SheetHead, SheetNotFound } from './SheetHead';
+import { usePermissions } from '../permissions';
+import { DateRangeField, rangeErrors } from '../../ui/Field';
 
 export function EventSheet({ id }: { id: string }) {
-  const { role } = useSession();
+  const perm = usePermissions();
   const c = useConsole();
   const now = useNow(5000);
   const events = useApi((s) => s.events);
@@ -28,7 +30,7 @@ export function EventSheet({ id }: { id: string }) {
   const ev = events.find((e) => e.id === id);
   // Con área propia (hexágonos), el mapa muestra esa área; los eventos anteriores, sus zonas.
   useOverlay(ev?.cells?.length ? { fit: { points: cellsShape(ev.cells).ring, key: 'ev' + ev.id } } : { highlightZones: ev?.zoneIds }, [ev?.id]);
-  if (!ev) return <SheetHead kicker="Evento" title="No encontrado" />;
+  if (!ev) return <SheetNotFound kicker="Evento" title="No encontrado" what="este evento" />;
 
   const st = eventStatus(ev, now);
   const ez = zones.filter((z) => ev.zoneIds.includes(z.id));
@@ -42,7 +44,7 @@ export function EventSheet({ id }: { id: string }) {
   return (
     <>
       <SheetHead kicker={<><span className="mono">{ev.id}</span>·<span>{dateShort(ev.start)} {hhmm(ev.start)}–{hhmm(ev.end)}</span></>} title={ev.name} sub={`${ev.venue} · registrado por ${ev.createdBy}`}
-        aside={<><EventTag s={st} />{role === 'admin' && <button className="btn secondary xs" onClick={() => c.open({ k: 'evento-form', id: ev.id })}><Icon name="edit_note" />Editar</button>}</>} />
+        aside={<><EventTag s={st} />{perm.config && <button className="btn secondary xs" onClick={() => c.open({ k: 'evento-form', id: ev.id })}><Icon name="edit_note" />Editar</button>}</>} />
       <div className="pb">
         {/* Cuándo: lo primero que se pregunta de un evento en curso es hasta qué hora dura */}
         <div className={`ev-when ${st}`}>
@@ -68,7 +70,7 @@ export function EventSheet({ id }: { id: string }) {
             ); })}
           </ul>
         </div>
-        {role !== 'admin' && (
+        {perm.seesAlerts && (
           <div className="box flush">
             <div className="bh"><h3>Alertas del evento</h3><span className="sub">{evAlerts.length}</span></div>
             <ul className="list bb">
@@ -99,6 +101,8 @@ export function EventFormSheet({ id }: { id?: string }) {
     occ: String(ex?.thresholds?.occupancyPct ?? 110), per: String(ex?.thresholds?.perOfficer ?? 2000), pers: String(ex?.thresholds?.persistenceMin ?? 3),
   });
   const [tried, setTried] = useState(false);
+  const [initial] = useState(() => JSON.stringify(f));
+  const release = useUnsavedGuard(JSON.stringify(f) !== initial);
   const setCells = (cells: string[]) => setF((p) => ({ ...p, cells }));
   // Encuadre al abrir: el área del evento si ya tiene, o de cerca el centro del sector (para ver la grilla).
   const [fitPts] = useState(() => (f.cells.length ? cellsShape(f.cells).ring : closeUp(zones)));
@@ -111,16 +115,25 @@ export function EventFormSheet({ id }: { id?: string }) {
   const errors: Record<string, string> = {};
   if (!f.name.trim()) errors.name = 'Escribe el nombre del evento.';
   if (!f.cells.length) errors.zones = 'Elige en el mapa los hexágonos donde ocurre el evento.';
-  if (fromLocalInput(f.end) <= fromLocalInput(f.start)) errors.end = 'El fin debe ser posterior al inicio.';
+  // Fechas: vacías o fin antes del inicio (las mismas reglas en toda la consola, ui/Field.tsx).
+  const re = rangeErrors(f.start, f.end, ['el inicio', 'el fin']);
+  if (re.from) errors.start = re.from;
+  if (re.to) errors.end = re.to;
   if (!(Number(f.expected) > 0)) errors.expected = 'Indica la asistencia esperada.';
   if (f.planned === '' || !(Number(f.planned) >= 0)) errors.planned = 'Indica cuántos policías habrá.';
   if (f.capacity !== '' && !(Number(f.capacity) > 0)) errors.capacity = 'El aforo tiene que ser un número mayor que 0.';
+  if (f.own) {
+    if (!(Number(f.occ) > 0)) errors.occ = 'Tiene que ser un número mayor que 0.';
+    if (!(Number(f.per) > 0)) errors.per = 'Tiene que ser un número mayor que 0.';
+    if (f.pers === '' || !(Number(f.pers) >= 0)) errors.pers = 'Tiene que ser 0 o más minutos.';
+  }
   const zonesCap = touched.length ? touched.reduce((n, z) => n + z.capacity, 0) : Math.round((cellsArea(f.cells) * 4) / 100) * 100;
   const err = (k: string) => (tried && errors[k] ? <span className="err"><Icon name="error" />{errors[k]}</span> : null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
   const submit = (e: FormEvent) => {
-    e.preventDefault(); setTried(true); if (Object.keys(errors).length) return;
+    e.preventDefault(); setTried(true);
+    if (Object.keys(errors).length) { requestAnimationFrame(() => (document.querySelector('#evform [aria-invalid="true"]') as HTMLElement | null)?.focus()); return; }
     // Si el área no toca ninguna zona, se crea una con esos hexágonos: sin zona no se cuenta la gente.
     let zoneIds = touched.map((z) => z.id);
     if (!zoneIds.length) {
@@ -131,7 +144,7 @@ export function EventFormSheet({ id }: { id?: string }) {
     const ev: MassEvent = { id: ex?.id ?? newEventId(), name: f.name.trim(), venue: f.venue.trim() || f.name.trim(), cells: f.cells, zoneIds, start: fromLocalInput(f.start), end: fromLocalInput(f.end),
       expected: Number(f.expected), plannedOfficers: Number(f.planned), capacity: f.capacity === '' ? null : Number(f.capacity), createdBy: ex?.createdBy ?? user.name,
       thresholds: f.own ? { occupancyPct: Number(f.occ), perOfficer: Number(f.per), persistenceMin: Number(f.pers) } : null };
-    saveEvent(ev, user); toast(ex ? 'Evento guardado' : 'Evento registrado. Sus zonas usan su aforo y sus umbrales mientras dure.'); c.open({ k: 'evento', id: ev.id });
+    saveEvent(ev, user); release(); toast(ex ? 'Evento guardado' : 'Evento registrado. Sus zonas usan su aforo y sus umbrales mientras dure.'); c.open({ k: 'evento', id: ev.id });
   };
 
   return (
@@ -140,10 +153,8 @@ export function EventFormSheet({ id }: { id?: string }) {
       <form className="pb" onSubmit={submit} noValidate id="evform">
         <div className="field"><label htmlFor="en">Nombre</label><input id="en" className="fld sm" value={f.name} onChange={set('name')} aria-invalid={tried && !!errors.name} placeholder="Festividades de diciembre" />{err('name')}</div>
         <div className="field"><label htmlFor="ev">Lugar</label><input id="ev" className="fld sm" value={f.venue} onChange={set('venue')} /></div>
-        <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
-          <div className="field"><label htmlFor="es">Inicio</label><input id="es" type="datetime-local" className="fld sm" value={f.start} onChange={set('start')} /></div>
-          <div className="field"><label htmlFor="ee">Fin</label><input id="ee" type="datetime-local" className="fld sm" value={f.end} onChange={set('end')} aria-invalid={tried && !!errors.end} />{err('end')}</div>
-        </div>
+        <DateRangeField labels={['Inicio', 'Fin']} errorLabels={['el inicio', 'el fin']} from={f.start} to={f.end} showErrors={tried}
+          onChange={(r) => setF({ ...f, start: r.from, end: r.to })} />
         <div className="box"><div className="bh"><h3>Dónde ocurre</h3><span className="sub">{f.cells.length} hexágonos</span></div><div className="bb grid">
           <HexPicker cells={f.cells} onChange={setCells} allowSplit hint="Puede abarcar varias zonas, y también lugares separados." />
           {err('zones')}
@@ -169,13 +180,13 @@ export function EventFormSheet({ id }: { id?: string }) {
           <label className="toggle"><input type="checkbox" checked={f.own} onChange={(e) => setF({ ...f, own: e.target.checked })} />Usar umbrales propios mientras dure</label>
           {!f.own && <span className="dim" style={{ fontSize: 'var(--fs-sm)' }}>Apagado: sus zonas usan los umbrales de Reglas y criticidad.</span>}
           {f.own && <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-            <div className="field"><label htmlFor="to">Aglomeración desde (% del aforo)</label><input id="to" inputMode="numeric" className="fld sm mono" value={f.occ} onChange={set('occ')} /></div>
-            <div className="field"><label htmlFor="tp">Falta policía desde (personas por policía)</label><input id="tp" inputMode="numeric" className="fld sm mono" value={f.per} onChange={set('per')} /></div>
-            <div className="field"><label htmlFor="tm">Tiene que durar (min)</label><input id="tm" inputMode="numeric" className="fld sm mono" value={f.pers} onChange={set('pers')} /></div>
+            <div className="field"><label htmlFor="to">Aglomeración desde (% del aforo)</label><input id="to" inputMode="numeric" className="fld sm mono" value={f.occ} onChange={set('occ')} aria-invalid={tried && !!errors.occ} />{err('occ')}</div>
+            <div className="field"><label htmlFor="tp">Falta policía desde (personas por policía)</label><input id="tp" inputMode="numeric" className="fld sm mono" value={f.per} onChange={set('per')} aria-invalid={tried && !!errors.per} />{err('per')}</div>
+            <div className="field"><label htmlFor="tm">Tiene que durar (min)</label><input id="tm" inputMode="numeric" className="fld sm mono" value={f.pers} onChange={set('pers')} aria-invalid={tried && !!errors.pers} />{err('pers')}</div>
           </div>}
         </div></div>
       </form>
-      <div className="pf"><button type="button" className="btn ghost sm" onClick={() => (ex ? c.open({ k: 'evento', id: ex.id }) : c.open({ k: 'config', tab: 'eventos' }))}>Cancelar</button><button type="submit" form="evform" className="btn solid sm" style={{ marginLeft: 'auto' }}>{ex ? 'Guardar cambios' : 'Registrar evento'}</button></div>
+      <div className="pf"><button type="button" className="btn ghost sm" onClick={() => (ex ? c.open({ k: 'evento', id: ex.id }) : c.open({ k: 'config', tab: 'eventos' }))}>Cancelar</button><button type="submit" form="evform" className="btn primary sm" style={{ marginLeft: 'auto' }}>{ex ? 'Guardar cambios' : 'Registrar evento'}</button></div>
     </>
   );
 }

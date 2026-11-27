@@ -15,6 +15,7 @@ export function ConfigNav() {
   const zones = useApi((s) => s.zones);
   const users = useApi((s) => s.users);
   const events = useApi((s) => s.events);
+  const roles = useApi((s) => s.roleConfigs);
   /* La sección marcada sigue a lo que está abierto: un evento abierto marca Eventos, aunque sea su ficha. */
   const s = c.sheet;
   const current: ConfigTab | null = !s ? null : s.k === 'config' ? ((s.tab ?? 'zonas') as ConfigTab)
@@ -28,7 +29,7 @@ export function ConfigNav() {
     eventos: [upcoming ? `${upcoming} en curso o próximos` : 'Ninguno próximo', ''],
     reglas: [`${rules.filter((r) => r.source === 'supuesto').length} umbrales por confirmar`, rules.some((r) => r.source === 'supuesto') ? 'media' : 'ok'],
     listas: [staleLists ? `${staleLists} desactualizadas` : `${lists.length} listas al día`, staleLists ? 'media' : 'ok'],
-    roles: ['Capas y alertas de cada rol', ''],
+    roles: [`${roles.length} roles · qué ve y hace cada uno`, ''],
     usuarios: [`${users.filter((u) => u.active).length} activos de ${users.length}`, ''],
   };
   return (

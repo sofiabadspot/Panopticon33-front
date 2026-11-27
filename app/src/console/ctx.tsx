@@ -6,10 +6,12 @@ import { forOperator, inScope, useApi } from '../api';
 import { useSession } from '../shell/session';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { LngLat, Role } from '../api/types';
+import type { LngLat, TabId } from '../api/types';
+import { permsOf, TAB_LABEL, type Perms } from './permissions';
 import type { RouteStop } from '../map/MapView';
 import { answerJules } from './jules';
 import { useJulesStore, type JulesStore } from '../jules/store';
+import { Dialog } from '../ui/kit';
 
 export interface InvDraft { title: string; lat: number; lon: number; label: string; from: number; to: number }
 export type PanelId = 'estado' | 'alertas' | 'investigar' | 'config' | 'bitacora' | 'verificacion';
@@ -33,34 +35,26 @@ function decode(v: string | null): Sheet | null {
   }
 }
 
-/* ---------- Qué ve cada rol: pestañas con nombre en la columna izquierda ---------- */
+/* ---------- Qué ve cada rol: sale de su configuración (console/permissions.ts) ----------
+   Configuración es un panel aparte: no es una pestaña; se entra desde el menú del usuario. */
 export interface Tool { id: PanelId; label: string; phase?: string }
-export const TOOLS: Record<Role, Tool[]> = {
-  // Los eventos van dentro de Estado (ya no tienen pestaña propia).
-  command: [{ id: 'estado', label: 'Estado' }, { id: 'alertas', label: 'Alertas' }],
-  operator_911: [{ id: 'alertas', label: 'Alertas' }, { id: 'verificacion', label: 'Personas' }, { id: 'estado', label: 'Estado' }],
-  // Analista: sus investigaciones y el estado general. Las alertas en vivo son del operador.
-  analyst: [{ id: 'investigar', label: 'Investigaciones' }, { id: 'estado', label: 'Estado' }],
-  admin: [{ id: 'config', label: 'Configuración' }, { id: 'estado', label: 'Estado' }],
-};
-export const DEFAULT_PANEL: Record<Role, PanelId> = { command: 'estado', operator_911: 'alertas', analyst: 'investigar', admin: 'config' };
-export const DEFAULT_SHEET: Record<Role, Sheet | null> = { command: null, operator_911: null, analyst: null, admin: { k: 'config' } };
+export const toolsOf = (p: Perms): Tool[] => p.tabs.map((t) => ({ id: t, label: TAB_LABEL[t] }));
 
-/** Qué fichas puede abrir cada rol. El rol define qué se ve. */
-export function canOpenSheet(role: Role, s: Sheet): boolean {
+/** Qué fichas puede abrir: salen de las pestañas, las acciones y los accesos del rol. */
+export function canOpenSheet(p: Perms, s: Sheet): boolean {
   switch (s.k) {
-    case 'config': return role === 'admin';
+    case 'config': case 'evento-form': return p.config;
     // Bitácora: era del rol Auditor, retirado por ahora. La ficha queda en el código sin acceso.
     case 'bitacora': return false;
-    case 'evento-form': return role === 'admin';
-    case 'alerta': return role !== 'admin';
-    // Facial: decide el operador 911; el mando la ve (solo lectura), porque también es una alerta.
-    case 'facial': return role === 'operator_911' || role === 'command';
-    case 'vehiculo': return role === 'analyst';
+    case 'alerta': return p.seesAlerts;
+    // Facial: decide quien tiene la acción; quien ve alertas la mira en solo lectura.
+    case 'facial': return p.has('verificacion') || p.can('decidir_facial') || p.seesAlerts;
+    case 'vehiculo': return p.has('investigar');
+    case 'jules': return p.jules;
     default: return true;
   }
 }
-export const canOpenPanel = (role: Role, p: PanelId) => TOOLS[role].some((t) => t.id === p);
+export const canOpenPanel = (p: Perms, id: PanelId) => (id === 'config' ? p.config : p.tabs.includes(id as TabId));
 
 /* ---------- Capas temporales que un panel pone sobre el mapa ---------- */
 export interface Overlay {
@@ -84,7 +78,13 @@ export interface JulesMsg { from: 'user' | 'jules'; text: string; datos?: { valo
 interface Ctx {
   panel: PanelId; sheet: Sheet | null;
   setPanel: (p: PanelId) => void;
+  /** Cambia de panel y de ficha a la vez (dos escrituras seguidas en la dirección se pisarían). */
+  go: (p: PanelId, s: Sheet | null) => void;
   open: (s: Sheet) => void; close: () => void;
+  /** Formulario con cambios sin guardar: cerrar o ir a otra ficha pregunta antes (ver useUnsavedGuard). */
+  setDirty: (dirty: boolean) => void;
+  /** Corre `fn` si no hay cambios sin guardar; si los hay, pregunta primero. */
+  guardNav: (fn: () => void) => void;
   overlay: Overlay; setOverlay: (o: Overlay) => void;
   pin: { lat: number; lon: number; label: string } | null; setPin: (p: Ctx['pin']) => void;
   /** Emisión en el mapa al confirmar una alerta (anillos y haz sobre el punto). */
@@ -110,12 +110,22 @@ interface Ctx {
 const C = createContext<Ctx | null>(null);
 export const useConsole = () => useContext(C)!;
 
-export function ConsoleProvider({ role, children }: { role: Role; children: ReactNode }) {
+export function ConsoleProvider({ role, children }: { role: string; children: ReactNode }) {
   const [params, setParams] = useSearchParams();
+  /* Los permisos se leen en vivo: si alguien cambia el rol, la pestaña o la ficha que ya no corresponde
+     se cae sola (vuelve a la de inicio, o se cierra la ficha). */
+  const cfg = useApi((s) => s.roleConfigs.find((r) => r.role === role));
+  const perms = permsOf(role, cfg);
   const pRaw = params.get('p') as PanelId | null;
-  const panel: PanelId = pRaw && canOpenPanel(role, pRaw) ? pRaw : DEFAULT_PANEL[role];
+  const home: PanelId = perms.home ?? 'estado';
+  /* Sin ?p= en la dirección, la persona sigue en la pestaña donde estaba aunque cambie el orden de su rol;
+     solo si esa pestaña ya no es suya, pasa a la de inicio. */
+  const lastPanel = useRef<PanelId | null>(null);
+  const panel: PanelId = pRaw && canOpenPanel(perms, pRaw) ? pRaw : lastPanel.current && canOpenPanel(perms, lastPanel.current) ? lastPanel.current : home;
+  lastPanel.current = panel;
   const sRaw = decode(params.get('s'));
-  const sheet = params.has('s') ? (sRaw && canOpenSheet(role, sRaw) ? sRaw : null) : DEFAULT_SHEET[role];
+  // Sin pestañas, Configuración abre en su primera sección.
+  const sheet = params.has('s') && params.get('s') ? (sRaw && canOpenSheet(perms, sRaw) ? sRaw : null) : panel === 'config' ? { k: 'config' } as Sheet : null;
 
   const write = useCallback((p: PanelId | null | undefined, s: Sheet | null | undefined) => {
     setParams((prev) => {
@@ -125,6 +135,13 @@ export function ConsoleProvider({ role, children }: { role: Role; children: Reac
       return n;
     });
   }, [setParams]);
+
+  /* Cambios sin guardar: un formulario lo marca; cualquier salida de la ficha (Esc, clic en el mapa,
+     volver, otra pestaña) pasa por guardNav y pregunta antes de descartar. */
+  const dirty = useRef(false);
+  const [pendingNav, setPendingNav] = useState<(() => void) | null>(null);
+  const guardNav = useCallback((fn: () => void) => { if (dirty.current) setPendingNav(() => fn); else fn(); }, []);
+  const setDirty = useCallback((d: boolean) => { dirty.current = d; }, []);
 
   const [overlay, setOverlay] = useState<Overlay>({});
   const [pin, setPin] = useState<Ctx['pin']>(null);
@@ -175,25 +192,58 @@ export function ConsoleProvider({ role, children }: { role: Role; children: Reac
 
   const value = useMemo<Ctx>(() => ({
     panel, sheet,
-    setPanel: (p) => write(p, undefined),
+    setPanel: (p) => guardNav(() => write(p, undefined)),
+    go: (p, s) => guardNav(() => write(p, s)),
+    setDirty, guardNav,
     // Una alerta "Persona en lista" abre la ficha facial (ahí está la decisión del 911).
-    open: (s0) => { const s: Sheet = s0.k === 'alerta' && s0.id.startsWith('FC-') ? { k: 'facial', id: s0.id } : s0; if (canOpenSheet(role, s)) { write(undefined, s); if (s0.k === 'alerta' || s.k === 'facial') { const id = s.k === 'facial' ? s.id : s0.k === 'alerta' ? s0.id : ''; setFresh((f) => f.filter((x) => x !== id)); setArrival((a) => (a === id ? null : a)); } } },
-    close: () => write(undefined, null),
+    open: (s0) => guardNav(() => { const s: Sheet = s0.k === 'alerta' && s0.id.startsWith('FC-') ? { k: 'facial', id: s0.id } : s0; if (canOpenSheet(perms, s)) { write(undefined, s); if (s0.k === 'alerta' || s.k === 'facial') { const id = s.k === 'facial' ? s.id : s0.k === 'alerta' ? s0.id : ''; setFresh((f) => f.filter((x) => x !== id)); setArrival((a) => (a === id ? null : a)); } } }),
+    close: () => guardNav(() => write(undefined, null)),
     overlay, setOverlay, pin, setPin, signal, setSignal, hoverAlert, setHoverAlert,
     fresh, arrival, dismissArrival: () => setArrival(null), sound, setSound,
     focus: (points, k) => setFitReq({ points, key: k + Date.now() }), fitReq,
     recents, remember, invId, setInvId, invPick, setInvPick, invDraft, setInvDraft, storyId, setStoryId,
     jules,
-    // Mando tiene a Jules fijo en el lateral: se cierra lo que haya abierto para verlo. Los demás roles lo abren como ficha.
+    /* Jules vive en el lateral derecho para todo rol que lo tiene: se cierra lo que haya abierto para verlo.
+       Solo ofrece ir a lo que el rol puede abrir. */
     askJules: (q) => {
-      if (jules.estado === 'think') return;
-      const ans = answerJules(q, role);
-      jules.preguntar(q, { texto: ans.text, datos: ans.datos, acciones: ans.actions });
-      write(undefined, role === 'command' ? null : { k: 'jules' });
+      if (!perms.jules || jules.estado === 'think') return;
+      const ans = answerJules(q, perms, user);
+      const acciones = ans.actions?.filter((a) => (!a.sheet || canOpenSheet(perms, a.sheet)) && (!a.panel || canOpenPanel(perms, a.panel)));
+      jules.preguntar(q, { texto: ans.text, datos: ans.datos, acciones });
+      // En Configuración no hay lateral: Jules se abre como ficha.
+      write(undefined, panel === 'config' ? { k: 'jules' } : null);
     },
-  }), [panel, sheet, write, role, overlay, pin, signal, hoverAlert, fresh, arrival, sound, setSound, fitReq, recents, remember, invId, setInvId, invPick, invDraft, storyId, setStoryId, jules]);
-  return <C.Provider value={value}>{children}</C.Provider>;
+  }), [panel, sheet, write, guardNav, setDirty, role, perms.cfg, user, overlay, pin, signal, hoverAlert, fresh, arrival, sound, setSound, fitReq, recents, remember, invId, setInvId, invPick, invDraft, storyId, setStoryId, jules]);
+  return (
+    <C.Provider value={value}>
+      {children}
+      {pendingNav && (
+        <Dialog title="¿Descartar los cambios?" onClose={() => setPendingNav(null)} dismissOnBackdrop footer={<>
+          <button className="btn ghost sm" onClick={() => setPendingNav(null)}>Seguir editando</button>
+          <button className="btn danger sm" onClick={() => { const fn = pendingNav; dirty.current = false; setPendingNav(null); fn(); }}>Descartar cambios</button>
+        </>}>
+          <p className="muted" style={{ margin: 0, fontSize: 'var(--fs-md)' }}>Hay cambios en esta ficha que todavía no se guardaron. Al salir, se pierden.</p>
+        </Dialog>
+      )}
+    </C.Provider>
+  );
 }
+
+/** Un formulario avisa que tiene cambios sin guardar. Mientras dure, salir de la ficha pregunta antes
+    y cerrar la pestaña del navegador también. Devuelve `release` para salir sin preguntar después de guardar. */
+export function useUnsavedGuard(isDirty: boolean) {
+  const { setDirty } = useConsole();
+  useEffect(() => {
+    setDirty(isDirty);
+    if (!isDirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => { window.removeEventListener('beforeunload', warn); setDirty(false); };
+  }, [isDirty, setDirty]);
+  return () => setDirty(false);
+}
+/** Lo mismo como pieza: se puede poner en el JSX de una ficha que tiene salidas tempranas. */
+export function UnsavedGuard({ dirty }: { dirty: boolean }) { useUnsavedGuard(dirty); return null; }
 
 /** Un panel pone capas sobre el mapa mientras está abierto, y las quita al cerrarse. */
 export function useOverlay(o: Overlay, deps: unknown[]) {

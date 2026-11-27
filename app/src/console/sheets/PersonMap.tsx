@@ -229,12 +229,12 @@ export function PersonMap({ m, onOpen, about, who = true }: {
           <Icon name="search" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar en todo lo de la persona (placa, lugar, caso, cámara…)" aria-label="Buscar en el mapa de la persona" />
           {query && <span className="mono">{[...hits].filter((h) => h.startsWith('card:') || h.startsWith('link:')).length} resultados</span>}
-          {q && <button className="iconbtn" aria-label="Borrar búsqueda" onClick={() => setQ('')}><Icon name="close" /></button>}
+          {q && <button className="iconbtn" aria-label="Borrar búsqueda" title="Borrar búsqueda" onClick={() => setQ('')}><Icon name="close" /></button>}
         </div>
         <div className="pm-zoom" role="group" aria-label="Acercar o alejar">
-          <button className="iconbtn" aria-label="Acercar" onClick={() => setView((v) => ({ ...v, k: Math.min(2.2, v.k * 1.25) }))}><Icon name="add" /></button>
-          <button className="iconbtn" aria-label="Alejar" onClick={() => setView((v) => ({ ...v, k: Math.max(0.25, v.k / 1.25) }))}><Icon name="remove" /></button>
-          <button className="iconbtn" aria-label="Centrar en la persona" onClick={() => setView({ x: 0, y: 0, k: 0.5 })}><Icon name="center_focus_strong" /></button>
+          <button className="iconbtn" aria-label="Acercar" title="Acercar" onClick={() => setView((v) => ({ ...v, k: Math.min(2.2, v.k * 1.25) }))}><Icon name="add" /></button>
+          <button className="iconbtn" aria-label="Alejar" title="Alejar" onClick={() => setView((v) => ({ ...v, k: Math.max(0.25, v.k / 1.25) }))}><Icon name="remove" /></button>
+          <button className="iconbtn" aria-label="Centrar en la persona" title="Centrar en la persona" onClick={() => setView({ x: 0, y: 0, k: 0.5 })}><Icon name="center_focus_strong" /></button>
         </div>
         <div className="pm-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
           <svg className="pm-lines" aria-hidden>

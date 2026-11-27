@@ -4,31 +4,34 @@
    una alerta, un panel). En producción la respuesta la da el agente en el backend
    (POST /v1/jules/ask); aquí es una respuesta por reglas sobre los mismos datos.
    Cada consulta queda en la bitácora. */
-import { audit, forOperator, sessionFor, snapshot } from '../api';
+import { audit, forOperator, inScope, snapshot } from '../api';
 import { fmt, fmtCrowd, normalizePlate, pct } from '../api/format';
 import { KIND_LABEL } from '../api/labels';
-import type { Role } from '../api/types';
+import type { User } from '../api/types';
+import type { Perms } from './permissions';
 import { byUrgency } from '../views/shared';
 import type { JulesMsg } from './ctx';
 
 const has = (q: string, ...w: string[]) => w.some((x) => q.includes(x));
 
-export function answerJules(raw: string, role: Role): JulesMsg {
+/** Responde dentro de los permisos del rol: solo cuenta las alertas de su alcance, no habla de la ubicación de
+    unidades si esa capa le está oculta y solo ofrece ir a lo que puede abrir (ctx.tsx filtra las acciones). */
+export function answerJules(raw: string, perms: Perms, user: User): JulesMsg {
   const s = snapshot();
   const q = raw.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  audit(sessionFor(role).user, 'Consulta a Jules', 'Jules', raw.slice(0, 120));
+  audit(user, 'Consulta a Jules', 'Jules', raw.slice(0, 120));
   const measured = s.zones.filter((z) => s.zoneStatus[z.id]?.count != null);
-  const pending = s.alerts.filter((a) => forOperator(a) && a.review === 'por_revisar').sort(byUrgency);
+  const pending = perms.seesAlerts ? s.alerts.filter((a) => forOperator(a) && a.review === 'por_revisar' && inScope(a, user)).sort(byUrgency) : [];
 
   // Placa
   const plate = raw.match(/[A-Za-z]{1,2}\s?\d{3}-?\d{3}/)?.[0];
   if (plate) {
     const np = normalizePlate(plate);
-    const al = s.alerts.find((a) => a.plate && normalizePlate(a.plate.listed) === np);
+    const al = perms.seesAlerts ? s.alerts.find((a) => a.plate && normalizePlate(a.plate.listed) === np && inScope(a, user)) : undefined;
     if (al) return { from: 'jules', text: `${al.plate!.listed} está en la lista de robados (${al.plate!.vehicle.type} ${al.plate!.vehicle.make} ${al.plate!.vehicle.color.toLowerCase()}). Tiene la alerta ${al.id}, ${al.review === 'por_revisar' ? 'aún por revisar' : al.review}.`,
-      actions: [{ label: `Abrir ${al.id}`, sheet: { k: 'alerta', id: al.id } }, ...(role === 'analyst' ? [{ label: 'Reconstruir recorrido', panel: 'investigar' as const }] : [])] };
-    return { from: 'jules', text: `No hay alertas para ${plate.toUpperCase()}. ${role === 'analyst' ? 'Puedes buscar sus lecturas en Investigar; te pedirá un motivo.' : 'La búsqueda de lecturas la hace el analista.'}`,
-      actions: role === 'analyst' ? [{ label: 'Ir a Investigar', panel: 'investigar' }] : [] };
+      actions: [{ label: `Abrir ${al.id}`, sheet: { k: 'alerta', id: al.id } }, ...(perms.has('investigar') ? [{ label: 'Reconstruir recorrido', panel: 'investigar' as const }] : [])] };
+    return { from: 'jules', text: `No hay alertas para ${plate.toUpperCase()}. ${perms.has('investigar') ? 'Puedes buscar sus lecturas en Investigar; te pedirá un motivo.' : 'La búsqueda de lecturas la hace el analista.'}`,
+      actions: perms.has('investigar') ? [{ label: 'Ir a Investigar', panel: 'investigar' }] : [] };
   }
 
   // Zona por nombre
@@ -43,6 +46,7 @@ export function answerJules(raw: string, role: Role): JulesMsg {
 
   // Presencia policial / refuerzo
   if (has(q, 'polic', 'brecha', 'refuer', 'unidad')) {
+    if (perms.layer('units') === 'oculta') return { from: 'jules', text: 'La presencia policial no está entre lo que ve tu rol. Pídesela al administrador si la necesitas.' };
     if (!s.policeSource) return { from: 'jules', text: 'No hay acceso a la ubicación policial, así que no puedo medir la presencia. Puedo comparar con los policías planificados de cada evento.' };
     const worst = measured.filter((z) => s.zoneStatus[z.id].perOfficer != null).sort((a, b) => s.zoneStatus[b.id].perOfficer! - s.zoneStatus[a.id].perOfficer!)[0];
     if (!worst) return { from: 'jules', text: 'No hay zonas con presencia policial medida ahora.' };
@@ -56,7 +60,7 @@ export function answerJules(raw: string, role: Role): JulesMsg {
   if (has(q, 'alerta', 'primero', 'urgente', 'atiendo', 'pendiente')) {
     if (!pending.length) return { from: 'jules', text: 'No hay alertas por revisar.' };
     const a = pending[0];
-    return { from: 'jules', text: `Hay ${pending.length} alertas por revisar. La más urgente es ${KIND_LABEL[a.kind].toLowerCase()} (${a.id}): ${a.rule.measured}. Confirmarla o descartarla es decisión del operador 911.`,
+    return { from: 'jules', text: `Hay ${pending.length} alertas por revisar. La más urgente es ${KIND_LABEL[a.kind].toLowerCase()} (${a.id}): ${a.rule.measured}. ${perms.can('decidir') ? 'Confirmarla o descartarla es decisión tuya.' : 'Confirmarla o descartarla le toca a quien decide las alertas.'}`,
       actions: [{ label: `Abrir ${a.id}`, sheet: { k: 'alerta', id: a.id } }, { label: 'Ver la bandeja', panel: 'alertas' }] };
   }
 

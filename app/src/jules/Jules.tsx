@@ -338,7 +338,7 @@ export function Jules({ store, nombre, intro, saludo, tarjetas, preguntas = [], 
               data-tip={TEXTOS.mas}
               className="jules-lateral__mas"
               trigger={<Icon name="mas" />}
-              triggerClassName="sv-btn sv-btn--ghost sv-btn--icon jules-icono"
+              triggerClassName="iconbtn jules-icono"
               align="end"
               fijo
               items={[
@@ -461,8 +461,8 @@ export function Jules({ store, nombre, intro, saludo, tarjetas, preguntas = [], 
         description={TEXTOS.borrarTexto}
         actions={(
           <>
-            <Button variant="secondary" onClick={() => setBorrando(false)}>{TEXTOS.cancelar}</Button>
-            <Button variant="danger" onClick={borrar}>{TEXTOS.borrar}</Button>
+            <Button variant="ghost" size="sm" onClick={() => setBorrando(false)}>{TEXTOS.cancelar}</Button>
+            <Button variant="danger" size="sm" onClick={borrar}>{TEXTOS.borrar}</Button>
           </>
         )}
       />

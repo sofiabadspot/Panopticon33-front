@@ -17,6 +17,7 @@ import { AgentFeed } from './AgentFeed';
 import { useConsole } from '../ctx';
 import { useApi } from '../../api';
 import { useSession } from '../../shell/session';
+import { usePermissions } from '../permissions';
 
 /** Nombre de pila (sin títulos abreviados como "Cmdte."). */
 const firstName = (name: string) => name.split(' ').filter((w) => !/\.$/.test(w))[0] ?? name;
@@ -28,16 +29,18 @@ function greeting(now = new Date()) {
 export function JulesSheet({ docked = false }: { docked?: boolean }) {
   const c = useConsole();
   const { user, role } = useSession();
+  const perm = usePermissions();
   const alerts = useApi((s) => s.alerts); const zs = useApi((s) => s.zoneStatus); const cams = useApi((s) => s.cameras);
   // Lo que Jules hace solo (reversible) corre fuera del render, cada vez que cambian los datos.
-  useEffect(() => { if (role === 'command') agentTick(role); }, [alerts, zs, cams, role]);
+  // El agente corre mientras Jules está en el lateral (no como ficha), y solo si el rol tiene a Jules.
+  useEffect(() => { if (docked && perm.jules) agentTick(role); }, [alerts, zs, cams, role, docked, perm.jules]);
   const nombre = firstName(user.name);
   const saludo = `${greeting()}, ${nombre}.`;
   const go = (a: AccionJules | Look) => { if (a.panel) c.setPanel(a.panel); if (a.sheet) c.open(a.sheet); };
-  // Mando: Jules trabajando en vivo (revisa, encuentra, propone, responde y sigue).
+  // En el lateral: Jules trabajando en vivo (revisa, encuentra, propone, responde y sigue).
   const resumen = <AgentFeed user={user} saludo={saludo} onLook={go} />;
 
-  const mando = role === 'command';
+  const mando = docked;
   return (
     <Jules
       store={c.jules}

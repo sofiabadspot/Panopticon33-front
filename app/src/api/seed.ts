@@ -159,14 +159,19 @@ export const territories: Territory[] = [{ name: 'San Salvador', note: 'Área me
    las alertas de su territorio. No todos ven la ubicación de cada agente. */
 const L = (o: Partial<Record<LayerKey, LayerAccess>>): Record<LayerKey, LayerAccess> =>
   ({ zones: 'disponible', events: 'disponible', alerts: 'disponible', units: 'disponible', cameras: 'disponible', hex: 'disponible', drones: 'disponible', helis: 'disponible', ...o });
+const base = { system: true, version: 1 } as const;
 export const roleConfigs: RoleConfig[] = [
-  { role: 'command', alertScope: 'todas', minSeverity: null,
+  { ...base, role: 'command', name: 'Mando', description: 'Mando y ministro', tabs: ['estado', 'alertas'], alertScope: 'todas', minSeverity: null,
+    actions: ['despachar', 'registrar'], jules: true, config: false,
     layers: L({ zones: 'inicio', events: 'inicio', alerts: 'inicio', units: 'inicio', hex: 'inicio', drones: 'inicio', helis: 'inicio' }) },
-  { role: 'operator_911', alertScope: 'territorio', minSeverity: null,
+  { ...base, role: 'operator_911', name: 'Operador 911', description: 'Decide las alertas', tabs: ['alertas', 'verificacion', 'estado'], alertScope: 'territorio', minSeverity: null,
+    actions: ['decidir', 'decidir_facial', 'despachar', 'registrar'], jules: true, config: false,
     layers: L({ events: 'inicio', alerts: 'inicio', units: 'inicio' }) },
-  { role: 'analyst', alertScope: 'todas', minSeverity: null,
+  { ...base, role: 'analyst', name: 'Analista', description: 'Investiga', tabs: ['investigar', 'estado'], alertScope: 'todas', minSeverity: null,
+    actions: [], jules: true, config: false,
     layers: L({ zones: 'inicio', events: 'inicio', alerts: 'inicio', cameras: 'inicio', hex: 'inicio' }) },
-  { role: 'admin', alertScope: 'todas', minSeverity: null,
+  { ...base, role: 'admin', name: 'Administrador', description: 'Configura', tabs: [], alertScope: 'todas', minSeverity: null,
+    actions: [], jules: true, config: true,
     layers: L({ zones: 'inicio', events: 'inicio', cameras: 'inicio', units: 'oculta' }) },
 ];
 

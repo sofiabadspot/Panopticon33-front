@@ -7,30 +7,32 @@
    Abrir algo nunca cambia de pantalla: el mapa se mueve hacia ello. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { INCIDENT_LABEL, SCENARIO_LABEL, SECTOR, eventStatus, forOperator, inScope, openStory, sessionFor, setScenario, snapshot, useApi, type Scenario } from '../api';
+import { INCIDENT_LABEL, SCENARIO_LABEL, SECTOR, eventStatus, forOperator, inScope, openStory, roleName, sessionFor, setScenario, snapshot, useApi, type Scenario } from '../api';
 import { useFacial } from '../api/facial';
 import { dateTime, hhmm, hhmmss } from '../api/format';
 import { KIND_LABEL, KIND_PHRASE } from '../api/labels';
 import { nearZone } from '../api/place';
-import { ROLE_LABEL } from '../api/labels';
-import type { LayerKey, LngLat, Role } from '../api/types';
+import type { LayerKey, LngLat } from '../api/types';
 import type { GoogleBase } from '../map/google';
 import { AirHex, AlertMark, AlertTile, CameraNode, UnitHex } from '../map/icons';
 import { coverageAt } from '../api/coverage';
 import { MapView, type MapLayers } from '../map/MapView';
 import type { HexMetric } from '../api/coverage';
 import { useSession } from '../shell/session';
-import { Icon, useNow, PanelSkeleton, SheetSkeleton } from '../ui/kit';
+import { EmptyState, Icon, useNow, useOnline, PanelSkeleton, SheetSkeleton } from '../ui/kit';
 import { P33Logo } from '../ui/Logo';
-import { Menu } from '../jules/ds/Menu';
+import { Menu } from '../ui/Menu';
 import { boundsOf, useZoneSeverity } from '../views/shared';
-import { ConsoleProvider, TOOLS, canOpenSheet, useConsole } from './ctx';
+import { ConsoleProvider, toolsOf, canOpenSheet, useConsole } from './ctx';
+import { usePermissions } from './permissions';
+import { useRoleChangeNotice } from './roleChange';
 import { Search } from './Search';
 import { VideoWall } from './VideoWall';
 import { StatusPanel } from './panels/StatusPanel';
 import { QueuePanel } from './panels/QueuePanel';
 import { AuditNav, ConfigNav } from './panels/AdminPanels';
 import { AlertSheet } from './sheets/AlertSheet';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { ZoneSheet } from './sheets/ZoneSheet';
 import { EventSheet, EventFormSheet } from './sheets/EventSheet';
 import { MAP_TABS, type ConfigTab } from './sheets/configTabs';
@@ -53,6 +55,7 @@ import { StoryPlayer } from './story/StoryPlayer';
 import { EvidenceFan, EvidenceLoose } from './story/EvidenceCard';
 import { StoryScene } from './story/StoryScene';
 import { OpenStoryHost } from './story/OpenStory';
+import { Segmented } from '../ui/Segmented';
 
 /** Iniciales para el avatar (solo palabras con mayúscula: sin títulos como "Cmdte."). */
 const initials = (name: string) => name.split(' ').filter((w) => /^[A-ZÁÉÍÓÚ]/.test(w) && !/\.$/.test(w)).slice(0, 2).map((w) => w[0]).join('');
@@ -61,13 +64,24 @@ const initials = (name: string) => name.split(' ').filter((w) => /^[A-ZÁÉÍÓ�
 const NO_STATUS = {};
 
 export function Console() {
-  const { role } = useSession();
+  const { role, signOut } = useSession();
+  const known = useApi((s) => s.roleConfigs.some((r) => r.role === role));
+  /* Un rol que llega de Keycloak y no existe en la plataforma no entra: nunca se le da un rol por defecto. */
+  if (!known) return (
+    <div className="console no-map" style={{ display: 'grid', placeItems: 'center' }}>
+      <EmptyState icon="lock" title="Tu rol no tiene acceso configurado" action={<button className="btn secondary sm" onClick={signOut}><Icon name="logout" />Cerrar sesión</button>}>
+        Pídeselo al administrador.
+      </EmptyState>
+    </div>
+  );
   return <ConsoleProvider key={role} role={role}><StoryPlaybackProvider><Layout /><OpenStoryHost /></StoryPlaybackProvider></ConsoleProvider>;
 }
 
 function Layout() {
   const { user, role, setRole, signOut } = useSession();
   const c = useConsole();
+  const p = usePermissions();
+  useRoleChangeNotice(p);
   const navigate = useNavigate();
   const now = useNow();
   const zones = useApi((s) => s.zones);
@@ -77,17 +91,19 @@ function Layout() {
   const alerts = useApi((s) => s.alerts);
   const events = useApi((s) => s.events);
   const maic = useApi((s) => s.maic);
+  const net = useOnline();
   const loading = useApi((s) => s.loading);
+  const roleConfigs = useApi((s) => s.roleConfigs);
   const scenario = useApi((s) => s.scenario);
   const policeSource = useApi((s) => s.policeSource);
   const investigations = useApi((s) => s.investigations);
   /* Analista con una investigación abierta: el mapa pasa a modo histórico. Muestra solo las alertas de la
      ventana del hecho; el calor de personas y las unidades son en vivo, así que se apagan. */
-  const inv = role === 'analyst' && c.invId ? investigations.find((x) => x.id === c.invId) ?? null : null;
+  const inv = p.has('investigar') && c.invId ? investigations.find((x) => x.id === c.invId) ?? null : null;
   /* Analista con una historia abierta: a la izquierda el sujeto, a la derecha los capítulos y abajo el
      reproductor. La investigación (si la hay) sigue abierta debajo: al salir se vuelve a ella. */
   const stories = useApi((s) => s.stories);
-  const story = role === 'analyst' && c.storyId ? stories.find((x) => x.id === c.storyId) ?? null : null;
+  const story = p.has('investigar') && c.storyId ? stories.find((x) => x.id === c.storyId) ?? null : null;
   // Una investigación que ya no existe (p. ej. después de recargar los datos) no queda «abierta» en blanco:
   // si no, tocar su tarjeta no haría nada.
   useEffect(() => { if (c.storyId && !stories.some((x) => x.id === c.storyId)) c.setStoryId(null); }, [c.storyId, stories]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -113,14 +129,20 @@ function Layout() {
 
   /* Capas de cada rol: se configuran en Configuración → Roles. "Al entrar" = prendida al abrir;
      "No la ve" = no aparece en la franja. */
-  const roleCfg = useApi((s) => s.roleConfigs.find((r) => r.role === role)!);
-  const seen = (k: LayerKey) => roleCfg.layers[k] !== 'oculta';
+  const seen = (k: LayerKey) => p.layer(k) !== 'oculta';
   const [layers, setLayers] = useState<MapLayers>(() => {
-    const on = (k: LayerKey) => roleCfg.layers[k] === 'inicio';
+    const on = (k: LayerKey) => p.layer(k) === 'inicio';
     return { zones: on('zones'), events: on('events'), alerts: on('alerts'), units: on('units'), cameras: on('cameras'), fov: false, hex: on('hex') ? 'personas' : null, drones: on('drones'), helis: on('helis') };
   });
-  /* Administrador: su propio mapa, el de configuración (ver AdminMapLayers). */
-  const admin = role === 'admin';
+  /* Una capa que el rol deja de ver (cambio de rol en vivo) se apaga. Una que pasa a "Al entrar" no se prende
+     sola: aplica la próxima vez que se entra, para no cambiarle el mapa a nadie a mitad de trabajo. */
+  useEffect(() => {
+    setLayers((l) => ({ ...l,
+      ...(['zones', 'events', 'alerts', 'units', 'cameras', 'drones', 'helis'] as const).reduce((o, k) => (seen(k) ? o : { ...o, [k]: false }), {}),
+      ...(seen('hex') ? {} : { hex: null }) }));
+  }, [p.cfg?.version]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* En Configuración (rol con ese acceso): su propio mapa, el de configuración (ver AdminMapLayers). */
+  const admin = c.panel === 'config';
   const [adm, setAdmRaw] = useState<AdminLayers>(ADMIN_LAYERS);
   const setAdm = (p: Partial<AdminLayers>) => setAdmRaw((l) => ({ ...l, ...p }));
   /* Cada sección abre con sus capas (Zonas → zonas, Eventos → eventos…); la ficha de un elemento cuenta
@@ -149,7 +171,7 @@ function Layout() {
   useEffect(() => { if (!fanPt) setFanXY(null); }, [fanPt]);
   const setMeasuring = (on: boolean) => setTool(on ? 'medir' : 'mover');
   const incidents = useApi((s) => s.incidents);
-  const canIncident = role === 'operator_911' || role === 'command';
+  const canIncident = p.can('registrar');
   const [measureAt, setMeasureAt] = useState<LngLat | null>(null);
   const [radius, setRadius] = useState(500);
   const [base, setBase] = useState<GoogleBase>('mapa');
@@ -164,13 +186,13 @@ function Layout() {
     const nav = tabsRef.current; if (!nav) return undefined;
     const place = () => { const b = nav.querySelector<HTMLElement>(`[data-tab="${c.panel}"]`); if (!b) return; nav.style.setProperty('--ti-x', `${b.offsetLeft}px`); nav.style.setProperty('--ti-w', `${b.offsetWidth}px`); };
     place(); const ro = new ResizeObserver(place); ro.observe(nav); return () => ro.disconnect();
-  }, [c.panel, role, !!story]);
+  }, [c.panel, role, !!story, p.tabs.join()]);
   // Configuración (admin) y bitácora (auditor) son tablas y formularios: el mapa no suma nada ahí
   // y repetía lo mismo que la lista. Con esas fichas abiertas, la ficha ocupa el lugar del mapa
   // (el mapa queda montado pero oculto, para volver a Estado o Eventos sin recargarlo).
   const noMap = wide;
-  // Mando: Jules vive en el lateral derecho cuando no hay otra ficha abierta.
-  const julesDock = role === 'command' && !c.sheet;
+  // Jules vive en el lateral derecho cuando no hay otra ficha abierta (todo rol que lo tiene; en Configuración no).
+  const julesDock = p.jules && !c.sheet && !admin;
   // Jules minimizado (franja de 64 px) o con el ancho que eligió la persona arrastrando su borde.
   const julesW = c.jules.minimizado && !c.jules.maximizado ? '64px' : c.jules.ancho ? `${c.jules.ancho}px` : null;
   const rw = story ? '360px' : c.sheet ? (wide ? 'min(860px, 52vw)' : c.sheet.k === 'jules' && julesW ? julesW : c.sheet.k === 'alerta' ? '500px' : c.sheet.k === 'config' ? 'min(480px, 36vw)' : '440px') : julesDock ? julesW ?? '400px' : '0px';
@@ -304,26 +326,29 @@ function Layout() {
           <button className={`iconbtn sound ${c.sound ? 'on' : ''}`} onClick={() => c.setSound(!c.sound)} aria-pressed={c.sound} aria-label={c.sound ? 'Silenciar avisos' : 'Activar sonido de avisos'} title={c.sound ? 'Sonido de alertas nuevas y mensajes de Jules: activado' : 'Sonido de alertas nuevas y mensajes de Jules: silenciado'}><Icon name={c.sound ? 'volume_up' : 'volume_off'} /></button>
           <span className="clock">{hhmmss(now)}</span>
           {/* Cuenta: quién tiene la sesión, los roles de la demostración y, al final, cerrar sesión.
-              Menú del sistema de diseño (src/jules/ds/Menu.tsx), no el select del navegador. */}
+              Menú del sistema de diseño (src/ui/Menu.tsx), no el select del navegador. */}
           <Menu
             fijo align="end" label="Cuenta y rol" className="user-menu" triggerClassName="user"
             trigger={<>
               <span className="av" aria-hidden>{initials(user.name)}</span>
-              <span className="user-role">{ROLE_LABEL[role]}</span>
+              <span className="user-role">{roleName(role)}</span>
               <svg className="user-caret" viewBox="0 0 16 16" aria-hidden><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </>}
             encabezado={<div className="user-head"><b>{user.name}</b><span>{user.territory}</span></div>}
             items={[
-              ...(Object.keys(ROLE_LABEL) as Role[]).map((r) => ({
-                label: ROLE_LABEL[r], detalle: sessionFor(r).user.name, marcado: r === role,
-                onSelect: () => { if (r !== role) { setRole(r); navigate('/'); } },
+              // Roles de la demostración (en producción el rol llega del token de Keycloak).
+              ...roleConfigs.map((r) => ({
+                label: r.name, detalle: sessionFor(r.role).user.name, marcado: r.role === role,
+                onSelect: () => { if (r.role !== role) { setRole(r.role); navigate('/'); } },
               })),
               // Escenario de la consola: para revisar cada estado de la interfaz (vacía, cargando, sin Maic…)
               ...(Object.keys(SCENARIO_LABEL) as Scenario[]).map((sc, i) => ({
                 label: SCENARIO_LABEL[sc], detalle: i === 0 ? 'Escenario' : undefined, marcado: sc === scenario, separado: i === 0,
                 onSelect: () => setScenario(sc),
               })),
-              { label: 'Cerrar sesión', icono: <Icon name="logout" />, separado: true, onSelect: signOut },
+              // Configuración: solo si el rol tiene ese acceso. No es una pestaña.
+              ...(p.config ? [{ label: 'Configuración', icono: <Icon name="settings" />, separado: true, onSelect: () => c.go('config', { k: 'config' }) }] : []),
+              { label: 'Cerrar sesión', icono: <Icon name="logout" />, separado: !p.config, onSelect: signOut },
             ]}
           />
         </div>
@@ -331,17 +356,19 @@ function Layout() {
 
       <aside className="lcol" aria-label={story ? 'Lo que buscaste' : 'Lista'}>
         {story ? <StoryPanel key={story.id} story={story} onExit={() => c.setStoryId(null)} /> : <>
+        {/* En Configuración no hay barra de pestañas: si el rol también tiene pestañas, se vuelve desde acá. */}
+        {admin ? (p.tabs.length > 0 && <div className="pb" style={{ paddingBottom: 0 }}><button className="btn ghost sm" onClick={() => c.go(p.tabs[0], null)}><Icon name="arrow_back" />Volver a la consola</button></div>) : (
         <nav className="ltabs" role="tablist" aria-label="Tareas" ref={tabsRef}>
           {/* Indicador que se desliza a la pestaña activa (posición medida abajo, en tabsRef). */}
           <span className="ti" aria-hidden />
-          {TOOLS[role].map((t) => (
+          {toolsOf(p).map((t) => (
             <button key={t.id} data-tab={t.id} role="tab" aria-selected={c.panel === t.id} className={c.panel === t.id ? 'on' : ''} onClick={() => c.setPanel(t.id)}>
               {t.label}
               {!loading && badge(t.id) > 0 && <span key={t.id === 'alertas' ? `n${pending}` : t.id} className={`count ${t.id === 'alertas' && c.fresh.length ? 'beat' : ''}`}>{badge(t.id)}</span>}
               {t.phase && <small>{t.phase}</small>}
             </button>
           ))}
-        </nav>
+        </nav>)}
         {/* key: cada cambio de pestaña vuelve a montar el contenedor y dispara su entrada. */}
         <div key={c.panel} className="panel-swap">
           {/* Mientras llegan los datos, cada panel muestra su forma en gris (no ceros ni listas vacías) */}
@@ -367,10 +394,10 @@ function Layout() {
             bounds={boundsOf(fit.points, 0.0008)} fitKey={fit.key} backOutKey={backOut} padding={{ top: 24, right: 24, bottom: 24, left: 24 }}
             base={base} onBaseStatus={setBaseStatus} onPointer={setPointer}
             region={{ lat: SECTOR.lat, lon: SECTOR.lon, title: SECTOR.name, sub: `${zones.length} zonas · ${cameras.length} cámaras`, onClick: () => setFit({ points: sectorPts, key: 'sector' + Date.now() }) }}
-            onZoneClick={c.overlay.onZoneClick ?? ((id) => c.open(role === 'admin' ? { k: 'config', tab: 'zonas', id } : { k: 'zona', id }))}
+            onZoneClick={c.overlay.onZoneClick ?? ((id) => c.open(admin ? { k: 'config', tab: 'zonas', id } : { k: 'zona', id }))}
             onEventClick={(id) => c.open({ k: 'evento', id })}
             onAlertClick={(id) => c.open({ k: 'alerta', id })}
-            onCameraClick={(id) => c.open(role === 'admin' ? { k: 'config', tab: 'camaras', id } : { k: 'camara', id })}
+            onCameraClick={(id) => c.open(admin ? { k: 'config', tab: 'camaras', id } : { k: 'camara', id })}
             onMapClick={story ? (tool === 'evidencia' ? (p) => setEvAt(p) : undefined) : measuring ? (p) => setMeasureAt(p) : tool === 'incidente' ? (p) => setIncAt(p) : c.overlay.onMapClick} onEmptyClick={() => { if (c.sheet) c.close(); }} onAirClick={(id) => c.open({ k: 'aereo', id })}
             measure={measure ? { p: measure.p, radius, cells: [], state: measure.state } : null}
             incidents={story || inv ? undefined : incidents.map((x) => ({ id: x.id, lat: x.lat, lon: x.lon, label: INCIDENT_LABEL[x.kind], icon: INCIDENT_ICON[x.kind], title: `${x.id} · ${INCIDENT_LABEL[x.kind]} · ${x.address} · ${hhmm(x.at)} · ${x.by}` }))}
@@ -388,8 +415,8 @@ function Layout() {
           {admin && !c.overlay.onMapClick && <AdminMapLegend l={adm} cameras={adm.pending ? pendingCams : cameras} />}
           {measuring && (
             <section className="measure-card" aria-live="polite">
-              <div className="mc2-hd"><span className="mc2-lbl">¿Quién llega a este punto?</span><button className="iconbtn" onClick={() => { setMeasuring(false); setMeasureAt(null); }} aria-label="Cerrar medición"><Icon name="close" /></button></div>
-              <div className="seg" role="group" aria-label="Radio"><span className="seg-lbl">Radio</span>{[250, 500, 1000].map((r) => <button key={r} className={radius === r ? 'on' : ''} onClick={() => setRadius(r)}>{r < 1000 ? `${r} m` : '1 km'}</button>)}</div>
+              <div className="mc2-hd"><span className="mc2-lbl">¿Quién llega a este punto?</span><button className="iconbtn" onClick={() => { setMeasuring(false); setMeasureAt(null); }} aria-label="Cerrar medición" title="Cerrar medición"><Icon name="close" /></button></div>
+              <Segmented label="Radio" showLabel value={radius} onChange={setRadius} options={[250, 500, 1000].map((r) => ({ value: r, label: r < 1000 ? `${r} m` : '1 km' }))} />
               {!measure ? <p className="mc2-hint">Hacé clic en el mapa donde querés medir. Te muestro qué unidades policiales están dentro del radio y cuánto tardarían en llegar.</p> : (<>
                 <p className={`mc2-state ${measure.state}`}><i />{measure.state === 'cubierta' ? `Cubierta: ${measure.within.length} ${measure.within.length === 1 ? 'unidad' : 'unidades'} en el radio` : measure.state === 'cerca' ? `Sin unidades en el radio; la más cercana llega en ${Math.round(measure.nearest!.eta)} min` : 'Sin cobertura: ninguna unidad llega en menos de 4 min'}</p>
                 {policeSource && <WhoArrives key={measure.p.join(',')} p={measure.p} />}
@@ -403,9 +430,9 @@ function Layout() {
             : <div className="map-hint" role="status"><Icon name="my_location" />Hacé clic en el mapa donde pasó</div>)}
           {/* Analista: la barra solo dentro de una investigación (Evidencia). «¿Quién llega?» es de los roles
               que despachan o miden en vivo, no del analista. */}
-          {(story || (!inv && role !== 'analyst')) && !loading && !c.overlay.onMapClick && !admin && (
+          {(story || (!inv && !p.has('investigar'))) && !loading && !c.overlay.onMapClick && !admin && (
             <CommandBar tool={tool} setTool={setTool} canIncident={canIncident && !story} canMeasure={policeSource && !story} canEvidence={!!story} onLooseEvidence={() => setLoose(true)}
-              onNewEvent={canOpenSheet(role, { k: 'evento-form' }) ? () => c.open({ k: 'evento-form' }) : undefined} />
+              onNewEvent={canOpenSheet(p, { k: 'evento-form' }) ? () => c.open({ k: 'evento-form' }) : undefined} />
           )}
           <div className="hud-frame" aria-hidden>
             <i className="br tl" /><i className="br tr" /><i className="br bl" /><i className="br rb" />
@@ -427,9 +454,10 @@ function Layout() {
           )}
           {/* Estado de los datos: cargando, o el enlace con Maic caído (los eventos le llegan cuando vuelve) */}
           {!inv && loading && <div className="map-state" role="status"><i className="spin" aria-hidden /><span><b>Cargando datos</b> · cámaras, zonas y unidades</span></div>}
-          {!inv && !loading && !maic.connected && <div className={`map-state warn ${focusSel && !c.overlay.route ? 'below' : ''}`} role="alert"><Icon name="warning" /><span><b>Sin conexión con Maic</b> desde las {hhmm(maic.lastMessageAt)} · las confirmaciones quedan en cola</span></div>}
+          {!net.online && <div className={`map-state warn ${focusSel && !c.overlay.route ? 'below' : ''}`} role="alert"><Icon name="warning" /><span><b>Sin conexión con la plataforma</b> desde las {hhmm(net.since)} · lo que se ve puede estar desactualizado</span></div>}
+          {net.online && !inv && !loading && !maic.connected && <div className={`map-state warn ${focusSel && !c.overlay.route ? 'below' : ''}`} role="alert"><Icon name="warning" /><span><b>Sin conexión con Maic</b> desde las {hhmm(maic.lastMessageAt)} · las confirmaciones quedan en cola</span></div>}
           {inv && !story && <div className="hist-pill" role="status"><Icon name="history" /><span>Histórico · <b>{dateTime(inv.from)} → {hhmm(inv.to)}</b>{c.invPick ? ' · haz clic en el mapa para mover el lugar' : ' · solo lo que pasó en esa ventana'}</span></div>}
-          {c.overlay.onMapClick && !inv && role !== 'analyst' && <div className="chip" style={{ position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)', zIndex: 6, background: 'var(--surface-panel)' }}><Icon name="edit_note" />{c.overlay.pickCells ? 'Haz clic en un hexágono para sumarlo o quitarlo · acércate para ver la grilla' : 'Haz clic en el mapa para marcar el punto'}</div>}
+          {c.overlay.onMapClick && !inv && !p.has('investigar') && <div className="chip" style={{ position: 'absolute', top: 36, left: '50%', transform: 'translateX(-50%)', zIndex: 'var(--z-map-hud)', background: 'var(--surface-panel)' }}><Icon name="edit_note" />{c.overlay.pickCells ? 'Haz clic en un hexágono para sumarlo o quitarlo · acércate para ver la grilla' : 'Haz clic en el mapa para marcar el punto'}</div>}
         </div>
         {/* Tocar cualquier capa con una ficha abierta suelta el foco: así la capa se ve al instante. */}
         <div className="mstrip" role="group" aria-label="Capas del mapa" onClickCapture={() => { if (focusSel && !unfocus) setUnfocus(true); }}>
@@ -470,10 +498,7 @@ function Layout() {
           )] : [el]))}
           </>}
           <span className="sep" />
-          <div className="seg" role="group" aria-label="Base del mapa">
-            <button className={base === 'mapa' ? 'on' : ''} onClick={() => setBase('mapa')}>Mapa</button>
-            <button className={base === 'satelite' ? 'on' : ''} onClick={() => setBase('satelite')}>Satélite</button>
-          </div>
+          <Segmented label="Base del mapa" value={base} onChange={setBase} options={[{ value: 'mapa', label: 'Mapa' }, { value: 'satelite', label: 'Satélite' }]} />
           {baseStatus === 'local' && <span className="chip nodata" title="Sin clave de Google o sin conexión">Mapa local</span>}
         </div>
       </section>
@@ -482,6 +507,7 @@ function Layout() {
       {!story && c.sheet && (
         <aside className="rcol" aria-label="Detalle">
           <div key={sheetKey} className="sheet-swap">
+          <ErrorBoundary scope="esta ficha" onReset={() => c.close()} resetLabel="Cerrar la ficha">
           {loading && !['config', 'bitacora', 'jules', 'evento-form'].includes(c.sheet.k) ? <SheetSkeleton /> : <>
           {c.sheet.k === 'alerta' && <AlertSheet key={c.sheet.id} id={c.sheet.id} />}
           {c.sheet.k === 'zona' && <ZoneSheet key={c.sheet.id} id={c.sheet.id} />}
@@ -495,6 +521,7 @@ function Layout() {
           {c.sheet.k === 'facial' && <FacialSheet key={c.sheet.id} id={c.sheet.id} />}
           {c.sheet.k === 'vehiculo' && <VehicleSheet key={c.sheet.id} id={c.sheet.id} />}
           </>}
+          </ErrorBoundary>
           </div>
         </aside>
       )}
@@ -527,7 +554,7 @@ function ArrivalBanner() {
         <span className="arrival-where">{where}</span>
       </div>
       <button className="btn primary sm" onClick={() => c.open({ k: 'alerta', id: a.id })}>Ver</button>
-      <button className="iconbtn" onClick={c.dismissArrival} aria-label="Cerrar aviso"><Icon name="close" /></button>
+      <button className="iconbtn" onClick={c.dismissArrival} aria-label="Cerrar aviso" title="Cerrar aviso"><Icon name="close" /></button>
       <i className="arrival-timer" aria-hidden />
     </div>
   );

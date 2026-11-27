@@ -102,7 +102,7 @@ export function VideoWall({ onClose }: { onClose: () => void }) {
           <button className="btn secondary sm" onClick={() => setFocus(null)}><Icon name="arrow_back" />Volver al muro</button>
           <div className="w-title"><h2>{cam.id} · {cam.street}</h2><span>{coords(cam)}</span></div>
           <span title="Filtro de visualización sobre la imagen. No es un sensor térmico ni infrarrojo.">{looks}</span>
-          <button className="iconbtn" onClick={onClose} aria-label="Cerrar muro de video"><Icon name="close" /></button>
+          <button className="iconbtn" onClick={onClose} aria-label="Cerrar muro de video" title="Cerrar muro de video"><Icon name="close" /></button>
         </div>
         <div className="w-focus">
           <div className={`wt big ${cam.status}`}>
@@ -112,7 +112,7 @@ export function VideoWall({ onClose }: { onClose: () => void }) {
           {wallAlert ? (
             <aside className="w-sheet" aria-label="Detalle de la alerta">
               <SheetNav.Provider value={{ close: () => setWallAlert(null), go: wallGo }}>
-                <div key={wallAlert} className="sheet-swap"><AlertSheet id={wallAlert} /></div>
+                <div key={wallAlert} className="sheet-swap"><AlertSheet id={wallAlert} inWall /></div>
               </SheetNav.Provider>
             </aside>
           ) : (
@@ -147,7 +147,7 @@ export function VideoWall({ onClose }: { onClose: () => void }) {
         {seg(GRIDS.map(([a, b], i) => [i, `${a}×${b}`] as [number, string]), grid, (v) => { setGrid(v); setPage(0); }, 'Rejilla')}
         <span title="Filtro de visualización sobre la imagen. No es un sensor térmico ni infrarrojo.">{looks}</span>
         <button className={`btn secondary sm ${auto ? 'on' : ''}`} aria-pressed={auto} onClick={() => setAuto(!auto)} title="Recorre las páginas del muro cada 7 segundos"><Icon name={auto ? 'pause' : 'play_arrow'} />Ronda</button>
-        <span className="w-pager"><button className="iconbtn" onClick={() => setPage((pg + pages - 1) % pages)} aria-label="Página anterior"><Icon name="chevron_left" /></button><b>{list.length ? pg + 1 : 0} / {pages}</b><button className="iconbtn" onClick={() => setPage((pg + 1) % pages)} aria-label="Página siguiente"><Icon name="chevron_right" /></button></span>
+        <span className="w-pager"><button className="iconbtn" onClick={() => setPage((pg + pages - 1) % pages)} aria-label="Página anterior" title="Página anterior"><Icon name="chevron_left" /></button><b>{list.length ? pg + 1 : 0} / {pages}</b><button className="iconbtn" onClick={() => setPage((pg + 1) % pages)} aria-label="Página siguiente" title="Página siguiente"><Icon name="chevron_right" /></button></span>
         <button className="iconbtn" onClick={onClose} aria-label="Cerrar muro de video" title="Cerrar (Esc)"><Icon name="close" /></button>
       </div>
       <div className="w-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)` }}>

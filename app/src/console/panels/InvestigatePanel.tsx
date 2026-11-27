@@ -27,7 +27,7 @@ export function InvestigatePanel() {
   return (
     <div className="pb">
       <p className="dim" style={{ margin: 0, fontSize: 12 }}>Una investigación parte de un hecho: dónde y cuándo pasó. Desde ahí ves qué registraron las cámaras en ese lugar y fijas lo que sirve.</p>
-      <button className="btn solid sm" onClick={() => setCreating(true)}><Icon name="add" />Nueva investigación</button>
+      <button className="btn primary sm" onClick={() => setCreating(true)}><Icon name="add" />Nueva investigación</button>
       <div className="box flush">
         <div className="bh"><h3>Investigaciones</h3><span className="sub">{invs.length}</span></div>
         <ul className="list bb">
@@ -135,7 +135,7 @@ function NewInvestigation({ onClose }: { onClose: () => void }) {
         <input className="fld sm" value={f.reasonText} onChange={(e) => setF({ ...f, reasonText: e.target.value })} placeholder="Número de caso (opcional)" aria-label="Número de caso" />
         {tried && errs.reason && <span className="err"><Icon name="error" />{errs.reason}</span>}
       </div>
-      <button className="btn solid sm" type="submit"><Icon name="search" />Crear y ver qué pasó</button>
+      <button className="btn primary sm" type="submit"><Icon name="search" />Crear y ver qué pasó</button>
       <p className="dim" style={{ margin: 0, fontSize: 11 }}>Todo lo que consultes dentro queda en la bitácora con este motivo.</p>
     </form>
   );

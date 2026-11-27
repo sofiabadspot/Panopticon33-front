@@ -9,10 +9,12 @@ import { useSession } from '../../shell/session';
 import { CoverageChip, Icon, KindIcon, Sparkline, StatusChip, useNow } from '../../ui/kit';
 import { useZoneSeverity } from '../../views/shared';
 import { useConsole } from '../ctx';
-import { SheetHead } from './SheetHead';
+import { SheetHead, SheetNotFound } from './SheetHead';
+import { usePermissions } from '../permissions';
 
 export function ZoneSheet({ id }: { id: string }) {
-  const { user, role } = useSession();
+  const { user } = useSession();
+  const perm = usePermissions();
   const c = useConsole();
   const now = useNow(5000);
   const zones = useApi((s) => s.zones);
@@ -26,7 +28,7 @@ export function ZoneSheet({ id }: { id: string }) {
   const sevOf = useZoneSeverity(alerts);
   const zone = zones.find((z) => z.id === id);
   useEffect(() => { if (zone) openZone(zone.id, zone.name, user); }, [zone?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!zone) return <><SheetHead kicker="Zona" title="No encontrada" /></>;
+  if (!zone) return <SheetNotFound kicker="Zona" what="esta zona" />;
 
   const s = status[zone.id]; const sev = sevOf(zone.id); const nd = !s || s.count == null;
   const ev = events.find((e) => e.zoneIds.includes(zone.id) && eventStatus(e, now) === 'en_curso');
@@ -62,7 +64,7 @@ export function ZoneSheet({ id }: { id: string }) {
         </div>
         <div className="box"><div className="bh"><h3>Personas en la última hora</h3></div><div className="bb"><Sparkline values={s?.trend ?? []} threshold={(zone.capacity * occMax) / 100} height={160} /></div></div>
 
-        {role !== 'admin' && (
+        {perm.seesAlerts && (
           <div className="box flush">
             <div className="bh"><h3>Alertas de la zona</h3><span className="sub">{zalerts.length}</span></div>
             <ul className="list bb">
@@ -90,6 +92,7 @@ export function ZoneSheet({ id }: { id: string }) {
         <div className="box flush">
           <div className="bh"><h3>Cámaras que la cubren</h3><span className="sub">{zcams.length}</span></div>
           <ul className="list bb">
+            {!zcams.length && <li className="empty">Ninguna cámara la cubre: la zona no se mide.</li>}
             {zcams.map((x) => (
               <li key={x.id}><button className="item" onClick={() => c.open({ k: 'camara', id: x.id })}>
                 <span className="ic"><Icon name={x.status === 'caida' ? 'videocam_off' : 'videocam'} /></span>

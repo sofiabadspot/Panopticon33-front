@@ -44,7 +44,7 @@ export function PanelConversaciones({
           aria-expanded="false"
           onClick={onAlternar}
         >
-          <span className="sv-btn sv-btn--secondary sv-btn--icon" aria-hidden="true">
+          <span className="iconbtn secondary" aria-hidden="true">
             <Icon name={flechaAbrir} />
           </span>
           <Eyebrow as="span" className="conversaciones__vertical">Conversaciones</Eyebrow>

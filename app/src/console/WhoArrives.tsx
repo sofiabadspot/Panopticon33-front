@@ -10,16 +10,18 @@ import type { LngLat } from '../api/types';
 import { UnitHex } from '../map/icons';
 import { useSession } from '../shell/session';
 import { Icon, useToast } from '../ui/kit';
+import { usePermissions } from './permissions';
 
 export function WhoArrives({ p, onSent }: { p: LngLat;
   /** Se mandaron unidades: quien muestra la lista sigue el flujo (p. ej. etiquetar el incidente). Sin esto, avisa con un toast. */
   onSent?: (ids: string[]) => void }) {
-  const { user, role } = useSession();
+  const { user } = useSession();
+  const perm = usePermissions();
   const toast = useToast();
   const units = useApi((s) => s.units);
   const opts = useMemo(() => unitOptions({ lat: p[1], lon: p[0] }).slice(0, 8), [p, units]); // eslint-disable-line react-hooks/exhaustive-deps
   const free = opts.filter((o) => o.free);
-  const canSend = role === 'operator_911' || role === 'command';
+  const canSend = perm.can('despachar');
   // Viene marcada la disponible que llega antes: en el caso común, mandar es un solo clic.
   const [picked, setPicked] = useState<string[]>(() => { const d = free.find((o) => o.avail === 'disponible'); return canSend && d ? [d.unit.id] : []; });
   const [showAll, setShowAll] = useState(false);

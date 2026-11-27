@@ -8,12 +8,12 @@ import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useS
 import { createPortal } from 'react-dom';
 import { ago, dateShort, dateTime, hhmm, pct } from '../../api/format';
 import { FACIAL_LISTS, FACIAL_SOURCES, POSE_LABEL, SHARP_LABEL, TRAIT_GROUPS, lastDetection, type FacialDetection, type FacialMatch, type LinkKind, type PersonLink, type Proof, type ProofKind, type Trait, type TraitGroup } from '../../api/facial';
-import { useSession } from '../../shell/session';
 import { FaceCloud, type FaceAnchors } from '../../ui/FaceCloud';
 import { Artifact, cardsOf, type Card } from './EvidenceWall';
 import { PersonMap } from './PersonMap';
 import { MapView, type RouteStop } from '../../map/MapView';
 import { EmptyState, Icon, useNow } from '../../ui/kit';
+import { usePermissions } from '../permissions';
 
 // Mismo día en hora de El Salvador (no en UTC).
 
@@ -56,7 +56,7 @@ export function Viewer({ items, index, onIndex, onClose, compare, standalone, re
         <span className="mono">{index + 1} / {n}</span>
         <b><Icon name={x.icon} />{x.tag} · {x.title}</b>
         <span className="lb-sub">{x.sub}</span>
-        <button className="iconbtn" aria-label="Cerrar (Esc)" onClick={onClose}><Icon name="close" /></button>
+        <button className="iconbtn" aria-label="Cerrar (Esc)" title="Cerrar (Esc)" onClick={onClose}><Icon name="close" /></button>
       </div>
       {render ? <div className="lb-body lb-art">{render(index)}</div> : <div className={`lb-body ${ref ? 'two' : ''}`}>
         <figure><ZoomImg key={x.title + index} src={x.src} alt={`${x.tag} · ${x.title}`} /><figcaption>{x.tag} · {x.sub}</figcaption></figure>
@@ -235,8 +235,8 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
   m: FacialMatch; canDecide: boolean; onConfirm: () => void; onDiscard: () => void; onClose: () => void;
 }) {
   const now = useNow(1000);
-  const { role } = useSession();
-  const analyst = role === 'analyst';
+  const perm = usePermissions();
+  const analyst = perm.has('investigar');
   const L = FACIAL_LISTS[m.list];
   const [sec, setSec] = useState<Sec>('resumen');
   const [cmp, setCmp] = useState(false);
@@ -347,7 +347,7 @@ export function FacialDossier({ m, canDecide, onConfirm, onDiscard, onClose }: {
             <button className="btn positive" onClick={onConfirm}><Icon name="check" />Confirmar identidad</button>
             <button className="btn secondary" onClick={onDiscard}><Icon name="close" />No es la persona</button>
           </>}
-          <button className="iconbtn ds-close" onClick={onClose} aria-label="Cerrar el expediente (Esc)"><Icon name="close" /></button>
+          <button className="iconbtn ds-close" onClick={onClose} aria-label="Cerrar el expediente (Esc)" title="Cerrar el expediente (Esc)"><Icon name="close" /></button>
         </div>
       </header>
 

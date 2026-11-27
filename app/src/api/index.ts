@@ -87,7 +87,7 @@ let state: State = {
   lists: seed.lists,
   users: seed.users,
   territories: seed.territories,
-  roleConfigs: seed.roleConfigs,
+  roleConfigs: readRoles(),
   severityTargets: { ...SEVERITY_TARGET_MIN },
   audit: seed.audit,
   maic: { connected: true, lastMessageAt: Date.now(), mode: 'producción' },
@@ -245,7 +245,9 @@ function newPlateAlert(now: number): Alert {
 export interface Session { user: User }
 /** GET /v1/me (Keycloak: el rol define vistas y territorio). En la demo se elige el rol. */
 export function sessionFor(role: Role): Session {
-  return { user: state.users.find((u) => u.role === role && u.active)! };
+  /* Un rol recién creado todavía no tiene a nadie en la demo: se entra con una persona de prueba. */
+  return { user: state.users.find((u) => u.role === role && u.active)
+    ?? { id: 'U-demo-' + role, name: `Prueba · ${roleName(role)}`, role, territory: 'San Salvador', active: true } };
 }
 
 /* ---------------- Bitácora ---------------- */
@@ -421,6 +423,14 @@ export function discardAlert(id: string, reason: string, user: User) {
   audit(user, 'Descartar alerta', id, KIND_LABEL[state.alerts.find((a) => a.id === id)!.kind], reason);
 }
 
+/** POST /v1/alerts/{id}/reopen — deshace un descarte: la alerta vuelve a la bandeja por revisar. */
+export function reopenAlert(id: string, user: User) {
+  const now = Date.now();
+  patchAlert(id, (a) => ({ ...a, review: 'por_revisar', reviewedBy: undefined, discardReason: undefined, updatedAt: now,
+    timeline: [...a.timeline, { at: now, label: 'Descarte deshecho: vuelve a la bandeja', by: user.name }] }));
+  audit(user, 'Deshacer descarte', id, KIND_LABEL[state.alerts.find((a) => a.id === id)!.kind]);
+}
+
 /* ---------------- Placas ---------------- */
 export interface PlateQuery { plate: string; from: number; to: number; zoneId: string | null; reason: string }
 /** GET /v1/plates/reads?q=&from=&to=&zone=&reason= → auditado. Sin motivo no hay resultados. */
@@ -520,10 +530,86 @@ export function setSeverityTargets(t: Record<Severity, number>, user: User) {
   commit({ severityTargets: { ...t } });
   audit(user, 'Editar tiempos objetivo', 'Criticidad', `Crítica ${t.critica} · Media ${t.media} · Baja ${t.baja} min`);
 }
-/** PUT /v1/roles/{role} — capas y alcance de alertas del arquetipo. */
+/* ---------------- Roles ----------------
+   En producción: GET/PUT/POST/DELETE /v1/roles y el evento roles.updated por el canal en vivo, que hace que las
+   consolas abiertas con ese rol vuelvan a pedir GET /v1/me/permissions. En la demo los roles se guardan en este
+   navegador y se avisan entre pestañas abiertas (evento storage): un cambio se ve al instante en las otras. */
+const ROLES_KEY = 'p33.roles.v2';
+function readRoles(): RoleConfig[] {
+  try {
+    // Clave literal: esta función corre al crear el estado, antes de que exista ROLES_KEY.
+    const v = JSON.parse(localStorage.getItem('p33.roles.v2') || 'null') as RoleConfig[] | null;
+    if (Array.isArray(v) && v.length && v.every((r) => r && typeof r.role === 'string' && Array.isArray(r.tabs))) return v;
+  } catch { /* sin almacenamiento o dato viejo */ }
+  return seed.roleConfigs;
+}
+function commitRoles(roleConfigs: RoleConfig[]) {
+  commit({ roleConfigs });
+  try { localStorage.setItem(ROLES_KEY, JSON.stringify(roleConfigs)); } catch { /* sin almacenamiento */ }
+}
+if (typeof window !== 'undefined') window.addEventListener('storage', (e) => { if (e.key === ROLES_KEY) commit({ roleConfigs: readRoles() }); });
+
+/** Nombre visible de un rol (el de la configuración; si ya no existe, el id). */
+export const roleName = (role: Role) => state.roleConfigs.find((r) => r.role === role)?.name ?? ROLE_LABEL[role] ?? role;
+/** Id de un rol nuevo a partir de su nombre ("Supervisor 911" → "supervisor_911"). No cambia al renombrarlo. */
+export function roleIdFrom(name: string): string {
+  const base = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'rol';
+  let id = base, n = 2;
+  while (state.roleConfigs.some((r) => r.role === id)) id = `${base}_${n++}`;
+  return id;
+}
+/** Qué no deja guardar un rol (errores) y qué conviene revisar (avisos). `me`: el rol de quien edita. */
+export function roleProblems(r: RoleConfig, all: RoleConfig[], me: Role): { errors: string[]; warnings: string[] } {
+  const errors: string[] = [], warnings: string[] = [];
+  const name = r.name.trim();
+  if (!name) errors.push('Ponle un nombre al rol.');
+  else if (all.some((x) => x.role !== r.role && x.name.trim().toLowerCase() === name.toLowerCase())) errors.push(`Ya hay un rol que se llama ${name}.`);
+  if (!r.tabs.length && !r.config) errors.push('El rol no ve nada: dale al menos una pestaña o el acceso a Configuración.');
+  const before = all.find((x) => x.role === r.role);
+  if (before?.config && !r.config) {
+    if (r.role === me) errors.push('No puedes quitarle Configuración a tu propio rol: no podrías volver a entrar.');
+    else if (!all.some((x) => x.role !== r.role && x.config)) errors.push('Es el único rol con Configuración: sin él, nadie podría volver a configurar.');
+  }
+  const seesAlerts = r.tabs.includes('alertas') || r.layers.alerts !== 'oculta';
+  if ((r.actions.includes('decidir') || r.actions.includes('despachar')) && !seesAlerts) warnings.push('Puede actuar sobre alertas, pero no tiene la pestaña Alertas ni la capa Alertas: no va a poder llegar a ellas.');
+  if (r.actions.includes('despachar') && r.layers.units === 'oculta') warnings.push('Puede mandar unidades, pero la capa Unidades policiales está oculta.');
+  if (r.actions.includes('decidir_facial') && !r.tabs.includes('verificacion')) warnings.push('Puede decidir coincidencias faciales, pero no tiene la pestaña Personas.');
+  if (r.config) warnings.push('Tiene Configuración: es administrador. Puede cambiar zonas, reglas, roles y usuarios.');
+  return { errors, warnings };
+}
+/** PUT /v1/roles/{role} — guarda el rol entero. Sube su versión: las consolas con ese rol lo aplican al instante. */
+export function saveRole(next: RoleConfig, user: User) {
+  const before = state.roleConfigs.find((r) => r.role === next.role);
+  if (!before) return;
+  commitRoles(state.roleConfigs.map((r) => (r.role === next.role ? { ...next, name: next.name.trim(), version: before.version + 1 } : r)));
+  const changed = (Object.keys(next) as (keyof RoleConfig)[]).filter((k) => k !== 'version' && JSON.stringify(next[k]) !== JSON.stringify(before[k]));
+  audit(user, before.name !== next.name.trim() ? 'Renombrar rol' : 'Editar rol', next.name.trim(), changed.length ? `Cambió: ${changed.join(', ')}` : 'Sin cambios');
+}
+/** Compatibilidad: cambio parcial de un rol (capas, alcance…). */
 export function updateRoleConfig(role: Role, patch: Partial<RoleConfig>, user: User) {
-  commit({ roleConfigs: state.roleConfigs.map((r) => (r.role === role ? { ...r, ...patch, layers: { ...r.layers, ...patch.layers } } : r)) });
-  audit(user, 'Editar rol', ROLE_LABEL[role], Object.keys(patch).join(', '));
+  const r = state.roleConfigs.find((x) => x.role === role); if (!r) return;
+  saveRole({ ...r, ...patch, layers: { ...r.layers, ...patch.layers } }, user);
+}
+/** POST /v1/roles — crea un rol: copiando otro (`from`) o desde lo mínimo. */
+export function createRole(name: string, from: RoleConfig | null, user: User): RoleConfig {
+  const role = roleIdFrom(name);
+  const minimal: Omit<RoleConfig, 'role' | 'name' | 'description' | 'system' | 'version'> = {
+    tabs: ['estado'], alertScope: 'territorio', minSeverity: null, actions: [], jules: false, config: false,
+    layers: { zones: 'disponible', events: 'disponible', alerts: 'disponible', units: 'disponible', cameras: 'disponible', hex: 'disponible', drones: 'disponible', helis: 'disponible' },
+  };
+  const r: RoleConfig = { ...(from ? { ...from, layers: { ...from.layers }, tabs: [...from.tabs], actions: [...from.actions] } : minimal),
+    role, name: name.trim(), description: from ? from.description : '', system: false, version: 1 };
+  commitRoles([...state.roleConfigs, r]);
+  audit(user, 'Crear rol', r.name, from ? `Copia de ${from.name}` : 'Desde cero');
+  return r;
+}
+/** DELETE /v1/roles/{role} — solo un rol creado y que nadie tenga. */
+export function deleteRole(role: Role, user: User): boolean {
+  const r = state.roleConfigs.find((x) => x.role === role);
+  if (!r || r.system || state.users.some((u) => u.role === role)) return false;
+  commitRoles(state.roleConfigs.filter((x) => x.role !== role));
+  audit(user, 'Borrar rol', r.name, 'Sin usuarios');
+  return true;
 }
 /** Territorio de un punto: el de su zona, o si no tiene, el de la zona más cercana (toda alerta tiene dirección). */
 export function territoryAt(lat: number, lon: number, zoneId?: string | null): string {
@@ -534,7 +620,7 @@ export function territoryAt(lat: number, lon: number, zoneId?: string | null): s
 /** ¿Le llega esta alerta al usuario? Según su rol (alcance y criticidad mínima) y su territorio. */
 export function inScope(a: Alert, user: User): boolean {
   const cfg = state.roleConfigs.find((r) => r.role === user.role);
-  if (!cfg) return true;
+  if (!cfg) return false; // un rol sin configuración no ve alertas
   if (cfg.minSeverity && SEVERITY_RANK[a.severity] > SEVERITY_RANK[cfg.minSeverity]) return false;
   if (cfg.alertScope === 'territorio' && user.territory !== 'Nacional') return territoryAt(a.lat, a.lon, a.zoneId) === user.territory;
   return true;

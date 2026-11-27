@@ -34,20 +34,22 @@
   --surface-overlay: var(--surface-raised);
   /* Tooltips: pieza invertida (en el oscuro de Sync, blanco roto con letra oscura). */
   --surface-inverse: var(--ink);
-  /* Hover suave: en el oscuro de Sync, blanco al 4 %. (--glass de la consola es otra cosa:
-     el fondo de los paneles sobre el mapa.) */
-  --glass: color-mix(in srgb, var(--ink) 4%, transparent);
+  /* Hover suave: en el oscuro de Sync, blanco al 4 %. Se llama --sv-hover para no pisar
+     --glass de la consola (el fondo de los paneles sobre el mapa). */
+  --sv-hover: color-mix(in srgb, var(--ink) 4%, transparent);
   --detect-fill-a: var(--glass-hi);
   /* Acento (borde que se arrastra): la consola no tiene color de acento; usa el del foco. */
   --accent: var(--focus);
   --link: var(--ink);
-  /* Acción principal en el oscuro de Sync: vidrio blanco (poca opacidad, borde fino). */
-  --primary: color-mix(in srgb, var(--ink) 10%, transparent);
-  --primary-hover: color-mix(in srgb, var(--ink) 16%, transparent);
-  --primary-borde: color-mix(in srgb, var(--ink) 35%, transparent);
-  --on-primary: var(--ink);
+  /* Acción principal en el oscuro de Sync: vidrio blanco (poca opacidad, borde fino).
+     Con prefijo --sv-: dentro de Jules no se pisan --primary ni --on-primary de la consola
+     (blanco sólido), que usan .tab.on, .iconbtn.on o .seg button.on. */
+  --sv-primary: color-mix(in srgb, var(--ink) 10%, transparent);
+  --sv-primary-hover: color-mix(in srgb, var(--ink) 16%, transparent);
+  --sv-primary-borde: color-mix(in srgb, var(--ink) 35%, transparent);
+  --sv-on-primary: var(--ink);
   --danger: var(--status-negative-text);
-  --status-negative-tint: color-mix(in srgb, var(--status-negative) 14%, transparent);
+  --sv-negative-tint: color-mix(in srgb, var(--status-negative) 14%, transparent);
   --shadow-card:
     inset 0 1px 0 color-mix(in srgb, var(--ink) 5%, transparent),
     0 1px 2px rgba(0, 0, 0, 0.35),
@@ -64,51 +66,30 @@
 :where(.jules-ds) .sv-ico { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 :where(.jules-ds) .sv-ico--lg { width: 20px; height: 20px; }
 
-/* Button */
-:where(.jules-ds) .sv-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
-  font: 600 var(--fs-base)/20px var(--font-sans); padding: var(--space-3) var(--space-6); border-radius: var(--radius-md);
-  border: 1px solid transparent; cursor: pointer; text-decoration: none; transition: background .15s, color .15s, border-color .15s, scale .15s ease-out; }
-:where(.jules-ds) .sv-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-:where(.jules-ds) .sv-btn--primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary-borde); }
-:where(.jules-ds) .sv-btn--primary:hover { background: var(--primary-hover); color: var(--on-primary); border-color: color-mix(in srgb, var(--ink) 60%, transparent); }
-:where(.jules-ds) .sv-btn--primary:active { background: var(--primary); }
-:where(.jules-ds) .sv-btn--secondary { background: transparent; color: var(--ink); border-color: var(--border-strong); }
-:where(.jules-ds) .sv-btn--secondary:hover { border-color: var(--ink); }
-:where(.jules-ds) .sv-btn--ghost { background: transparent; color: var(--link); padding-left: var(--space-2); padding-right: var(--space-2); }
-:where(.jules-ds) .sv-btn--sm { padding: var(--space-2) var(--space-4); font-size: var(--fs-md); }
-:where(.jules-ds) .sv-btn--icon { padding: 0; width: 40px; height: 40px; }
-:where(.jules-ds) .sv-btn--danger { background: var(--status-negative-tint); color: var(--status-negative-text); border-color: color-mix(in srgb, var(--status-negative) 55%, transparent); }
-:where(.jules-ds) .sv-btn--danger:hover { background: color-mix(in srgb, var(--status-negative) 22%, transparent); border-color: var(--status-negative); }
-:where(.jules-ds) .sv-btn[disabled] { opacity: .45; cursor: not-allowed; }
-:where(.jules-ds) .sv-btn:not([disabled]):active { scale: .96; }
-/* Grosor de íconos: en botones con texto (letra 600), trazo de 2px. */
-:where(.jules-ds) .sv-btn:not(.sv-btn--icon) .sv-ico { stroke-width: 2; }
-/* Zona clickeable mínima de 40px de alto en los botones chicos, sin cambiar cómo se ven. */
-:where(.jules-ds) .sv-btn--sm,
+/* Pestañas: zona clickeable mínima de 40px de alto, sin cambiar cómo se ven. */
 :where(.jules-ds) .sv-tabs__tab { position: relative; }
-:where(.jules-ds) .sv-btn--sm::after,
 :where(.jules-ds) .sv-tabs__tab::after { content: ""; position: absolute; inset: calc((100% - var(--hit-min)) / 2) 0; }
 
 /* Badge de estado */
-:where(.jules-ds) .sv-badge { display: inline-flex; align-items: center; gap: 6px; font: 600 var(--fs-sm)/16px var(--font-sans);
-  padding: 4px var(--space-2); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--ink); }
+:where(.jules-ds) .sv-badge { display: inline-flex; align-items: center; gap: var(--space-1-5); font: 600 var(--fs-sm)/16px var(--font-sans);
+  padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--ink); }
 :where(.jules-ds) .sv-badge::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--status-neutral); box-shadow: inset 0 0 0 1px var(--border-strong); }
 :where(.jules-ds) .sv-badge--positive::before { background: var(--status-positive); box-shadow: none; }
 :where(.jules-ds) .sv-badge--negative::before { background: var(--status-negative); box-shadow: none; }
 
 /* Field */
-:where(.jules-ds) .sv-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+:where(.jules-ds) .sv-field { display: flex; flex-direction: column; gap: var(--space-1-5); min-width: 0; }
 :where(.jules-ds) .sv-label { font: 600 var(--fs-base)/20px var(--font-sans); color: var(--ink); }
 :where(.jules-ds) .sv-input,
 :where(.jules-ds) .sv-textarea {
   width: 100%; font: 400 var(--fs-lg)/22px var(--font-sans); color: var(--ink); background: var(--surface);
-  border: 1px solid var(--border-strong); border-radius: var(--radius-md); padding: 9px 12px; transition: border-color .15s, box-shadow .15s; }
+  border: 1px solid var(--border-control); border-radius: var(--radius-md); padding: 9px var(--space-3); transition: border-color .15s, box-shadow .15s; }
 :where(.jules-ds) .sv-input::placeholder,
 :where(.jules-ds) .sv-textarea::placeholder { color: var(--ink-muted); opacity: .8; }
 :where(.jules-ds) .sv-input:hover,
 :where(.jules-ds) .sv-textarea:hover { border-color: var(--ink); }
 :where(.jules-ds) .sv-input:focus,
-:where(.jules-ds) .sv-textarea:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px var(--glass), 0 0 0 1px var(--focus); }
+:where(.jules-ds) .sv-textarea:focus { outline: 2px solid transparent; border-color: var(--focus); box-shadow: var(--ring-field); }
 :where(.jules-ds) .sv-textarea { min-height: 96px; resize: vertical; }
 :where(.jules-ds) .sv-inputgroup { position: relative; display: flex; align-items: center; }
 :where(.jules-ds) .sv-inputgroup .sv-ico { position: absolute; left: 12px; color: var(--ink-muted); pointer-events: none; }
@@ -121,45 +102,17 @@
 
 /* Tabs (píldora) */
 :where(.jules-ds) .sv-tabs__list { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--border); }
-:where(.jules-ds) .sv-tabs__tab { background: none; border: 0; font: 600 var(--fs-base)/20px var(--font-sans); color: var(--ink-muted); padding: 10px var(--space-4); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+:where(.jules-ds) .sv-tabs__tab { background: none; border: 0; font: 600 var(--fs-base)/20px var(--font-sans); color: var(--ink-muted); padding: var(--space-2-5) var(--space-4); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 :where(.jules-ds) .sv-tabs__tab:hover { color: var(--ink); }
 :where(.jules-ds) .sv-tabs__tab[aria-selected="true"] { color: var(--ink); }
-:where(.jules-ds) .sv-tabs--pill .sv-tabs__list { border: 0; background: var(--surface-raised); padding: 4px; border-radius: var(--radius-md); display: inline-flex; }
-:where(.jules-ds) .sv-tabs--pill .sv-tabs__tab { border: 0; margin: 0; border-radius: calc(var(--radius-md) - var(--space-1)); padding: 6px 14px; }
+:where(.jules-ds) .sv-tabs--pill .sv-tabs__list { border: 0; background: var(--surface-raised); padding: var(--space-1); border-radius: var(--radius-md); display: inline-flex; }
+:where(.jules-ds) .sv-tabs--pill .sv-tabs__tab { border: 0; margin: 0; border-radius: calc(var(--radius-md) - var(--space-1)); padding: var(--space-1-5) var(--space-3-5); }
 :where(.jules-ds) .sv-tabs--pill .sv-tabs__tab[aria-selected="true"] { background: var(--surface); box-shadow: var(--shadow-card); }
 
 /* Dialog (dialog nativo) */
-:where(.jules-ds) .sv-dialog { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 0; width: min(480px, calc(100% - 32px)); background: var(--surface); color: var(--ink); box-shadow: 0 24px 64px rgba(0, 0, 0, .5); }
-:where(.jules-ds) .sv-dialog::backdrop { background: var(--scrim); }
-:where(.jules-ds) .sv-dialog__inner { padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2); }
-:where(.jules-ds) .sv-dialog__title { font: 600 var(--fs-3xl)/28px var(--font-display); margin: 0; padding-right: var(--space-8); }
-:where(.jules-ds) .sv-dialog__desc { font: 400 var(--fs-base)/20px var(--font-sans); color: var(--ink-muted); margin: 0; }
-:where(.jules-ds) .sv-dialog__actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
-:where(.jules-ds) .sv-dialog__close { position: absolute; top: var(--space-3); right: var(--space-3); background: none; border: 0; color: var(--ink-muted); cursor: pointer; padding: 6px; border-radius: var(--radius-sm); }
-
-/* Dropdown menu */
-:where(.jules-ds).sv-menu,
-:where(.jules-ds) .sv-menu { position: relative; display: inline-block; }
-:where(.jules-ds) .sv-menu__content { position: absolute; top: calc(100% + 6px); left: 0; min-width: 220px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-float); padding: 4px; z-index: 50; }
-:where(.jules-ds) .sv-menu__content[hidden] { display: none; }
-:where(.jules-ds) .sv-menu__item { display: flex; align-items: center; gap: var(--space-2); width: 100%; background: none; border: 0; text-align: left; font: 400 var(--fs-base)/20px var(--font-sans); color: var(--ink); padding: 8px 10px; border-radius: calc(var(--radius-md) - var(--space-1) - 1px); cursor: pointer; }
-:where(.jules-ds) .sv-menu__item:hover,
-:where(.jules-ds) .sv-menu__item:focus-visible { background: var(--surface-raised); outline: none; }
-:where(.jules-ds) .sv-menu__item--danger { color: var(--status-negative-text); }
-:where(.jules-ds) .sv-menu__sep { height: 1px; background: var(--border); margin: 4px 0; }
-:where(.jules-ds) .sv-menu__header { padding: 10px 10px 8px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
-:where(.jules-ds) .sv-menu__label { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-:where(.jules-ds) .sv-menu__label small { font-size: var(--fs-sm); line-height: 16px; color: var(--ink-subtle); }
-:where(.jules-ds) .sv-menu__icon { display: inline-flex; width: 16px; justify-content: center; color: var(--ink-muted); }
-:where(.jules-ds) .sv-menu__check { width: 16px; height: 16px; flex: none; color: var(--ink); }
-:where(.jules-ds) .sv-menu__item--on { background: var(--glass); }
-/* Menú abierto hacia la izquierda (botón pegado al borde derecho). */
-:where(.jules-ds) .svx-menu__content--end { left: auto; right: 0; }
-/* Menú fijo: su contenido va al final de la página; el contenedor no ocupa lugar. */
-body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height: 0; z-index: 70; }
 
 /* Tag / Chip */
-:where(.jules-ds) .sv-tag { display: inline-flex; align-items: center; gap: 6px; font: 400 var(--fs-md)/18px var(--font-sans); padding: 4px 10px; border-radius: var(--radius-full); border: 1px solid var(--border-strong); color: var(--ink); background: transparent; cursor: pointer; }
+:where(.jules-ds) .sv-tag { display: inline-flex; align-items: center; gap: var(--space-1-5); font: 400 var(--fs-md)/18px var(--font-sans); padding: var(--space-1) var(--space-2-5); border-radius: var(--radius-full); border: 1px solid var(--border-strong); color: var(--ink); background: transparent; cursor: pointer; }
 
 /* Empty state (sutil) */
 :where(.jules-ds) .sv-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--space-2); padding: var(--space-12) var(--space-6); border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); }
@@ -284,8 +237,8 @@ body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height
 :where(.jules-ds) .svx-prompt__input::placeholder { color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 :where(.jules-ds) .svx-prompt > :not(.svx-prompt__input) { flex-shrink: 0; }
 /* Radios concéntricos del botón dentro del campo. */
-:where(.jules-ds) .svx-prompt--md > .sv-btn { border-radius: calc(var(--radius-lg) - var(--space-2) - 1px); }
-:where(.jules-ds) .svx-prompt--sm > .sv-btn { border-radius: calc(var(--radius-lg) - var(--space-1) - 1px); }
+:where(.jules-ds) .svx-prompt--md > .iconbtn { border-radius: calc(var(--radius-lg) - var(--space-2) - 1px); }
+:where(.jules-ds) .svx-prompt--sm > .iconbtn { border-radius: calc(var(--radius-lg) - var(--space-1) - 1px); }
 
 /* Mientras se arrastra un borde: el cursor no cambia y no se selecciona texto. */
 .svx-arrastrando { cursor: col-resize; user-select: none; }
@@ -312,7 +265,7 @@ body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height
 .rcol:has(> .jules-lateral--maximizado) {
   grid-column: 1 / -1;
   position: relative;
-  z-index: 30;
+  z-index: var(--z-takeover);
   border-left: 0;
 }
 
@@ -380,7 +333,7 @@ body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height
 .jules-lateral__abrir > :not(.jules-lateral__aura) { position: relative; }
 /* El nombre escrito de costado en la franja minimizada. */
 .jules-lateral__vertical { writing-mode: vertical-rl; color: var(--ink); }
-.jules-lateral__abrir:hover { color: var(--ink); background: var(--glass); }
+.jules-lateral__abrir:hover { color: var(--ink); background: var(--sv-hover); }
 .jules-lateral__abrir:active { background: var(--detect-fill-a); }
 .jules-lateral__abrir:focus-visible { outline-offset: -2px; }
 
@@ -398,8 +351,8 @@ body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height
 .jules-lateral__opciones { display: flex; align-items: center; gap: var(--space-1); }
 
 /* Íconos de Jules en --ink. */
-.jules-icono.sv-btn--ghost,
-.jules-accion.sv-btn--ghost { color: var(--ink); }
+.jules-icono.iconbtn,
+.jules-accion.iconbtn { color: var(--ink); }
 
 /* Tooltips del encabezado: abajo del ícono y alineados a la derecha. */
 .jules-lateral__opciones [data-tip]::before {
@@ -458,7 +411,7 @@ body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height
 }
 
 /* Botón para volver a lo último. */
-.jules-lateral__abajo.sv-btn {
+.jules-lateral__abajo.iconbtn {
   position: sticky;
   bottom: var(--space-3);
   align-self: center;
@@ -482,7 +435,7 @@ body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height
 .jules-respuesta__botones { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .jules-respuesta__pie { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .jules-respuesta__acciones { display: flex; align-items: center; gap: var(--space-1); }
-.jules-respuesta__pie .jules-accion[aria-pressed="true"] { background: var(--glass); }
+.jules-respuesta__pie .jules-accion[aria-pressed="true"] { background: var(--sv-hover); }
 .jules-opinion { margin-top: var(--space-2); }
 .jules-respuesta__fuente { font: var(--type-body-sm); color: var(--ink-muted); }
 .jules-respuesta__visual { align-self: stretch; min-width: 0; }
@@ -576,7 +529,7 @@ body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height
 .conversaciones__grupo-titulo { padding: var(--space-4) var(--space-2) var(--space-1); }
 .conversacion { display: flex; flex-direction: column; width: 100%; padding: var(--space-2); border: 0; border-radius: var(--radius-md); background: none; text-align: left; color: var(--ink); cursor: pointer; }
 .conversacion:active { background: var(--detect-fill-a); }
-.conversacion:hover { background: var(--glass); }
+.conversacion:hover { background: var(--sv-hover); }
 /* La conversación actual: como la pestaña elegida (relleno y sombra). */
 .conversacion--activa,
 .conversacion--activa:hover { background: var(--surface); box-shadow: var(--shadow-card); }
@@ -617,7 +570,7 @@ body > .sv-menu.jules-ds { position: absolute; top: 0; left: 0; width: 0; height
   cursor: text;
 }
 .jules-lateral__titulo-texto { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.jules-lateral__titulo-boton:hover { background: var(--glass); }
+.jules-lateral__titulo-boton:hover { background: var(--sv-hover); }
 .jules-lateral__titulo-boton:active { background: var(--surface-raised); }
 .jules-lateral__titulo-boton[data-tip]::before { top: calc(100% + var(--space-1)); bottom: auto; left: 0; translate: 0 calc(-1 * var(--space-1)); }
 .jules-lateral__titulo-boton[data-tip]:hover::before,

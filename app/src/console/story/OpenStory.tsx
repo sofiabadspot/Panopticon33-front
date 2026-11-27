@@ -12,6 +12,7 @@ import { Dialog, Icon } from '../../ui/kit';
 import { useConsole } from '../ctx';
 import { playWhenOpened } from './useStory';
 import { STORY_REASON } from './StorySimple';
+import { usePermissions } from '../permissions';
 
 /* El sujeto que espera motivo. Lo pinta <OpenStoryHost />, montado una vez en la consola. */
 let pending: StorySubject | null = null;
@@ -26,9 +27,10 @@ const same = (a: StorySubject, b: StorySubject) =>
 
 export function useOpenStory(): (s: StorySubject, from?: { invId: string }) => void {
   const { role, user } = useSession();
+  const perm = usePermissions();
   const c = useConsole();
   return useCallback((s: StorySubject, from?: { invId: string }) => {
-    if (role !== 'analyst' || !canOpenStory(s)) return;
+    if (!perm.has('investigar') || !canOpenStory(s)) return;
     // Desde una investigación es otra historia que la suelta: se reabre solo la del mismo origen.
     const had = snapshot().stories.find((x) => same(x.subject, s) && x.invId === from?.invId);
     if (had) { playWhenOpened(); c.setStoryId(had.id); return; }
@@ -68,7 +70,7 @@ function ReasonDialog({ s }: { s: StorySubject }) {
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button className="btn ghost sm" type="button" onClick={close}>Cancelar</button>
-          <button className="btn solid sm" type="submit" disabled={!pick} title={pick ? undefined : 'Elegí un motivo'}><Icon name="play_arrow" />Abrir y reproducir</button>
+          <button className="btn primary sm" type="submit" disabled={!pick} title={pick ? undefined : 'Elegí un motivo'}><Icon name="play_arrow" />Abrir y reproducir</button>
         </div>
       </form>
     </Dialog>

@@ -3,7 +3,7 @@
    manda desde acá, sin Maic; descartar pide un motivo de una lista corta. A Maic le llega el evento
    por el backend. Tras decidir, la ficha ofrece pasar a la siguiente alerta por revisar. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { audit, AVAIL_LABEL, confirmAlert, discardAlert, forOperator, inScope, nearestFree, openAlert, readsOf, sightingsOf, suggestedUnits, unitOptions, useApi } from '../../api';
+import { audit, AVAIL_LABEL, confirmAlert, discardAlert, reopenAlert, forOperator, inScope, nearestFree, openAlert, readsOf, sightingsOf, suggestedUnits, unitOptions, useApi } from '../../api';
 import { ago, dateTime, dec1, fmt, fmtCrowd, hhmm, pct } from '../../api/format';
 import { DISCARD_REASONS, DISPATCH_LABEL, KIND_LABEL, KIND_PHRASE } from '../../api/labels';
 import type { Alert, PlateRead, Zone } from '../../api/types';
@@ -14,13 +14,15 @@ import { useInspect } from '../../ui/ImageInspect';
 import type { Evidence as Ev } from '../../api/types';
 import { byUrgency } from '../../views/shared';
 import { useConsole } from '../ctx';
-import { SheetHead, useSheetGo } from './SheetHead';
+import { SheetHead, useSheetGo, SheetNotFound } from './SheetHead';
 import { useOpenStory } from '../story/OpenStory';
 import type { RouteStop } from '../../map/MapView';
 import { UnitHex } from '../../map/icons';
+import { usePermissions } from '../permissions';
 
-export function AlertSheet({ id }: { id: string }) {
-  const { user, role } = useSession();
+export function AlertSheet({ id, inWall = false }: { id: string; inWall?: boolean }) {
+  const { user } = useSession();
+  const perm = usePermissions();
   const c = useConsole();
   // Abrir otra ficha: en la consola, el lateral; dentro del muro de video, el muro decide (SheetNav).
   const go = useSheetGo();
@@ -32,7 +34,8 @@ export function AlertSheet({ id }: { id: string }) {
   const status = useApi((s) => s.zoneStatus);
   const cameras = useApi((s) => s.cameras);
   const [discarding, setDiscarding] = useState(false);
-  const a = alerts.find((x) => x.id === id);
+  // Solo lo que está en el alcance del rol: un enlace o una búsqueda no abren alertas de otro territorio.
+  const a = alerts.find((x) => x.id === id && inScope(x, user));
   /* Lecturas de la placa antes de la última: las de los 7 días anteriores a la alerta y las que la alerta
      fue sumando (una placa tiene una sola alerta; cada lectura nueva se suma a esta). La última es dónde
      está ahora: la posición de la alerta. */
@@ -75,7 +78,7 @@ export function AlertSheet({ id }: { id: string }) {
   };
 
   // Una alerta de persona se decide en la ficha facial (ahí está la verificación), no acá.
-  const canDecide = !!a && role === 'operator_911' && a.review === 'por_revisar' && a.kind !== 'persona_en_lista';
+  const canDecide = !!a && perm.can('decidir') && a.review === 'por_revisar' && a.kind !== 'persona_en_lista';
   const next = () => alerts.filter((x) => forOperator(x) && inScope(x, user) && x.review === 'por_revisar' && x.id !== id).sort(byUrgency)[0];
   const advance = () => { const n = next(); if (n) go({ k: 'alerta', id: n.id }); };
   const pendingCount = alerts.filter((x) => forOperator(x) && inScope(x, user) && x.review === 'por_revisar' && x.id !== id).length;
@@ -89,13 +92,20 @@ export function AlertSheet({ id }: { id: string }) {
     const key = a.id + Date.now(); c.setSignal({ lat: a.lat, lon: a.lon, label: unitIds.length ? DISPATCH_LABEL.en_camino : 'Confirmada', key });
     setTimeout(() => c.setSignal(null), 6500);
   };
-  const discard = (r: string) => { if (!a) return; discardAlert(a.id, r, user); toast(`${a.id} descartada: ${r}`); setDiscarding(false); advance(); };
+  const discard = (r: string) => {
+    if (!a) return; const aid = a.id; discardAlert(aid, r, user); setDiscarding(false); advance();
+    toast(`${aid} descartada: ${r}`, { undo: () => { reopenAlert(aid, user); go({ k: 'alerta', id: aid }); } });
+  };
 
   useEffect(() => {
     if (!canDecide) return;
     const k = (e: KeyboardEvent) => {
       if (composing) { if (e.key === 'Escape') { e.preventDefault(); setComposing(false); } return; }
       if ((e.target as HTMLElement).closest('input, select, textarea') || e.metaKey || e.ctrlKey) return;
+      /* Solo decide la ficha que está a la vista: con el muro abierto, la del muro; nunca con un diálogo,
+         un menú o una lista desplegada encima. */
+      if (!inWall && document.querySelector('.wall')) return;
+      if (document.querySelector('dialog[open], [aria-modal="true"]') || (e.target as HTMLElement).closest('[role="dialog"], [role="menu"], [role="listbox"]')) return;
       if ((e.key === 'c' || e.key === 'C') && !discarding) startConfirm();
       else if (e.key === 'd' || e.key === 'D') setDiscarding(true);
       else if (discarding && /^[1-5]$/.test(e.key)) discard(DISCARD_REASONS[Number(e.key) - 1]);
@@ -104,7 +114,7 @@ export function AlertSheet({ id }: { id: string }) {
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   });
 
-  if (!a) return <><SheetHead kicker="Alerta" title="No encontrada" /><div className="empty">Esta alerta no existe o no está en tu territorio.</div></>;
+  if (!a) return <SheetNotFound kicker="Alerta" what="esta alerta" />;
   const zone = zones.find((z) => z.id === a.zoneId);
   const cam = cameras.find((x) => x.id === a.cameraId);
   const zs = zone ? status[zone.id] : null;
@@ -118,12 +128,12 @@ export function AlertSheet({ id }: { id: string }) {
         kicker={<><span className="mono">{a.id}</span>·{a.review === 'por_revisar' ? <Unattended since={a.createdAt} /> : <span>{ago(a.createdAt, now)}</span>}</>}
         title={KIND_PHRASE[a.kind]}
         sub={<>{zone ? <button className="linklike" onClick={() => go({ k: 'zona', id: zone.id })}>{zone.name}</button> : cam?.street}{cam && <> · <button className="linklike mono" onClick={() => go({ k: 'camara', id: cam.id })}>{cam.id}</button></>}</>}
-        aside={a.review === 'por_revisar' && role !== 'analyst' ? undefined : <>
+        aside={a.review === 'por_revisar' && !perm.has('investigar') ? undefined : <>
           {a.review !== 'por_revisar' && <StatusChip alert={a} />}
           {/* Analista: abrir una investigación con el lugar y la hora de esta alerta ya cargados */}
-          {role === 'analyst' && <button className="chip outline" onClick={() => { c.setInvDraft({ title: `${KIND_PHRASE[a.kind]}${a.plate ? ` ${a.plate.listed}` : ''}`, lat: a.lat, lon: a.lon, label: cam?.street ?? zone?.name ?? a.cameraId, from: a.createdAt - 3600e3, to: a.createdAt + 1800e3 }); c.setPanel('investigar'); }}><Icon name="timeline" />Investigar esto</button>}
+          {perm.has('investigar') && <button className="chip outline" onClick={() => { c.setInvDraft({ title: `${KIND_PHRASE[a.kind]}${a.plate ? ` ${a.plate.listed}` : ''}`, lat: a.lat, lon: a.lon, label: cam?.street ?? zone?.name ?? a.cameraId, from: a.createdAt - 3600e3, to: a.createdAt + 1800e3 }); c.setPanel('investigar'); }}><Icon name="timeline" />Investigar esto</button>}
           {/* Analista: la historia de la placa (pide motivo). Las alertas de persona no son suyas. */}
-          {role === 'analyst' && a.plate && <button className="chip outline" onClick={() => openStory({ k: 'placa', plate: a.plate!.listed })}><Icon name="play_arrow" />Ver recorrido</button>}
+          {perm.has('investigar') && a.plate && <button className="chip outline" onClick={() => openStory({ k: 'placa', plate: a.plate!.listed })}><Icon name="play_arrow" />Ver recorrido</button>}
         </>}
       />
       <div className={`pb ${!sent ? '' : txSolo ? 'tx-alone' : 'tx-after'}`}>
@@ -146,7 +156,7 @@ export function AlertSheet({ id }: { id: string }) {
 
         {a.plate && (
           <div className="box flush">
-            <div className="bh"><h3>Lecturas previas de la placa</h3><span className="sub">{prev.length} en 7 días</span>{role === 'analyst' && <button className="linklike" style={{ marginLeft: 'auto', fontSize: 'var(--fs-sm)' }} onClick={() => go({ k: 'vehiculo', id: a.plate!.listed })}>Ficha del vehículo</button>}</div>
+            <div className="bh"><h3>Lecturas previas de la placa</h3><span className="sub">{prev.length} en 7 días</span>{perm.has('investigar') && <button className="linklike" style={{ marginLeft: 'auto', fontSize: 'var(--fs-sm)' }} onClick={() => go({ k: 'vehiculo', id: a.plate!.listed })}>Ficha del vehículo</button>}</div>
             {prev.length > 0 && (
               <div className="bb trace-cta">
                 <TraceCard on={trace} onToggle={toggleTrace}
@@ -184,7 +194,7 @@ export function AlertSheet({ id }: { id: string }) {
           {DISCARD_REASONS.map((r, i) => <button key={r} className="btn secondary xs" onClick={() => discard(r)}><span className="kbd">{i + 1}</span>{r}</button>)}
           <button className="btn ghost xs" onClick={() => setDiscarding(false)}>Cancelar</button>
         </>}
-        {!canDecide && a.review === 'por_revisar' && <span className="dim" style={{ fontSize: 'var(--fs-sm)' }}><Icon name="lock" /> Solo el operador 911 confirma o descarta.</span>}
+        {!canDecide && a.review === 'por_revisar' && <span className="dim" style={{ fontSize: 'var(--fs-sm)' }}><Icon name="lock" /> Solo lectura: tu rol no confirma ni descarta alertas.</span>}
         {a.review === 'confirmada' && sent && (pendingCount > 0
           ? <button className="btn primary" style={{ flex: 1 }} onClick={advance} autoFocus><Icon name="arrow_forward" />Siguiente alerta<span className="chip" style={{ marginLeft: 'auto' }}>{pendingCount} por revisar</span><span className="kbd" style={{ color: 'inherit', borderColor: 'currentColor' }}>↵</span></button>
           : <span style={{ fontSize: 'var(--fs-sm)' }}><Icon name="check_circle" /> No quedan alertas por revisar.</span>)}

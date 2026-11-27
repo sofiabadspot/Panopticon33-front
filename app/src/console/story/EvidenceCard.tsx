@@ -15,6 +15,8 @@ import { useSession } from '../../shell/session';
 import { Icon } from '../../ui/kit';
 import { QuickFan } from '../QuickFan';
 import { useStoryChapters, useStoryJump, useStoryPlayback, useStoryRange } from './useStory';
+import { DateTimeField, fromField, toField } from '../../ui/Field';
+import { FileInput } from '../../ui/FileInput';
 
 type Mode = 'archivo' | 'titulo' | 'plataforma';
 const ITEMS: { id: Mode; label: string; icon: string; hint: string }[] = [
@@ -27,11 +29,8 @@ const ITEMS: { id: Mode; label: string; icon: string; hint: string }[] = [
 export const EVIDENCE_SOURCES = [...FACIAL_SOURCES.map((s) => s.name), 'Particular (vecino o testigo)', 'Comercio o cámara privada', 'Empresa de transporte', 'Medios o redes sociales'];
 const OTHER = 'Otra fuente…';
 
-/* La hora se carga en la de El Salvador (UTC−6, sin horario de verano), la misma que muestra la consola,
-   aunque el navegador esté en otra zona. */
-const OFFSET = 6 * 3_600_000;
-const toField = (t: number) => new Date(t - OFFSET).toISOString().slice(0, 16);
-const fromField = (v: string) => { const t = Date.parse(`${v}:00Z`); return Number.isNaN(t) ? null : t + OFFSET; };
+/* La hora se carga en la de El Salvador (UTC−6), la misma que muestra la consola, aunque el navegador
+   esté en otra zona: la conversión es la de toda la consola (ui/Field.tsx). */
 const evOf = (f: File, caption: string): Evidence => {
   const src = URL.createObjectURL(f);
   return f.type.startsWith('image/') ? { type: 'imagen', src, caption } : f.type.startsWith('video/') ? { type: 'clip', src, caption } : { type: 'pendiente', caption: `${caption} · ${f.name}` };
@@ -44,12 +43,11 @@ function useWhenAndSource(story: Story) {
   const [when, setWhen] = useState(() => toField(chs[at]?.at ?? Date.now()));
   const [pick, setPick] = useState('');
   const [other, setOther] = useState('');
-  const t = useMemo(() => fromField(when), [when]);
+  const t = useMemo(() => { const v = fromField(when); return Number.isFinite(v) ? v : null; }, [when]);
   const source = pick === OTHER ? other.trim() : pick;
   const whenField = (
-    <div className="field"><label htmlFor="ev-when">Cuándo pasó</label>
-      <input id="ev-when" type="datetime-local" className="fld sm" value={when} onChange={(e) => setWhen(e.target.value)} aria-invalid={t === null} />
-      <span className="hint">La fecha y hora del hecho (por ejemplo, cuándo se hizo la denuncia), no la de hoy. Con esta fecha entra en su lugar del recorrido.</span></div>
+    <DateTimeField label="Cuándo pasó" value={when} onChange={setWhen} max={Date.now()} error={t === null ? 'Falta la fecha y hora del hecho.' : null}
+      hint="La fecha y hora del hecho (por ejemplo, cuándo se hizo la denuncia), no la de hoy. Con esta fecha entra en su lugar del recorrido." />
   );
   const sourceField = (
     <div className="field"><label htmlFor="ev-src">Fuente</label>
@@ -108,8 +106,8 @@ export function EvidenceFan({ story, p, xy, onClose }: { story: Story; p: LngLat
       <div className="mc2-hd"><span className="mc2-lbl">{ITEMS.find((x) => x.id === mode)?.label}</span></div>
       <form className="qf-form" noValidate onSubmit={(e) => { e.preventDefault(); save(); }}>
         {mode === 'archivo' && (
-          <div className="field"><label htmlFor="ev-file">Archivo</label>
-            <input id="ev-file" type="file" className="fld sm qf-file" accept="image/*,video/*,application/pdf" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); if (f && !title.trim()) setTitle(f.name.replace(/\.[^.]+$/, '')); }} /></div>
+          <div className="field"><span className="lbl">Archivo</span>
+            <FileInput label="Elegir archivo" accept="image/*,video/*,application/pdf" onFiles={(fs) => { const f = fs[0] ?? null; setFile(f); if (f && !title.trim()) setTitle(f.name.replace(/\.[^.]+$/, '')); }} /></div>
         )}
         {mode === 'plataforma' && (
           <div className="field"><span className="lbl" id="ev-cam">Cámara cercana</span>
@@ -154,9 +152,8 @@ export function EvidenceLoose({ story, onClose }: { story: Story; onClose: () =>
       <div className="mc2-hd"><span className="mc2-lbl">Evidencia sin lugar en el mapa</span><button className="iconbtn" onClick={onClose} aria-label="Cerrar" title="Cerrar (Esc)"><Icon name="close" /></button></div>
       <p className="qf-hint">Un documento, fotos o un informe que no pasó en un punto de la ciudad. En el recorrido aparece como una escena, en el momento en que pasó.</p>
       <form className="qf-form" noValidate onSubmit={(e) => { e.preventDefault(); save(); }}>
-        <div className="field"><label htmlFor="evl-files">Archivos <small className="hint">(uno o varios)</small></label>
-          <input id="evl-files" type="file" multiple className="fld sm qf-file" accept="image/*,video/*,application/pdf" onChange={(e) => { const fs = [...(e.target.files ?? [])]; setFiles(fs); if (fs[0] && !title.trim()) setTitle(fs[0].name.replace(/\.[^.]+$/, '')); }} />
-          {files.length > 1 && <span className="hint">{files.length} archivos</span>}</div>
+        <div className="field"><span className="lbl">Archivos <small className="hint">(uno o varios)</small></span>
+          <FileInput label="Elegir archivos" multiple accept="image/*,video/*,application/pdf" onFiles={(fs) => { setFiles(fs); if (fs[0] && !title.trim()) setTitle(fs[0].name.replace(/\.[^.]+$/, '')); }} /></div>
         <div className="field"><label htmlFor="evl-title">Qué es</label>
           <input id="evl-title" className="fld sm" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej.: denuncia de la víctima, fotos del DUI" /></div>
         {whenField}

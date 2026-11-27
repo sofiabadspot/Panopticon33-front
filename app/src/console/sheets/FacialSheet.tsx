@@ -8,17 +8,19 @@
    y las conexiones quedan en el expediente.
    El operador 911 tiene el veredicto final. Nunca es una identificación automática. */
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { ConfirmDelete } from './configPlace';
 import { audit } from '../../api';
 import { cameraClip } from '../../api/video';
 import { ago, dateTime, hhmm, pct } from '../../api/format';
-import { FACIAL_DISCARD, FACIAL_LISTS, bestDetection, confirmFacial, discardFacial, lastDetection, requestFieldCheck, scoreMeaning, useFacial, type FacialDetection, type FacialList, type FacialMatch } from '../../api/facial';
+import { FACIAL_DISCARD, FACIAL_LISTS, bestDetection, confirmFacial, discardFacial, reopenFacial, lastDetection, requestFieldCheck, scoreMeaning, useFacial, type FacialDetection, type FacialList, type FacialMatch } from '../../api/facial';
 import { useSession } from '../../shell/session';
 import { FacialDossier, Proofs, Shot, proofItem, type ViewItem } from './FacialDossier';
 import { ImageViewer } from '../../ui/ImageInspect';
 import { EmptyState, Icon, useNow, useToast } from '../../ui/kit';
 import type { RouteStop } from '../../map/MapView';
 import { useConsole } from '../ctx';
-import { SheetHead } from './SheetHead';
+import { SheetHead, SheetNotFound } from './SheetHead';
+import { usePermissions } from '../permissions';
 
 const gapMin = (ms: number) => { const mn = Math.round(ms / 60000); return mn < 60 ? `${mn} min` : `${Math.floor(mn / 60)} h${mn % 60 ? ` ${mn % 60} min` : ''}`; };
 const distM = (a: FacialDetection, b: FacialDetection) => {
@@ -97,12 +99,15 @@ export function FacialPanel() {
 }
 
 export function FacialSheet({ id }: { id: string }) {
-  const { user, role } = useSession();
+  const { user } = useSession();
+  const perm = usePermissions();
   const c = useConsole();
   const toast = useToast();
   const now = useNow(5000);
   const m = useFacial().find((x) => x.id === id);
   const [discarding, setDiscarding] = useState(false);
+  /* Confirmar una identidad genera una alerta y avisa al agente: se pide un segundo paso que repite a quién. */
+  const [confirming, setConfirming] = useState(false);
   /* Comparar: la captura junto a una foto de la lista (la que más se parece, o la que elija el operador).
      Toda imagen se amplía con un clic (zoom, mover, girar) en el visor sobre el mapa. */
   /** Expediente a pantalla completa: todo junto, con la 3D para girar, señas para marcar y conexiones. */
@@ -135,7 +140,7 @@ export function FacialSheet({ id }: { id: string }) {
     return () => c.setOverlay({});
   }, [trace, m?.id, m?.detections.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!m) return <SheetHead kicker="Reconocimiento facial" title="No encontrada" />;
+  if (!m) return <SheetNotFound kicker="Reconocimiento facial" what="esta coincidencia" />;
   const d = lastDetection(m);
   const L = FACIAL_LISTS[m.list];
   const toggleTrace = () => { if (!trace) audit(user, 'Ver recorrido de persona', m.listRef, `${m.detections.length} detecciones en el mapa`); setTrace(!trace); };
@@ -208,7 +213,7 @@ export function FacialSheet({ id }: { id: string }) {
 
         {m.status === 'por_revisar' && (m.fieldCheck
           ? <p className="fc-asked"><Icon name="schedule" />El agente está verificando el documento ({ago(m.fieldCheck.at, now)}).</p>
-          : role === 'operator_911' && <button className="btn secondary fc-check" onClick={() => { requestFieldCheck(m.id, user); toast('Pedido enviado al agente: verificar el documento'); }}><Icon name="badge" />Pedir al agente que verifique el documento</button>)}
+          : perm.can('decidir_facial') && <button className="btn secondary fc-check" onClick={() => { requestFieldCheck(m.id, user); toast('Pedido enviado al agente: verificar el documento'); }}><Icon name="badge" />Pedir al agente que verifique el documento</button>)}
 
         <div className="box">
           <div className="bh"><h3>Metadatos</h3></div>
@@ -232,24 +237,28 @@ export function FacialSheet({ id }: { id: string }) {
           {m.timeline.map((t, i) => <li key={i} className={i === m.timeline.length - 1 ? 'now' : 'done'}><span className="b" aria-hidden /><div>{t.label}</div><div className="when">{hhmm(t.at)}{t.by && ` · ${t.by}`}</div></li>)}
         </ol></div></div>
       </div>
-      {dossier && <FacialDossier m={m} canDecide={role === 'operator_911' && m.status === 'por_revisar'} onClose={() => setDossier(false)}
-        onConfirm={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta generada y agente avisado'); setDossier(false); }}
+      {dossier && <FacialDossier m={m} canDecide={perm.can('decidir_facial') && m.status === 'por_revisar'} onClose={() => setDossier(false)}
+        onConfirm={() => { setDossier(false); setConfirming(true); }}
         onDiscard={() => { setDossier(false); setDiscarding(true); }} />}
-      {role !== 'operator_911' && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: confirma o descarta el operador 911.</span></div>}
+      {confirming && <ConfirmDelete tone="positive" title="¿Confirmar la identidad?" action="Confirmar identidad" onClose={() => setConfirming(false)}
+        onConfirm={() => { confirmFacial(m.id, user); setConfirming(false); toast('Identidad confirmada: alerta generada y agente avisado'); }}>
+        Se confirma que la persona detectada es <b style={{ color: 'var(--ink)' }}>{m.name}</b> ({m.listRef}, {m.reason.toLowerCase()}). Se genera una alerta y se avisa al {m.agent.split(' (')[0]} con la foto de referencia. Queda registrado con el nombre de quien confirma.
+      </ConfirmDelete>}
+      {!perm.can('decidir_facial') && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: tu rol no confirma ni descarta coincidencias.</span></div>}
       <div className="pf">
         <button className="fc-open" onClick={openDossier}>
           <i aria-hidden><Icon name="open_in_full" /></i>
           <span><b>Abrir expediente completo</b><small>Reconstrucción 3D, conexiones y todas las imágenes · {m.links.length} vínculos</small></span>
           <Icon name="arrow_forward" />
         </button>
-        {role === 'operator_911' && m.status === 'por_revisar' && !discarding && <>
-          <button className="btn positive" style={{ flex: 1 }} onClick={() => { confirmFacial(m.id, user); toast('Identidad confirmada: alerta generada y agente avisado'); }}><Icon name="check" />Confirmar identidad</button>
+        {perm.can('decidir_facial') && m.status === 'por_revisar' && !discarding && <>
+          <button className="btn positive" style={{ flex: 1 }} onClick={() => setConfirming(true)}><Icon name="check" />Confirmar identidad</button>
           <button className="btn secondary" onClick={() => setDiscarding(true)}><Icon name="close" />No es la persona</button>
         </>}
-        {role === 'operator_911' && m.status === 'por_revisar' && discarding && <>
+        {perm.can('decidir_facial') && m.status === 'por_revisar' && discarding && <>
           <div role="group" aria-labelledby="fc-discard" style={{ display: 'contents' }}>
             <span id="fc-discard" style={{ fontSize: 'var(--fs-sm)', width: '100%', color: 'var(--ink-muted)' }}>Motivo del descarte</span>
-            {FACIAL_DISCARD.map((r) => <button key={r} className="btn secondary xs" onClick={() => { discardFacial(m.id, r, user); setDiscarding(false); }}>{r}</button>)}
+            {FACIAL_DISCARD.map((r) => <button key={r} className="btn secondary xs" onClick={() => { discardFacial(m.id, r, user); setDiscarding(false); toast(`Coincidencia descartada: ${r.toLowerCase()}`, { undo: () => reopenFacial(m.id, user) }); }}>{r}</button>)}
             <button className="btn ghost xs" onClick={() => setDiscarding(false)}>Cancelar</button>
           </div>
         </>}

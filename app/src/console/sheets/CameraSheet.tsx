@@ -5,17 +5,19 @@ import { CAMERA_LABEL } from '../../api/labels';
 import { useSession } from '../../shell/session';
 import { Evidence, Icon, useNow, useToast } from '../../ui/kit';
 import { useConsole } from '../ctx';
-import { SheetHead } from './SheetHead';
+import { SheetHead, SheetNotFound } from './SheetHead';
+import { usePermissions } from '../permissions';
 
 export function CameraSheet({ id }: { id: string }) {
-  const { user, role } = useSession();
+  const { user } = useSession();
+  const perm = usePermissions();
   const c = useConsole();
   const toast = useToast();
   const now = useNow(10000);
   const cameras = useApi((s) => s.cameras);
   const zones = useApi((s) => s.zones);
   const cam = cameras.find((x) => x.id === id);
-  if (!cam) return <SheetHead kicker="Cámara" title="No encontrada" />;
+  if (!cam) return <SheetNotFound kicker="Cámara" what="esta cámara" />;
   const zone = zones.find((z) => z.id === cam.zoneId);
   const chip = `chip ${cam.status === 'operativa' ? 'ok' : cam.status === 'caida' ? 'critica' : cam.status === 'degradada' ? 'media' : 'nodata'}`;
   return (
@@ -34,10 +36,11 @@ export function CameraSheet({ id }: { id: string }) {
         <div className="box flush">
           <div className="bh"><h3>Presets</h3><span className="sub">{cam.presets.length}</span></div>
           <ul className="list bb">
+            {!cam.presets.length && <li className="empty">Sin presets: la cámara no mide su zona.</li>}
             {cam.presets.map((p) => (
               <li key={p} className="item" style={{ gridTemplateColumns: '1fr auto' }}>
                 <span className="t">{p}</span>
-                {role === 'admin' && cam.status === 'fuera_de_preset' && <button className="btn secondary xs" onClick={() => { setCameraPreset(cam.id, p, user); toast(`${cam.id} en ${p}: la zona vuelve a medirse`); }}>Volver a este preset</button>}
+                {perm.config && cam.status === 'fuera_de_preset' && <button className="btn secondary xs" onClick={() => { setCameraPreset(cam.id, p, user); toast(`${cam.id} en ${p}: la zona vuelve a medirse`); }}>Volver a este preset</button>}
               </li>
             ))}
           </ul>

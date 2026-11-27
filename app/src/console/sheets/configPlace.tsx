@@ -11,11 +11,12 @@ import { CAMERA_LABEL } from '../../api/labels';
 import type { Camera, LngLat, Zone } from '../../api/types';
 import { useSession } from '../../shell/session';
 import { Dialog, EmptyState, Icon, useNow, useToast } from '../../ui/kit';
-import { useConsole, useOverlay } from '../ctx';
+import { UnsavedGuard, useConsole, useOverlay } from '../ctx';
 import { cellsArea, cellsAround, cellsShape, growCells, isContiguous, toggleCell, zoneCore, zoneHexes } from '../../api/coverage';
 import { bearing } from '../../map/markers';
 import { CsvImport, type CsvColumn, type RowResult } from './CsvImport';
-import { SheetHead } from './SheetHead';
+import { SheetHead, SheetNotFound } from './SheetHead';
+import { Segmented } from '../../ui/Segmented';
 
 /* ---------------- Comunes ---------------- */
 export function SectionHead({ group, icon, title, sub }: { group: string; icon: string; title: string; sub: string }) {
@@ -35,11 +36,12 @@ const inSV = (lat: number, lon: number) => lat > 12.9 && lat < 14.5 && lon > -90
 const num = (v: string) => Number(v.replace(',', '.'));
 
 /** Confirmación de borrado: dice qué se borra y qué pasa después. */
-function ConfirmDelete({ title, children, action, onConfirm, onClose }: { title: string; children: ReactNode; action: string; onConfirm: () => void; onClose: () => void }) {
+/** También confirma cambios con impacto operativo (apagar una regla, quitar un acceso): tone="primary". */
+export function ConfirmDelete({ title, children, action, onConfirm, onClose, tone = 'danger' }: { title: string; children: ReactNode; action: string; onConfirm: () => void; onClose: () => void; tone?: 'danger' | 'primary' | 'positive' }) {
   return (
-    <Dialog title={title} onClose={onClose} footer={<>
-      <button className="btn ghost sm" onClick={onClose}>Conservar</button>
-      <button className="btn danger sm" onClick={onConfirm}>{action}</button>
+    <Dialog title={title} onClose={onClose} dismissOnBackdrop footer={<>
+      <button className="btn ghost sm" onClick={onClose}>Cancelar</button>
+      <button className={`btn ${tone} sm`} onClick={onConfirm}>{action}</button>
     </>}>
       <p className="muted" style={{ margin: 0, fontSize: 'var(--fs-md)' }}>{children}</p>
     </Dialog>
@@ -122,7 +124,7 @@ export function ZonesSection() {
             <div className="field"><label htmlFor="zn">Nombre</label><input id="zn" className="fld sm" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Catedral Metropolitana" /></div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button className="btn ghost sm" onClick={() => { setDrawing(false); setCells([]); }}>Cancelar</button>
-              <button className="btn solid sm" style={{ marginLeft: 'auto' }} onClick={finish} disabled={!ok}>Crear zona</button>
+              <button className="btn primary sm" style={{ marginLeft: 'auto' }} onClick={finish} disabled={!ok}>Crear zona</button>
             </div>
           </div></div>
         )}
@@ -190,7 +192,7 @@ export function ZoneDetail({ id }: { id: string }) {
   const [del, setDel] = useState(false);
   useOverlay(cells ? { pickCells: cells, onMapClick: (p) => setCells(toggleCell(cells, p)) }
     : { highlightZones: [id], fit: z ? { points: z.ring, key: 'z' + id } : undefined }, [id, cells?.join()]);
-  if (!z) return <SheetHead kicker="Zona" title="No encontrada" />;
+  if (!z) return <SheetNotFound kicker="Zona" what="esta zona" />;
   const current = zoneHexes([z]);
   const zcams = cameras.filter((x) => x.zoneId === z.id || z.cameras.includes(x.id));
   const usedBy = events.filter((e) => e.zoneIds.includes(z.id));
@@ -233,7 +235,7 @@ export function ZoneDetail({ id }: { id: string }) {
               <HexPicker cells={cells} onChange={setCells} />
               <div style={{ display: 'flex', gap: 8 }}>
                 <button type="button" className="btn ghost sm" onClick={() => setCells(null)}>Cancelar</button>
-                <button type="button" className="btn solid sm" style={{ marginLeft: 'auto' }} disabled={!cells.length || !isContiguous(cells)} onClick={saveShape}>Guardar forma</button>
+                <button type="button" className="btn primary sm" style={{ marginLeft: 'auto' }} disabled={!cells.length || !isContiguous(cells)} onClick={saveShape}>Guardar forma</button>
               </div></>}
           </div>
         </div>
@@ -276,8 +278,9 @@ export function ZoneDetail({ id }: { id: string }) {
         <button type="button" className="btn ghost sm" style={{ alignSelf: 'flex-start' }} disabled={!!usedBy.length} onClick={() => setDel(true)}><Icon name="remove" />Eliminar zona</button>
         {usedBy.length > 0 && <span className="dim" style={{ fontSize: 'var(--fs-sm)' }}>No se puede eliminar mientras un evento la use. Quítala primero del evento.</span>}
       </form>
+      <UnsavedGuard dirty={dirty} />
       <div className="pf"><button type="button" className="btn ghost sm" onClick={() => c.open({ k: 'config', tab: 'zonas' })}>Volver a zonas</button>
-        <button type="submit" form="zone-form" className="btn solid sm" style={{ marginLeft: 'auto' }} disabled={!dirty || !f.name.trim() || !capOk || !thrOk}>Guardar cambios</button></div>
+        <button type="submit" form="zone-form" className="btn primary sm" style={{ marginLeft: 'auto' }} disabled={!dirty || !f.name.trim() || !capOk || !thrOk}>Guardar cambios</button></div>
       {del && <ConfirmDelete title={`¿Eliminar la zona ${z.name}?`} action="Eliminar zona" onClose={() => setDel(false)}
         onConfirm={() => { deleteZone(z.id, user); toast('Zona eliminada'); c.open({ k: 'config', tab: 'zonas' }); }}>
         Sus cámaras quedan sin zona y se pierde su medición. Esto no se puede deshacer.
@@ -332,11 +335,8 @@ export function CamerasSection() {
           <button className="btn primary sm" onClick={() => setAdding('csv')}><Icon name="arrow_upward" />Importar CSV</button>
           <button className="btn ghost sm" onClick={() => setAdding('manual')}><Icon name="add" />Agregar una</button>
         </div>
-        <div className="seg" style={{ alignSelf: 'flex-start' }}>
-          <button className={filter === 'todas' ? 'on' : ''} onClick={() => setFilter('todas')}>Todas<b>{cameras.length}</b></button>
-          <button className={filter === 'problemas' ? 'on' : ''} onClick={() => setFilter('problemas')}>Con problemas<b>{probs.length}</b></button>
-          <button className={filter === 'sin_zona' ? 'on' : ''} onClick={() => setFilter('sin_zona')}>Sin zona<b>{noZone.length}</b></button>
-        </div>
+        <Segmented label="Qué cámaras ver" style={{ alignSelf: 'flex-start' }} value={filter} onChange={setFilter} options={[
+          { value: 'todas', label: 'Todas', count: cameras.length }, { value: 'problemas', label: 'Con problemas', count: probs.length }, { value: 'sin_zona', label: 'Sin zona', count: noZone.length }]} />
         <div className="box flush">
           <ul className="list">
             {!shown.length && <li><EmptyState icon="videocam" title={filter === 'problemas' ? 'Todas las cámaras funcionan' : 'Todas tienen zona'} tone="ok" /></li>}
@@ -372,11 +372,11 @@ function NewCamera({ onSave, onClose }: { onSave: (c: Camera) => void; onClose: 
   const res = parseCamera(v, cameras.map((x) => x.id), zones);
   const touched = v.ubicacion || v.lat || v.lon;
   const set = (k: keyof typeof v) => (e: { target: { value: string } }) => setV({ ...v, [k]: e.target.value });
-  if (pick) return <div className="map-state" role="status" style={{ position: 'fixed', top: 72, left: '50%', transform: 'translateX(-50%)', zIndex: 60 }}><Icon name="pin_drop" /><span><b>Haz clic en el mapa</b> donde está la cámara</span><button className="btn ghost xs" onClick={() => setPick(false)}>Cancelar</button></div>;
+  if (pick) return <div className="map-state" role="status" style={{ position: 'fixed', top: 72, left: '50%', transform: 'translateX(-50%)', zIndex: 'var(--z-popover)' }}><Icon name="pin_drop" /><span><b>Haz clic en el mapa</b> donde está la cámara</span><button className="btn ghost xs" onClick={() => setPick(false)}>Cancelar</button></div>;
   return (
     <Dialog title="Agregar cámara" onClose={onClose} footer={<>
       <button className="btn ghost sm" onClick={onClose}>Cancelar</button>
-      <button className="btn solid sm" disabled={!('ok' in res)} onClick={() => 'ok' in res && onSave(res.ok)}>Agregar cámara</button>
+      <button className="btn primary sm" disabled={!('ok' in res)} onClick={() => 'ok' in res && onSave(res.ok)}>Agregar cámara</button>
     </>}>
       <div className="form-row">
         <div className="field"><label htmlFor="ci">Identificador</label><input id="ci" className="fld mono" value={v.id} onChange={set('id')} /></div>
@@ -414,7 +414,7 @@ export function CameraDetail({ id }: { id: string }) {
   const lat = num(f.lat), lon = num(f.lon);
   useEffect(() => { if (cam) { c.setPin({ lat: cam.lat, lon: cam.lon, label: cam.id }); c.focus([[cam.lon - 0.002, cam.lat - 0.0015], [cam.lon + 0.002, cam.lat + 0.0015]], 'cam' + cam.id); } return () => c.setPin(null); }, [cam?.id, cam?.lat, cam?.lon]); // eslint-disable-line react-hooks/exhaustive-deps
   useOverlay(pick ? { onMapClick: ([x, y]) => { setF((p) => ({ ...p, lat: y.toFixed(5), lon: x.toFixed(5) })); setPick(false); } } : {}, [pick]);
-  if (!cam) return <SheetHead kicker="Cámara" title="No encontrada" />;
+  if (!cam) return <SheetNotFound kicker="Cámara" what="esta cámara" />;
   const okPos = inSV(lat, lon);
   const patch: Partial<Camera> = {};
   if (f.street.trim() !== cam.street) patch.street = f.street.trim();
@@ -445,7 +445,7 @@ export function CameraDetail({ id }: { id: string }) {
         <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr auto', alignItems: 'end' }}>
           <div className="field"><label htmlFor="cdla">Latitud</label><input id="cdla" inputMode="decimal" className="fld sm mono" value={f.lat} onChange={set('lat')} aria-invalid={!okPos} /></div>
           <div className="field"><label htmlFor="cdlo">Longitud</label><input id="cdlo" inputMode="decimal" className="fld sm mono" value={f.lon} onChange={set('lon')} aria-invalid={!okPos} /></div>
-          <button type="button" className={`btn sm ${pick ? 'solid' : 'secondary'}`} onClick={() => setPick(!pick)}><Icon name="pin_drop" />{pick ? 'Haz clic en el mapa' : 'Mover en el mapa'}</button>
+          <button type="button" className={`btn sm ${pick ? 'primary' : 'secondary'}`} onClick={() => setPick(!pick)}><Icon name="pin_drop" />{pick ? 'Haz clic en el mapa' : 'Mover en el mapa'}</button>
         </div>
         {!okPos && <span className="err"><Icon name="error" />Las coordenadas están fuera de El Salvador.</span>}
         <div className="form-row">
@@ -469,7 +469,7 @@ export function CameraDetail({ id }: { id: string }) {
               <li key={p} className="item" style={{ gridTemplateColumns: '1fr auto auto' }}>
                 <span className="t">{p}</span>
                 {cam.status === 'fuera_de_preset' ? <button type="button" className="btn secondary xs" onClick={() => { setCameraPreset(cam.id, p, user); toast(`${cam.id} en ${p}: la zona vuelve a medirse`); }}>Llevar a este preset</button> : <span />}
-                <button type="button" className="iconbtn" aria-label={`Quitar preset ${p}`} onClick={() => setPresets(cam.presets.filter((x) => x !== p))}><Icon name="close" /></button>
+                <button type="button" className="iconbtn" aria-label={`Quitar preset ${p}`} title={`Quitar preset ${p}`} onClick={() => setPresets(cam.presets.filter((x) => x !== p))}><Icon name="close" /></button>
               </li>
             ))}
           </ul>
@@ -487,8 +487,9 @@ export function CameraDetail({ id }: { id: string }) {
           </dl>
         </div>
       </form>
+      <UnsavedGuard dirty={dirty} />
       <div className="pf"><button type="button" className="btn ghost sm" onClick={() => c.open({ k: 'config', tab: 'camaras' })}>Volver a cámaras</button>
-        <button type="submit" form="cam-form" className="btn solid sm" style={{ marginLeft: 'auto' }} disabled={!dirty || !okPos || !f.street.trim()}>Guardar cambios</button></div>
+        <button type="submit" form="cam-form" className="btn primary sm" style={{ marginLeft: 'auto' }} disabled={!dirty || !okPos || !f.street.trim()}>Guardar cambios</button></div>
     </>
   );
 }

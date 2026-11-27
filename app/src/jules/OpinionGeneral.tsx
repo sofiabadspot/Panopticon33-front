@@ -17,6 +17,7 @@ const TEXTOS = {
     { value: 'comentario', label: 'Un comentario', pregunta: '¿Cómo podemos mejorar Jules?', ayuda: 'Escribí lo que quieras contarnos.' },
   ] as const,
   enviar: 'Enviar',
+  cancelar: 'Cancelar',
 };
 
 type Tipo = (typeof TEXTOS.tipos)[number]['value'];
@@ -35,14 +36,16 @@ export function OpinionGeneral({ open, onClose, onEnviar }: { open: boolean; onC
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title={TEXTOS.titulo} description={TEXTOS.bajada}>
-      <form className="jules-opinion-general" onSubmit={enviar}>
+    <Dialog open={open} onClose={onClose} title={TEXTOS.titulo} description={TEXTOS.bajada} actions={<>
+      <Button variant="ghost" size="sm" onClick={onClose}>{TEXTOS.cancelar}</Button>
+      <Button type="submit" size="sm" form={`${id}-form`} disabled={!texto.trim()}>{TEXTOS.enviar}</Button>
+    </>}>
+      <form id={`${id}-form`} className="jules-opinion-general" onSubmit={enviar}>
         <Tabs label={TEXTOS.tipo} items={TEXTOS.tipos.map(({ value, label }) => ({ value, label }))} value={tipo} onChange={setTipo} />
         <div className="sv-field">
           <label className="sv-label" htmlFor={id}>{actual.pregunta}</label>
           <Textarea id={id} rows={4} placeholder={actual.ayuda} value={texto} onChange={(evento) => setTexto(evento.target.value)} />
         </div>
-        <Button type="submit" disabled={!texto.trim()}>{TEXTOS.enviar}</Button>
       </form>
     </Dialog>
   );

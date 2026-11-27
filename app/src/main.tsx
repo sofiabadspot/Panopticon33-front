@@ -7,6 +7,7 @@ import '@fontsource/ibm-plex-sans/500.css';
 import '@fontsource/ibm-plex-sans/600.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
+import '@fontsource/ibm-plex-mono/600.css';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './data/generated/theme.css';
 import './styles/app.css';
@@ -16,6 +17,7 @@ import { IconSheet } from './views/IconSheet';
 import { SessionProvider, useSession } from './shell/session';
 import { Login } from './shell/Login';
 import { ToastProvider } from './ui/kit';
+import { ErrorBoundary } from './ui/ErrorBoundary';
 
 // Una sola pantalla: la consola. Paneles y fichas se abren sobre el mapa (?p=…&s=…).
 // El router se crea al entrar (no al cargar la página): así lee la dirección ya limpia por signIn.
@@ -41,7 +43,7 @@ function Gate() {
   }, [signedIn]);
   return (
     <>
-      {signedIn && router && <RouterProvider key="app" router={router} />}
+      {signedIn && router && <ErrorBoundary scope="la consola" onReset={() => location.reload()} resetLabel="Recargar"><RouterProvider key="app" router={router} /></ErrorBoundary>}
       {(showLogin || !signedIn) && <div key="login" className={`login-shell ${signedIn ? 'leaving' : ''}`}><Login onDone={() => setShowLogin(false)} /></div>}
     </>
   );

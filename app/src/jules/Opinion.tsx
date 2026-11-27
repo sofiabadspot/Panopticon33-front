@@ -72,8 +72,8 @@ export function Opinion() {
         title={textos?.titulo}
         actions={(
           <>
-            <Button variant="secondary" onClick={() => setAbierta(null)}>{TEXTOS.cancelar}</Button>
-            <Button type="submit" form={id}>{TEXTOS.enviar}</Button>
+            <Button variant="ghost" size="sm" onClick={() => setAbierta(null)}>{TEXTOS.cancelar}</Button>
+            <Button type="submit" size="sm" form={id}>{TEXTOS.enviar}</Button>
           </>
         )}
       >

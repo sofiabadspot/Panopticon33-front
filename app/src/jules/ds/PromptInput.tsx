@@ -83,7 +83,7 @@ export function PromptInput({
     }
   }
 
-  const tamanoBoton = size === 'sm' ? 'sm' : undefined;
+  const tamanoBoton = size === 'sm' ? 'sm' : 'md';
   const tamanoIcono = size === 'sm' ? undefined : 'lg';
 
   return (

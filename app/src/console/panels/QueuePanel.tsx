@@ -11,6 +11,7 @@ import { EmptyState, Evidence, Icon, StatusChip, useNow } from '../../ui/kit';
 import { AlertGlyph, fmtLate, overdueMin, SeverityBars } from '../../map/icons';
 import { waitingSince } from '../../views/shared';
 import { useConsole } from '../ctx';
+import { usePermissions } from '../permissions';
 
 type Tab = ReviewStatus | 'todas';
 
@@ -19,6 +20,7 @@ const groupKey = (a: Alert) => (a.plate ? `placa:${a.plate.listed}` : a.id);
 
 export function QueuePanel() {
   const { role, user } = useSession();
+  const perm = usePermissions();
   const c = useConsole();
   const now = useNow(2000);
   const all = useApi((s) => s.alerts);
@@ -75,7 +77,10 @@ export function QueuePanel() {
   // ↑ ↓ recorren la bandeja sin salir del mapa
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest('input, select, textarea') || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      // Las flechas son de quien tiene el foco si es un campo, un menú, una lista, un grupo de opciones o un diálogo.
+      const t = e.target instanceof Element ? e.target : null;
+      if (t?.closest('input, select, textarea, [role="menu"], [role="listbox"], [role="radiogroup"], [role="tablist"], [role="dialog"], dialog') || document.querySelector('dialog[open]')) return;
       e.preventDefault();
       const i = shown.findIndex((a) => a.id === openId);
       const n = shown[Math.max(0, Math.min(shown.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
@@ -98,7 +103,7 @@ export function QueuePanel() {
         <input type="search" className="fld sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar alerta, placa, zona o calle" aria-label="Buscar en las alertas" />
       </div>
       {scoped && hidden > 0 && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="layers" /><span>Alertas de <b>{user.territory}</b>{hidden > 0 && ` · ${hidden} de otros territorios no se muestran`}.</span></div>}
-      {role !== 'operator_911' && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: confirma o descarta el operador 911.</span></div>}
+      {!perm.can('decidir') && <div className="notice" style={{ background: 'var(--glass-hi)' }}><Icon name="lock" /><span>Solo lectura: tu rol no confirma ni descarta alertas.</span></div>}
       <ul className="list pb flush">
         {shown.length === 0 && <li><QueueEmpty tab={tab} query={q.trim()} alerts={alerts} cameras={cameras.length} going={units.filter((u) => u.enRoute).length} onTab={setTab} onClearQuery={() => setQ('')} /></li>}
         {shown.map((a, i) => (
@@ -120,7 +125,7 @@ export function QueuePanel() {
           </li>
         ))}
       </ul>
-      {role === 'operator_911' && (
+      {perm.can('decidir') && (
         <div className="lfoot">
           <span><span className="kbd">↑</span> <span className="kbd">↓</span> recorrer</span><span><span className="kbd">C</span> confirmar</span><span><span className="kbd">D</span> descartar</span>
         </div>

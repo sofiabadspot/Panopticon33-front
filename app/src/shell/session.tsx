@@ -6,7 +6,6 @@ import type { Role, User } from '../api/types';
    En producción el rol llega del token de Keycloak; en la demo se elige al ingresar
    (y se puede cambiar en la barra superior). La sesión se guarda en este navegador. */
 
-const ROLES: Role[] = ['command', 'operator_911', 'analyst', 'admin'];
 
 type SessionCtx = {
   user: User;
@@ -27,7 +26,7 @@ function write(key: string, value: string | null) {
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [role, setRole] = useState<Role>(() => read<Role>('p33.role', 'command', (v) => ROLES.includes(v as Role)));
+  const [role, setRole] = useState<Role>(() => read<Role>('p33.role', 'command', (v) => !!v.trim()));
   const [signedIn, setSignedIn] = useState<boolean>(() => read<string>('p33.session', '') === '1');
   const user = sessionFor(role).user;
 

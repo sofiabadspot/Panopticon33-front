@@ -43,7 +43,8 @@ export const normalizePlate = (p: string) => p.toUpperCase().replace(/[\s-]/g, '
 
 /** Valor de input datetime-local en hora de El Salvador (UTC−6, sin horario de verano). */
 export const toLocalInput = (t: number) => new Date(t - 6 * 3600e3).toISOString().slice(0, 16);
-export const fromLocalInput = (v: string) => new Date(v + ':00-06:00').getTime();
+/** NaN si el campo está vacío o incompleto: Chrome lee ":00-06:00" (campo vacío) como el año 2000. */
+export const fromLocalInput = (v: string) => (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v) ? new Date(v + ':00-06:00').getTime() : NaN);
 
 /** Fechas de una investigación (puede abarcar horas, días o años): un solo criterio para la lista, el
     reproductor, el mapa y las tarjetas.

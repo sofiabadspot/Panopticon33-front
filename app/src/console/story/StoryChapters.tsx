@@ -54,7 +54,7 @@ export function StoryChapters({ story }: { story: Story }) {
         <div className="story-search">
           <Icon name="search" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar en esta investigación" aria-label="Buscar por lugar, cámara o texto" />
-          {q && <button className="iconbtn" onClick={() => setQ('')} aria-label="Borrar búsqueda"><Icon name="close" /></button>}
+          {q && <button className="iconbtn" onClick={() => setQ('')} aria-label="Borrar búsqueda" title="Borrar búsqueda"><Icon name="close" /></button>}
         </div>
         <ol className="story-list">
           {!rows.length && <li className="empty">Ningún capítulo coincide con “{q.trim()}”.</li>}

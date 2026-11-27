@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import type { Sheet } from '../ctx';
-import { Icon } from '../../ui/kit';
+import { EmptyState, Icon } from '../../ui/kit';
 import { useConsole } from '../ctx';
 
 /** Ficha abierta fuera del lateral (p. ej., dentro del muro de video): quien la aloja decide qué hacen
@@ -12,7 +12,7 @@ export const useSheetGo = () => { const nav = useContext(SheetNav); const c = us
 export function SheetHead({ kicker, title, sub, aside, className = '' }: { kicker: ReactNode; title: ReactNode; sub?: ReactNode; aside?: ReactNode; className?: string }) {
   const c = useConsole();
   const nav = useContext(SheetNav);
-  const back = nav ? nav.close : () => ((history.state?.idx ?? 0) > 0 ? history.back() : c.close());
+  const back = nav ? nav.close : () => c.guardNav(() => ((history.state?.idx ?? 0) > 0 ? history.back() : c.close()));
   const close = nav ? nav.close : c.close;
   return (
     <div className={`ph ${className}`} style={{ alignItems: 'flex-start', borderBottom: '1px solid var(--border)', paddingBottom: 12, marginBottom: 12 }}>
@@ -25,5 +25,22 @@ export function SheetHead({ kicker, title, sub, aside, className = '' }: { kicke
       </div>
       <button className="iconbtn" onClick={close} aria-label="Cerrar ficha" title="Cerrar"><Icon name="close" /></button>
     </div>
+  );
+}
+
+/** Ficha de algo que no está: un enlace viejo, algo que se borró o que no está en el alcance del rol.
+    Siempre dice por qué puede pasar y ofrece salir (antes, cada ficha mostraba solo el título). */
+export function SheetNotFound({ kicker, title = 'No encontrada', what }: { kicker: string; title?: string; what: string }) {
+  const c = useConsole();
+  const nav = useContext(SheetNav);
+  return (
+    <>
+      <SheetHead kicker={kicker} title={title} />
+      <div className="pb">
+        <EmptyState icon="search" title={`No se encuentra ${what}`} action={<button className="btn secondary sm" onClick={nav ? nav.close : c.close}>Cerrar la ficha</button>}>
+          Puede que se haya eliminado o que no esté en el alcance de este rol.
+        </EmptyState>
+      </div>
+    </>
   );
 }

@@ -11,6 +11,7 @@ import { Icon, KindIcon, StatusChip, useNow } from '../../ui/kit';
 import { useConsole } from '../ctx';
 import { SheetHead } from './SheetHead';
 import { useOpenStory } from '../story/OpenStory';
+import { usePermissions } from '../permissions';
 
 export function VehicleSheet({ id }: { id: string }) {
   const { user } = useSession();
@@ -41,7 +42,7 @@ function ReasonGate({ plate, n, onGrant }: { plate: string; n: number; onGrant: 
           <input className="fld sm" value={text} onChange={(e) => setText(e.target.value)} placeholder="Número de caso (opcional)" aria-label="Número de caso" />
           {tried && !pick && <span className="err"><Icon name="error" />El motivo es obligatorio: sin motivo no hay ficha.</span>}
         </div>
-        <button className="btn solid sm" type="submit"><Icon name="directions_car" />Ver ficha</button>
+        <button className="btn primary sm" type="submit"><Icon name="directions_car" />Ver ficha</button>
       </form>
     </>
   );
@@ -72,9 +73,9 @@ function Profile({ p, reason }: { p: ReturnType<typeof vehicleProfile>; reason: 
   const openInv = useApi((s) => s.investigations.find((x) => x.id === c.invId));
   const pinned = !!openInv?.plates.includes(p.plate);
   /* Historia: con una investigación abierta hereda su motivo; si no, la pide. */
-  const { role } = useSession();
+  const perm = usePermissions();
   const openStory = useOpenStory();
-  const story = role === 'analyst' ? () => openStory({ k: 'placa', plate: p.plate }, openInv ? { invId: openInv.id } : undefined) : null;
+  const story = perm.has('investigar') ? () => openStory({ k: 'placa', plate: p.plate }, openInv ? { invId: openInv.id } : undefined) : null;
 
 
   return (

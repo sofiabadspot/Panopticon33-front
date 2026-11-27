@@ -1,7 +1,10 @@
 /* Contrato de datos de la consola. Los nombres siguen el glosario de la ontología;
    las etiquetas en español están en src/api/labels.ts. */
 
-export type Role = 'command' | 'operator_911' | 'analyst' | 'admin';
+/** Id de un rol. Los 4 de base son 'command', 'operator_911', 'analyst' y 'admin'; el administrador puede crear
+    otros (p. ej. 'supervisor_911'). En producción el rol llega del token de Keycloak con este mismo id. */
+export type Role = string;
+export const BASE_ROLES = ['command', 'operator_911', 'analyst', 'admin'] as const;
 
 export interface User { id: string; name: string; role: Role; territory: string; active: boolean }
 
@@ -13,15 +16,37 @@ export interface Territory { name: string; note: string }
 export type LayerKey = 'zones' | 'events' | 'alerts' | 'units' | 'cameras' | 'hex' | 'drones' | 'helis';
 /** Qué hace un rol con una capa: no la ve, la puede prender, o la ve al entrar. */
 export type LayerAccess = 'oculta' | 'disponible' | 'inicio';
-/** Configuración de un arquetipo. Los roles se definen primero; cada usuario hereda la de su rol,
-    limitada a su territorio. */
+/** Pestañas de la columna izquierda que se pueden dar a un rol. Configuración no es una pestaña: es un acceso
+    aparte (RoleConfig.config), en el menú del usuario. */
+export type TabId = 'estado' | 'alertas' | 'investigar' | 'verificacion';
+/** Qué puede hacer un rol sobre una alerta. La pantalla las agrupa en niveles (Solo ver, Decidir…). */
+export type AlertAction =
+  | 'decidir'          // confirmar o descartar una alerta (con motivo)
+  | 'despachar'        // mandar unidades
+  | 'registrar'        // registrar un incidente a mano desde el mapa
+  | 'decidir_facial';  // confirmar o descartar una coincidencia facial
+/** Qué define un rol: lo que ve y lo que hace. Cada usuario hereda la de su rol, limitada a su territorio.
+    Sin excepciones por usuario: si alguien necesita otra cosa, se crea otro rol. */
 export interface RoleConfig {
   role: Role;
+  name: string;
+  description: string;
+  /** Uno de los 4 de base: se edita pero no se borra. */
+  system: boolean;
   layers: Record<LayerKey, LayerAccess>;
+  /** Pestañas en orden; la primera se abre al entrar. Vacía solo si tiene Configuración. */
+  tabs: TabId[];
   /** Qué alertas ve: todas, o solo las de su territorio. */
   alertScope: 'todas' | 'territorio';
-  /** Con alcance "todas": desde qué criticidad (null = todas las criticidades). */
+  /** Desde qué criticidad (null = todas las criticidades). */
   minSeverity: Severity | null;
+  /** Vacío = solo lectura. */
+  actions: AlertAction[];
+  jules: boolean;
+  /** Entra a Configuración (desde el menú del usuario). Darlo es hacer a alguien administrador. */
+  config: boolean;
+  /** Sube con cada cambio: las consolas abiertas con ese rol lo aplican al instante. */
+  version: number;
 }
 
 export type LngLat = [number, number];

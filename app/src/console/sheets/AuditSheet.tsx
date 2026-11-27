@@ -2,9 +2,8 @@
    "¿Quién vio, consultó o decidió qué?" Registro completo, sin edición posible,
    filtrable por usuario, acción, objeto y fecha. */
 import { useEffect, useMemo, useState } from 'react';
-import { audit as log, useApi } from '../../api';
+import { audit as log, roleName, useApi } from '../../api';
 import { dateTime, fromLocalInput, toLocalInput } from '../../api/format';
-import { ROLE_LABEL } from '../../api/labels';
 import { useSession } from '../../shell/session';
 import { Icon, download } from '../../ui/kit';
 import { useConsole, type Sheet } from '../ctx';
@@ -61,7 +60,7 @@ export function AuditSheet({ action = '' }: { action?: string }) {
               <tr key={e.id}>
                 <td className="mono" style={{ whiteSpace: 'nowrap' }}>{dateTime(e.at)}</td>
                 <td>{e.user}</td>
-                <td className="dim">{ROLE_LABEL[e.role]}</td>
+                <td className="dim">{roleName(e.role)}</td>
                 <td>{e.action}</td>
                 <td className="mono">{target(e.object) ? <button className="linklike" onClick={() => c.open(target(e.object)!)}>{e.object}</button> : e.object}</td>
                 <td className="muted">{e.detail}</td>

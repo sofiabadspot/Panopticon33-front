@@ -12,13 +12,15 @@ import { EmptyState, Icon, useNow } from '../../ui/kit';
 import { useZoneSeverity, waitingSince } from '../../views/shared';
 import { canOpenPanel, useConsole } from '../ctx';
 import { EventTag } from './EventsPanel';
+import { usePermissions } from '../permissions';
 
 const SEVS: Severity[] = ['critica', 'media', 'baja'];
 const SEV_WORD: Record<Severity, string> = { critica: 'Críticas', media: 'Medias', baja: 'Bajas' };
 
 export function StatusPanel() {
   const c = useConsole();
-  const { role, user } = useSession();
+  const { user } = useSession();
+  const perm = usePermissions();
   const now = useNow(5000);
   const zones = useApi((s) => s.zones);
   const status = useApi((s) => s.zoneStatus);
@@ -30,7 +32,7 @@ export function StatusPanel() {
   const sevOf = useZoneSeverity(alerts);
 
   /* Alertas */
-  const canSeeAlerts = role !== 'admin';
+  const canSeeAlerts = perm.seesAlerts;
   const waiting = alerts.filter((a) => forOperator(a) && inScope(a, user) && a.review === 'por_revisar');
   const late = waiting.filter((a) => overdueMin(a.severity, waitingSince(a), now) > 0);
   const bySev = SEVS.map((s) => [s, waiting.filter((a) => a.severity === s).length] as const);
@@ -99,10 +101,10 @@ export function StatusPanel() {
           <span className="st-ttl">Eventos</span>
           <span className="st-big">{live.length}</span>
           <span className="st-line">{live.length ? 'en curso' : 'ninguno en curso'}{next[0] ? ` · el próximo ${inTime(next[0].start, now)}` : ''}</span>
-          {role === 'admin' && <button className="btn ghost xs st-act" onClick={() => c.open({ k: 'evento-form' })}><Icon name="add" />Registrar</button>}
+          {perm.config && <button className="btn ghost xs st-act" onClick={() => c.open({ k: 'evento-form' })}><Icon name="add" />Registrar</button>}
         </div>
         {!events.length ? (
-          <div className="st-body"><EmptyState icon="flag" title="Sin eventos registrados">Un evento masivo agrupa zonas y les da umbrales propios mientras dure. {role === 'admin' ? 'Registralo antes de que empiece.' : 'Los registra el administrador.'}</EmptyState></div>
+          <div className="st-body"><EmptyState icon="flag" title="Sin eventos registrados">Un evento masivo agrupa zonas y les da umbrales propios mientras dure. {perm.config ? 'Registralo antes de que empiece.' : 'Los registra el administrador.'}</EmptyState></div>
         ) : (
           <ul className="list st-events">
             {[...live, ...next].map((e) => <EventRow key={e.id} e={e} now={now} />)}
@@ -112,11 +114,11 @@ export function StatusPanel() {
 
       {canSeeAlerts && (
         <section className="st-block">
-          <button className="st-top" onClick={() => canOpenPanel(role, 'alertas') && c.setPanel('alertas')} disabled={!canOpenPanel(role, 'alertas')}>
+          <button className="st-top" onClick={() => canOpenPanel(perm, 'alertas') && c.setPanel('alertas')} disabled={!canOpenPanel(perm, 'alertas')}>
             <span className="st-ttl">Alertas</span>
             <span className={`st-big ${late.length ? 'bad' : ''}`}>{waiting.length}</span>
             <span className="st-line">{waiting.length ? <>esperan decisión{late.length ? <> · <b className="st-late">{late.length === waiting.length ? 'todas atrasadas' : `${late.length} atrasadas`}</b></> : ''}</> : going ? `ninguna espera decisión · ${going} ${going === 1 ? 'unidad' : 'unidades'} en camino` : 'ninguna espera decisión'}</span>
-            {canOpenPanel(role, 'alertas') && <Icon name="chevron_right" className="st-go" />}
+            {canOpenPanel(perm, 'alertas') && <Icon name="chevron_right" className="st-go" />}
           </button>
           {waiting.length > 0 && (
             <div className="st-body">

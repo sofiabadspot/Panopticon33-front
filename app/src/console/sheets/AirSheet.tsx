@@ -11,14 +11,14 @@ import { hhmmss } from '../../api/format';
 import { AirGlyph } from '../../map/icons';
 import { ImageViewer, Inspectable } from '../../ui/ImageInspect';
 import { useNow } from '../../ui/kit';
-import { SheetHead } from './SheetHead';
+import { SheetHead, SheetNotFound } from './SheetHead';
 
 export function AirSheet({ id }: { id: string }) {
   const now = useNow(1000);
   const [big, setBig] = useState(false);
   const [rot, setRot] = useState(0);
   const a = AIRCRAFT.find((x) => x.id === id);
-  if (!a) return <SheetHead kicker="Medio aéreo" title="No encontrado" />;
+  if (!a) return <SheetNotFound kicker="Medio aéreo" title="No encontrado" what="este medio aéreo" />;
   const f = airAt(a, now);
   const what = a.type === 'Dron' ? 'dron' : 'helicóptero';
   const ev: Ev = a.stream ? { type: 'clip', src: a.stream.src, poster: a.stream.poster, caption: `Transmisión del ${what} ${a.id}` }

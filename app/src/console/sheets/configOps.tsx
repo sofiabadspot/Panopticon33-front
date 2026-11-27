@@ -15,8 +15,9 @@ import { useSession } from '../../shell/session';
 import { Dialog, EmptyState, Icon, useNow, useToast } from '../../ui/kit';
 import { useConsole, useOverlay } from '../ctx';
 import { EventTag } from '../panels/EventsPanel';
-import { SectionHead } from './configPlace';
+import { ConfirmDelete, SectionHead } from './configPlace';
 import { CsvImport, type CsvColumn, type RowResult } from './CsvImport';
+import { Segmented } from '../../ui/Segmented';
 
 const SEVS: Severity[] = ['critica', 'media', 'baja'];
 
@@ -95,10 +96,9 @@ export function EventsSection() {
           <button className="btn primary sm" onClick={() => c.open({ k: 'evento-form' })}><Icon name="add" />Registrar evento</button>
           <button className="btn ghost sm" onClick={() => setImporting(true)}><Icon name="arrow_upward" />Importar CSV</button>
         </div>
-        <div className="seg" style={{ alignSelf: 'flex-start' }}>
-          <button className={show === 'proximos' ? 'on' : ''} onClick={() => setShow('proximos')}>En curso y próximos<b>{events.filter((e) => eventStatus(e, now) !== 'finalizado').length}</b></button>
-          <button className={show === 'finalizados' ? 'on' : ''} onClick={() => setShow('finalizados')}>Finalizados<b>{events.filter((e) => eventStatus(e, now) === 'finalizado').length}</b></button>
-        </div>
+        <Segmented label="Qué eventos ver" style={{ alignSelf: 'flex-start' }} value={show} onChange={setShow} options={[
+          { value: 'proximos', label: 'En curso y próximos', count: events.filter((e) => eventStatus(e, now) !== 'finalizado').length },
+          { value: 'finalizados', label: 'Finalizados', count: events.filter((e) => eventStatus(e, now) === 'finalizado').length }]} />
         <div className="box flush">
           <ul className="list">
             {!list.length && <li><EmptyState icon="flag" title={show === 'proximos' ? 'Ningún evento por delante' : 'Sin eventos finalizados'}>{show === 'proximos' ? 'Registra el evento antes de que empiece: así sus zonas usan su aforo y sus umbrales.' : undefined}</EmptyState></li>}
@@ -140,6 +140,8 @@ export function RulesSection() {
   const zones = useApi((s) => s.zones);
   const events = useApi((s) => s.events);
   const [edit, setEdit] = useState<Rule | null>(null);
+  /* Apagar una regla deja de crear alertas en toda la ciudad: se confirma. Encenderla es inmediato. */
+  const [turningOff, setTurningOff] = useState<Rule | null>(null);
   const zoneName = (id: string) => zones.find((z) => z.id === id)?.name ?? id;
   const withOwn = events.filter((e) => e.thresholds && eventStatus(e, now) !== 'finalizado');
   return (
@@ -160,7 +162,7 @@ export function RulesSection() {
                   <td className="r mono">{r.persistenceMin ? `${r.persistenceMin} min` : 'Al instante'}</td>
                   <td>{r.overrides.length ? r.overrides.map((o) => zoneName(o.targetId)).join(', ') : <span className="dim">Ninguna</span>}</td>
                   <td>{r.source === 'ministerio' ? <span className="chip ok">Ministerio</span> : <span className="chip media">Supuesto</span>}</td>
-                  <td><label className="toggle"><input type="checkbox" checked={r.enabled} onChange={(e) => { updateRule(r.id, { enabled: e.target.checked }, user); toast(`${r.name}: ${e.target.checked ? 'activa' : 'apagada, no crea alertas'}`); }} /><span className="sr">Activa</span></label></td>
+                  <td><label className="toggle"><input type="checkbox" checked={r.enabled} onChange={(e) => { if (!e.target.checked) { setTurningOff(r); return; } updateRule(r.id, { enabled: true }, user); toast(`${r.name}: activa`); }} /><span className="sr">Activa: {r.name}</span></label></td>
                   <td className="r"><button className="btn ghost xs" onClick={() => setEdit(r)}>Editar</button></td>
                 </tr>
               ))}
@@ -185,6 +187,10 @@ export function RulesSection() {
       </div>
 
       {edit && <RuleDialog rule={edit} onClose={() => setEdit(null)} />}
+      {turningOff && <ConfirmDelete title={`¿Apagar «${turningOff.name}»?`} action="Apagar regla" onClose={() => setTurningOff(null)}
+        onConfirm={() => { const r = turningOff; updateRule(r.id, { enabled: false }, user); setTurningOff(null); toast(`${r.name}: apagada, no crea alertas`, { undo: () => updateRule(r.id, { enabled: true }, user) }); }}>
+        Mientras esté apagada, no se crean alertas de «{KIND_LABEL[turningOff.kind].toLowerCase()}» en {turningOff.scope.toLowerCase()}. El 911 no se entera de lo que pase.
+      </ConfirmDelete>}
     </>
   );
 }
@@ -202,7 +208,7 @@ export function RuleDialog({ rule, onClose }: { rule: Rule; onClose: () => void 
   return (
         <Dialog title={rule.name} onClose={() => onClose()} footer={<>
           <button className="btn ghost sm" onClick={() => onClose()}>Cancelar</button>
-          <button className="btn solid sm" disabled={!(Number(v.threshold) > 0) || !ovrOk} onClick={() => {
+          <button className="btn primary sm" disabled={!(Number(v.threshold) > 0) || !ovrOk} onClick={() => {
             if (Number(v.threshold) !== rule.threshold) updateRule(rule.id, { threshold: Number(v.threshold), source: 'ministerio' }, user);
             if (Number(v.persistenceMin) !== rule.persistenceMin) updateRule(rule.id, { persistenceMin: Number(v.persistenceMin) }, user);
             if (v.severity !== rule.severity) updateRule(rule.id, { severity: v.severity }, user);
@@ -211,10 +217,8 @@ export function RuleDialog({ rule, onClose }: { rule: Rule; onClose: () => void 
           }}>Guardar regla</button>
         </>}>
           <p className="muted" style={{ margin: 0, fontSize: 'var(--fs-md)' }}>Crea una alerta de <b>{KIND_LABEL[rule.kind].toLowerCase()}</b> cuando la medición pasa el umbral y se mantiene el tiempo indicado.</p>
-          <div className="field"><label>Criticidad de la alerta</label>
-            <div className="seg" role="radiogroup" aria-label="Criticidad">
-              {SEVS.map((s) => <button key={s} type="button" role="radio" aria-checked={v.severity === s} className={v.severity === s ? 'on' : ''} onClick={() => setV({ ...v, severity: s })}>{SEVERITY_LABEL[s]}</button>)}
-            </div>
+          <div className="field"><span className="lbl">Criticidad de la alerta</span>
+            <Segmented label="Criticidad de la alerta" value={v.severity} onChange={(s) => setV({ ...v, severity: s })} options={SEVS.map((s) => ({ value: s, label: SEVERITY_LABEL[s] }))} />
             <span className="hint dim" style={{ fontSize: 'var(--fs-sm)' }}>Define el orden en la bandeja del 911 y el tiempo que tiene para decidir.</span>
           </div>
           <div className="form-row">
@@ -239,7 +243,7 @@ export function RuleDialog({ rule, onClose }: { rule: Rule; onClose: () => void 
                     </select></div>
                   <div className="field"><label htmlFor={`ot${i}`}>Umbral</label><input id={`ot${i}`} inputMode="decimal" className="fld sm mono" value={o.threshold || ''} onChange={(e) => set({ threshold: Number(e.target.value) || 0 })} /></div>
                   <div className="field"><label htmlFor={`op${i}`}>Min</label><input id={`op${i}`} inputMode="numeric" className="fld sm mono" value={o.persistenceMin} onChange={(e) => set({ persistenceMin: Number(e.target.value) || 0 })} /></div>
-                  <button className="iconbtn" aria-label="Quitar esta zona" onClick={() => setOvr(ovr.filter((_, j) => j !== i))}><Icon name="close" /></button>
+                  <button className="iconbtn" aria-label="Quitar esta zona" title="Quitar esta zona" onClick={() => setOvr(ovr.filter((_, j) => j !== i))}><Icon name="close" /></button>
                 </div>
               );
             })}
@@ -344,18 +348,15 @@ export function ListsSection() {
       {adding && (
         <Dialog title="Agregar lista" onClose={() => setAdding(false)} footer={<>
           <button className="btn ghost sm" onClick={() => setAdding(false)}>Cancelar</button>
-          <button className="btn solid sm" disabled={!f.name.trim() || !f.origin.trim() || !(Number(f.maxAgeH) > 0)} onClick={() => {
+          <button className="btn primary sm" disabled={!f.name.trim() || !f.origin.trim() || !(Number(f.maxAgeH) > 0)} onClick={() => {
             addList({ name: f.name.trim(), kind: f.kind, origin: f.origin.trim(), mode: f.mode, maxAgeMin: Number(f.maxAgeH) * 60 }, user);
             toast(f.mode === 'Carga manual' ? `Lista "${f.name.trim()}" creada. Ahora carga su archivo.` : `Lista "${f.name.trim()}" creada. Queda pendiente de conectar con ${f.origin.trim()}.`);
             setAdding(false); setF({ name: '', kind: 'vehiculos', origin: '', mode: 'Carga manual', maxAgeH: '24' });
           }}>Agregar lista</button>
         </>}>
           <div className="field"><label htmlFor="ln">Nombre</label><input id="ln" className="fld" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Vehículos con orden de búsqueda" /></div>
-          <div className="field"><label>Qué contiene</label>
-            <div className="seg" role="radiogroup" aria-label="Qué contiene">
-              <button type="button" role="radio" aria-checked={f.kind === 'vehiculos'} className={f.kind === 'vehiculos' ? 'on' : ''} onClick={() => setF({ ...f, kind: 'vehiculos' })}>Placas de vehículos</button>
-              <button type="button" role="radio" aria-checked={f.kind === 'personas'} className={f.kind === 'personas' ? 'on' : ''} onClick={() => setF({ ...f, kind: 'personas' })}>Personas</button>
-            </div></div>
+          <div className="field"><span className="lbl">Qué contiene</span>
+            <Segmented label="Qué contiene" value={f.kind} onChange={(kind) => setF({ ...f, kind })} options={[{ value: 'vehiculos', label: 'Placas de vehículos' }, { value: 'personas', label: 'Personas' }]} /></div>
           <div className="field"><label htmlFor="lo">De dónde viene</label><input id="lo" className="fld" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} placeholder="PNC, Fiscalía, Ministerio…" /></div>
           <div className="form-row">
             <div className="field"><label htmlFor="lm">Cómo se actualiza</label>
@@ -373,6 +374,7 @@ export function ListsSection() {
             return missing.length ? { error: `Falta ${missing.map((m) => m.label.toLowerCase()).join(' y ')}.` } : { ok: row };
           }}
           preview={{ head: ENTRY_COLUMNS[loading.kind].slice(0, 3).map((col) => col.label), row: (r) => ENTRY_COLUMNS[loading.kind].slice(0, 3).map((col) => r[col.key] || '—') }}
+          replaces={loading.entries}
           onImport={(items) => { loadListEntries(loading.id, items.length, user); toast(`${loading.name}: ${fmt(items.length)} entradas cargadas. Reemplazan a las anteriores.`); setLoading(null); }}
           onClose={() => setLoading(null)} />
       )}
